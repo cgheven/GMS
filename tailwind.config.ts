@@ -54,11 +54,13 @@ const config: Config = {
           accent:              "hsl(var(--sidebar-accent))",
           "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
         },
+        /* Brand tokens */
+        amber:   "hsl(var(--amber))",
+        teal:    "hsl(var(--teal))",
         /* Semantic tokens */
         success: "hsl(var(--success))",
         warning: "hsl(var(--warning))",
         info:    "hsl(var(--info))",
-        energy:  "hsl(var(--brand-energy))",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -95,8 +97,8 @@ const config: Config = {
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
         "pulse-glow": {
-          "0%, 100%": { boxShadow: "0 0 0 0 hsl(219 100% 50% / 0.3)" },
-          "50%":       { boxShadow: "0 0 0 8px hsl(219 100% 50% / 0)" },
+          "0%, 100%": { boxShadow: "0 0 0 0 hsl(38 92% 55% / 0.3)" },
+          "50%":       { boxShadow: "0 0 0 8px hsl(38 92% 55% / 0)" },
         },
       },
       animation: {

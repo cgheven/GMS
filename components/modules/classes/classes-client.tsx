@@ -376,10 +376,13 @@ export function ClassesClient({ gymId: initialGymId, classes: initialClasses, st
               </div>
               <div className="space-y-1.5">
                 <Label>Trainer</Label>
-                <Select value={form.trainer_id} onValueChange={(v) => setForm({ ...form, trainer_id: v })}>
+                <Select
+                  value={form.trainer_id || "none"}
+                  onValueChange={(v) => setForm({ ...form, trainer_id: v === "none" ? "" : v })}
+                >
                   <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                     {staff.map((s) => <SelectItem key={s.id} value={s.id}>{s.full_name}</SelectItem>)}
                   </SelectContent>
                 </Select>

@@ -582,12 +582,12 @@ export function MembersClient({
                   <div className="space-y-1.5">
                     <Label>Assigned Trainer</Label>
                     <Select
-                      value={form.assigned_trainer_id}
-                      onValueChange={(v) => setForm({ ...form, assigned_trainer_id: v })}
+                      value={form.assigned_trainer_id || "none"}
+                      onValueChange={(v) => setForm({ ...form, assigned_trainer_id: v === "none" ? "" : v })}
                     >
                       <SelectTrigger><SelectValue placeholder="No trainer" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">No trainer</SelectItem>
+                        <SelectItem value="none">No trainer</SelectItem>
                         {staff.map((s) => (
                           <SelectItem key={s.id} value={s.id}>{s.full_name}</SelectItem>
                         ))}

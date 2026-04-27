@@ -61,7 +61,7 @@ const emptyForm: {
   access_hours: "",
   description: "",
   is_active: true,
-  color: "#0066FF",
+  color: "#F5A623",
 };
 
 interface PlanWithCount extends MembershipPlan {
@@ -147,7 +147,14 @@ export function PlansClient({ gymId, plans: initialPlans }: Props) {
   }
 
   async function handleSave() {
-    if (!gymId || !form.name || !form.price) return;
+    if (!gymId) {
+      toast({ title: "No gym found", description: "Reload the page and try again.", variant: "destructive" });
+      return;
+    }
+    if (!form.name || !form.price) {
+      toast({ title: "Missing fields", description: "Plan name and price are required.", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     const supabase = createClient();
     const payload = {
