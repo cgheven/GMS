@@ -1,6 +1,8 @@
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getMonthRange, formatDateInput } from "@/lib/utils";
 import type {
   Profile, Gym, Member, MembershipPlan, Payment, Issue, Announcement,
@@ -169,11 +171,8 @@ export async function getMembershipPlans() {
   return { gymId, plans: (data as MembershipPlan[]) ?? [] };
 }
 
-export async function getPaymentsData() {
-  const ctx = await getAuthContext();
-  if (!ctx?.gymId) return { gymId: null, payments: [], members: [], plans: [] };
-  const { supabase, gymId } = ctx;
-
+async function _fetchPayments(gymId: string) {
+  const supabase = createAdminClient();
   const [{ data: payments }, { data: members }, { data: plans }] = await Promise.all([
     supabase.from("pulse_payments")
       .select("*, member:pulse_members(full_name,plan_id)")
@@ -181,18 +180,32 @@ export async function getPaymentsData() {
       .order("created_at", { ascending: false })
       .limit(200),
     supabase.from("pulse_members")
-      .select("id,full_name,monthly_fee,plan_id,status,plan_expiry_date,outstanding_balance")
+      .select("id,full_name,member_number,monthly_fee,plan_id,status,plan_expiry_date,outstanding_balance,plan:pulse_membership_plans(name)")
       .eq("gym_id", gymId)
-      .eq("status", "active"),
-    supabase.from("pulse_membership_plans").select("id,name,price,duration_type").eq("gym_id", gymId).eq("is_active", true),
+      .eq("status", "active")
+      .order("full_name"),
+    supabase.from("pulse_membership_plans")
+      .select("id,name,price,duration_type")
+      .eq("gym_id", gymId)
+      .eq("is_active", true),
   ]);
-
   return {
-    gymId,
     payments: (payments ?? []) as Payment[],
-    members: (members ?? []) as Pick<Member, "id" | "full_name" | "monthly_fee" | "plan_id" | "status" | "plan_expiry_date" | "outstanding_balance">[],
+    members: (members ?? []) as unknown as (Pick<Member, "id" | "full_name" | "member_number" | "monthly_fee" | "plan_id" | "status" | "plan_expiry_date" | "outstanding_balance"> & { plan?: { name: string } | null })[],
     plans: (plans ?? []) as Pick<MembershipPlan, "id" | "name" | "price" | "duration_type">[],
   };
+}
+
+export async function getPaymentsData() {
+  const ctx = await getAuthContext();
+  if (!ctx?.gymId) return { gymId: null, payments: [], members: [], plans: [] };
+  const gymId = ctx.gymId;
+  const data = await unstable_cache(
+    () => _fetchPayments(gymId),
+    ["payments", gymId],
+    { revalidate: 30, tags: [`payments-${gymId}`] }
+  )();
+  return { gymId, ...data };
 }
 
 export async function getCheckIns() {

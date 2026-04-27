@@ -239,90 +239,106 @@ export function MembersClient({
     );
   }
 
-  function MemberRow({ m, showExpired = false }: { m: Member; showExpired?: boolean }) {
-    const plan = m.plan_id ? planMap[m.plan_id] : null;
-    const planData = (m as Member & { plan?: { name: string; duration_type: string; color: string } | null }).plan;
-    const planName = planData?.name ?? plan?.name;
-    const planColor = planData?.color ?? plan?.color ?? "#0066ff";
-    const trainerData = (m as Member & { trainer?: { full_name: string } | null }).trainer;
-
+  function MemberTable({ list, showExpired = false }: { list: Member[]; showExpired?: boolean }) {
+    if (list.length === 0) return null;
     return (
-      <div className="flex items-center gap-4 px-4 py-3 rounded-xl hover:bg-white/[0.03] transition-colors border border-transparent hover:border-white/5">
-        {/* Avatar */}
-        <div
-          className="flex items-center justify-center w-9 h-9 rounded-full border text-sm font-semibold shrink-0"
-          style={{
-            backgroundColor: `${planColor}1a`,
-            borderColor: `${planColor}33`,
-            color: planColor,
-          }}
-        >
-          {m.full_name[0].toUpperCase()}
-        </div>
-
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-sm font-medium text-foreground">{m.full_name}</p>
-            {m.member_number && (
-              <span className="text-xs text-muted-foreground font-mono">#{m.member_number}</span>
-            )}
-            <StatusBadge status={m.status} />
-            {m.is_waiting && (
-              <Badge variant="secondary" className="text-xs">Waiting</Badge>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
-            {planName && (
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Dumbbell className="w-2.5 h-2.5" />
-                {planName}
-              </span>
-            )}
-            {trainerData?.full_name && (
-              <span className="text-xs text-muted-foreground">Trainer: {trainerData.full_name}</span>
-            )}
-            {m.phone && (
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Phone className="w-2.5 h-2.5" />{m.phone}
-              </span>
-            )}
-            {m.join_date && (
-              <span className="text-xs text-muted-foreground">Joined: {formatDate(m.join_date)}</span>
-            )}
-            {m.plan_expiry_date && (
-              <span className={`text-xs ${showExpired ? "text-rose-400" : "text-muted-foreground"}`}>
-                Expires: {formatDate(m.plan_expiry_date)}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Fee */}
-        <div className="text-right shrink-0 hidden sm:block">
-          <p className="text-sm font-semibold text-foreground">
-            {formatCurrency(m.monthly_fee)}
-            <span className="text-xs text-muted-foreground font-normal">/mo</span>
-          </p>
-          {m.outstanding_balance > 0 && (
-            <p className="text-xs text-rose-400">Due: {formatCurrency(m.outstanding_balance)}</p>
-          )}
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-1 shrink-0">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(m)}>
-            <Edit2 className="w-3.5 h-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-destructive hover:text-destructive"
-            onClick={() => setDeleteMember(m)}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
-        </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-sidebar-border">
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Member</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Plan</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Trainer</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Phone</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">{showExpired ? "Expired" : "Joined"}</th>
+              <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fee</th>
+              <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
+              <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-sidebar-border/50">
+            {list.map((m) => {
+              const plan = m.plan_id ? planMap[m.plan_id] : null;
+              const planData = (m as Member & { plan?: { name: string; color: string } | null }).plan;
+              const planName = planData?.name ?? plan?.name;
+              const planColor = planData?.color ?? plan?.color ?? "#6B7A99";
+              const trainerData = (m as Member & { trainer?: { full_name: string } | null }).trainer;
+              return (
+                <tr key={m.id} className="hover:bg-white/[0.02] transition-colors group">
+                  {/* Member */}
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                        style={{ backgroundColor: `${planColor}22`, color: planColor }}
+                      >
+                        {m.full_name[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">{m.full_name}</p>
+                        {m.member_number && (
+                          <p className="text-xs text-muted-foreground font-mono">{m.member_number}</p>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  {/* Plan */}
+                  <td className="px-4 py-3">
+                    {planName ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-md"
+                        style={{ backgroundColor: `${planColor}20`, color: planColor }}>
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: planColor }} />
+                        {planName}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  {/* Trainer */}
+                  <td className="px-4 py-3 hidden md:table-cell">
+                    <span className="text-sm text-muted-foreground">
+                      {trainerData?.full_name ?? "—"}
+                    </span>
+                  </td>
+                  {/* Phone */}
+                  <td className="px-4 py-3 hidden lg:table-cell">
+                    <span className="text-sm text-muted-foreground">{m.phone ?? "—"}</span>
+                  </td>
+                  {/* Date */}
+                  <td className="px-4 py-3 hidden lg:table-cell">
+                    <span className="text-sm text-muted-foreground">
+                      {showExpired
+                        ? (m.plan_expiry_date ? formatDate(m.plan_expiry_date) : "—")
+                        : (m.join_date ? formatDate(m.join_date) : "—")}
+                    </span>
+                  </td>
+                  {/* Fee */}
+                  <td className="px-4 py-3 text-right">
+                    <p className="font-semibold text-foreground">{formatCurrency(m.monthly_fee)}</p>
+                    {m.outstanding_balance > 0 && (
+                      <p className="text-xs text-rose-400">Due: {formatCurrency(m.outstanding_balance)}</p>
+                    )}
+                  </td>
+                  {/* Status */}
+                  <td className="px-4 py-3 text-center">
+                    <StatusBadge status={m.status} />
+                  </td>
+                  {/* Actions */}
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(m)}>
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteMember(m)}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     );
   }
@@ -389,50 +405,24 @@ export function MembersClient({
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="active">
-          <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
-            {filterList(active).length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
-                <Users className="w-10 h-10 opacity-20" />
-                <p className="text-sm">{search ? "No members match" : "No active members yet"}</p>
-              </div>
-            ) : (
-              <div className="p-2 space-y-1">
-                {filterList(active).map((m) => <MemberRow key={m.id} m={m} />)}
-              </div>
-            )}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="waiting">
-          <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
-            {filterList(waiting).length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
-                <Clock className="w-10 h-10 opacity-20" />
-                <p className="text-sm">{search ? "No members match" : "Waiting list is empty"}</p>
-              </div>
-            ) : (
-              <div className="p-2 space-y-1">
-                {filterList(waiting).map((m) => <MemberRow key={m.id} m={m} />)}
-              </div>
-            )}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="expired">
-          <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
-            {filterList(expired).length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
-                <CalendarX className="w-10 h-10 opacity-20" />
-                <p className="text-sm">{search ? "No members match" : "No expired or cancelled members"}</p>
-              </div>
-            ) : (
-              <div className="p-2 space-y-1">
-                {filterList(expired).map((m) => <MemberRow key={m.id} m={m} showExpired />)}
-              </div>
-            )}
-          </div>
-        </TabsContent>
+        {[
+          { value: "active",  list: filterList(active),  empty: "No active members yet",            showExpired: false, emptyIcon: Users },
+          { value: "waiting", list: filterList(waiting), empty: "Waiting list is empty",             showExpired: false, emptyIcon: Clock },
+          { value: "expired", list: filterList(expired), empty: "No expired or cancelled members",  showExpired: true,  emptyIcon: CalendarX },
+        ].map(({ value, list, empty, showExpired, emptyIcon: Icon }) => (
+          <TabsContent key={value} value={value}>
+            <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
+              {list.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
+                  <Icon className="w-10 h-10 opacity-20" />
+                  <p className="text-sm">{search ? "No members match your search" : empty}</p>
+                </div>
+              ) : (
+                <MemberTable list={list} showExpired={showExpired} />
+              )}
+            </div>
+          </TabsContent>
+        ))}
       </Tabs>
 
       {/* Delete confirm */}
