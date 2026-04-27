@@ -2,18 +2,19 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
-  Dumbbell, Wallet, TrendingDown, Banknote,
-  Clock, CheckCircle2, FileWarning, Users, UserCog,
-  Activity, AlertTriangle, TrendingUp, Target,
+  Dumbbell, Wallet,
+  AlertTriangle, Clock, CheckCircle2,
+  TrendingUp, TrendingDown, FileWarning, Zap,
 } from "lucide-react";
-import { formatCurrency, formatDate } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
-import type { DashboardStats, DashboardMember, Bill } from "@/types";
+import { formatCurrency } from "@/lib/utils";
+import type { DashboardStats, DashboardMember, Bill, TrainerStat } from "@/types";
 
 const ExpenseChart = dynamic(
   () => import("./expense-chart").then((m) => m.ExpenseChart),
-  { ssr: false, loading: () => <div className="h-[220px] animate-pulse rounded-xl bg-white/5" /> }
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse rounded-xl bg-white/5" /> }
 );
+
+interface ExpiringMember { id: string; name: string; plan_expiry_date: string; days_left: number }
 
 interface Props {
   data: {
@@ -22,6 +23,8 @@ interface Props {
     upcomingBills: Bill[];
     monthlyData: { month: string; collected: number; expenses: number }[];
     overdueMembers: DashboardMember[];
+    trainerStats: TrainerStat[];
+    expiringMembers: ExpiringMember[];
   } | null;
 }
 
@@ -35,22 +38,51 @@ export function DashboardClient({ data }: Props) {
     );
   }
 
-  const { stats, upcomingBills, monthlyData, overdueMembers } = data;
+  const { stats, upcomingBills, monthlyData, overdueMembers, trainerStats, expiringMembers } = data;
 
   const isProfit = stats.net_profit >= 0;
-
-  // Progress toward monthly revenue target
   const targetProgress = stats.revenue_target > 0
     ? Math.min(100, Math.round((stats.monthly_collected / stats.revenue_target) * 100))
     : 0;
 
-  // Collection rate for outstanding section
-  const hasOutstanding = stats.monthly_outstanding > 0;
+  // Unified action items — sorted by urgency
+  const actionItems = [
+    ...expiringMembers.map((m) => ({
+      key: `exp-${m.id}`,
+      icon: AlertTriangle,
+      color: m.days_left <= 2 ? "text-rose-400" : "text-primary",
+      bg:   m.days_left <= 2 ? "bg-rose-500/10 border-rose-500/20" : "bg-primary/10 border-primary/20",
+      text: `${m.name} — expires in ${m.days_left === 0 ? "today" : m.days_left === 1 ? "1 day" : `${m.days_left} days`}`,
+      action: "Renew",
+      href: "/members",
+      urgency: m.days_left,
+    })),
+    ...overdueMembers.map((m) => ({
+      key: `due-${m.id}`,
+      icon: Clock,
+      color: "text-rose-400",
+      bg: "bg-rose-500/10 border-rose-500/20",
+      text: `${m.name} owes ${formatCurrency(m.amount)}`,
+      action: "Collect",
+      href: "/payments",
+      urgency: 100,
+    })),
+    ...upcomingBills.filter((b) => b.status === "overdue").map((b) => ({
+      key: `bill-${b.id}`,
+      icon: FileWarning,
+      color: "text-rose-400",
+      bg: "bg-rose-500/10 border-rose-500/20",
+      text: `${b.title} bill overdue — ${formatCurrency(b.amount)}`,
+      action: "View",
+      href: "/bills",
+      urgency: 200,
+    })),
+  ].sort((a, b) => a.urgency - b.urgency);
 
   return (
     <div className="space-y-6 animate-fade-in">
 
-      {/* ── Header ──────────────────────────────────────────── */}
+      {/* Header */}
       <div>
         <h1 className="text-3xl font-serif font-normal tracking-tight text-foreground">Dashboard</h1>
         <p className="text-muted-foreground text-sm mt-1">
@@ -58,345 +90,182 @@ export function DashboardClient({ data }: Props) {
         </p>
       </div>
 
-      {/* ── 4 Hero KPI Cards ──────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* ── Section 1: 3 Hero Numbers ───────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
-        {/* Active Members */}
-        <div className="relative rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.06] p-5 hover:border-emerald-500/50 transition-all duration-300 animate-fade-up">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Active Members</p>
-              <p className="mt-2 text-3xl font-bold leading-none text-emerald-400">
-                {stats.active_members}
+        {/* Collected */}
+        <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.05] p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Collected</p>
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+              <Wallet className="w-4 h-4 text-emerald-400" />
+            </div>
+          </div>
+          <p className="text-3xl font-bold text-emerald-400 leading-none">{formatCurrency(stats.monthly_collected)}</p>
+          {stats.revenue_target > 0 ? (
+            <div className="space-y-1.5">
+              <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                <div className="h-full bg-emerald-400 rounded-full transition-all duration-700" style={{ width: `${targetProgress}%` }} />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                <span className="text-emerald-400 font-semibold">{targetProgress}%</span> of {formatCurrency(stats.revenue_target)} target
               </p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {stats.total_members} total enrolled
-              </p>
-            </div>
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 shrink-0">
-              <Users className="w-4 h-4 text-emerald-400" />
-            </div>
-          </div>
-        </div>
-
-        {/* Today's Check-ins */}
-        <div className="relative rounded-2xl border border-[hsl(219_100%_50%/0.3)] bg-[hsl(219_100%_50%/0.06)] p-5 hover:border-[hsl(219_100%_50%/0.5)] transition-all animate-fade-up" style={{ animationDelay: "75ms" }}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Today&apos;s Check-ins</p>
-              <p className="mt-2 text-3xl font-bold leading-none text-[hsl(219_100%_50%)]">
-                {stats.todays_checkins}
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                members checked in today
-              </p>
-            </div>
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[hsl(219_100%_50%/0.1)] border border-[hsl(219_100%_50%/0.2)] shrink-0">
-              <Activity className="w-4 h-4 text-[hsl(219_100%_50%)]" />
-            </div>
-          </div>
-        </div>
-
-        {/* Monthly Revenue */}
-        <div className="relative rounded-2xl border border-sidebar-border bg-card p-5 hover:border-[hsl(219_100%_50%/0.3)] transition-all animate-fade-up" style={{ animationDelay: "150ms" }}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider truncate">Monthly Revenue</p>
-              <p className="mt-2 text-2xl font-bold leading-none truncate">{formatCurrency(stats.monthly_collected)}</p>
-              {stats.revenue_target > 0 && (
-                <>
-                  <div className="mt-2 flex items-center gap-2">
-                    <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
-                      <div
-                        className="h-full bg-[hsl(219_100%_50%)] rounded-full transition-all"
-                        style={{ width: `${targetProgress}%` }}
-                      />
-                    </div>
-                    <span className="text-xs text-[hsl(219_100%_50%)] font-semibold shrink-0">{targetProgress}%</span>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground truncate">
-                    {formatCurrency(stats.revenue_target)} target
-                  </p>
-                </>
-              )}
-            </div>
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[hsl(219_100%_50%/0.1)] border border-[hsl(219_100%_50%/0.2)] shrink-0">
-              <Wallet className="w-4 h-4 text-[hsl(219_100%_50%)]" />
-            </div>
-          </div>
-        </div>
-
-        {/* Outstanding Dues */}
-        <div className={`relative rounded-2xl border p-5 transition-all animate-fade-up ${hasOutstanding ? "border-rose-500/30 bg-rose-500/[0.06] hover:border-rose-500/50" : "border-sidebar-border bg-card hover:border-emerald-500/30"}`} style={{ animationDelay: "225ms" }}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider truncate">Outstanding Dues</p>
-              <p className={`mt-2 text-2xl font-bold leading-none truncate ${hasOutstanding ? "text-rose-400" : "text-emerald-400"}`}>
-                {formatCurrency(stats.monthly_outstanding)}
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {overdueMembers.length > 0
-                  ? `${overdueMembers.length} member${overdueMembers.length !== 1 ? "s" : ""} with dues`
-                  : "All members paid up"}
-              </p>
-            </div>
-            <div className={`flex items-center justify-center w-9 h-9 rounded-xl shrink-0 ${hasOutstanding ? "bg-rose-500/10 border border-rose-500/20" : "bg-emerald-500/10 border border-emerald-500/20"}`}>
-              <Clock className={`w-4 h-4 ${hasOutstanding ? "text-rose-400" : "text-emerald-400"}`} />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Net Profit Banner ─────────────────────────────────── */}
-      <div className={`rounded-2xl border p-5 flex items-center justify-between gap-4 animate-fade-up ${isProfit ? "border-emerald-500/30 bg-emerald-500/[0.06]" : "border-rose-500/30 bg-rose-500/[0.06]"}`} style={{ animationDelay: "300ms" }}>
-        <div className="flex items-center gap-4">
-          <div className={`flex items-center justify-center w-10 h-10 rounded-xl border shrink-0 ${isProfit ? "bg-emerald-500/10 border-emerald-500/20" : "bg-rose-500/10 border-rose-500/20"}`}>
-            <Banknote className={`w-5 h-5 ${isProfit ? "text-emerald-400" : "text-rose-400"}`} />
-          </div>
-          <div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Net Profit This Month</p>
-            <p className={`text-2xl font-bold leading-none mt-1 ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>
-              {isProfit ? "+" : ""}{formatCurrency(stats.net_profit)}
-            </p>
-          </div>
-        </div>
-        <div className="hidden sm:grid grid-cols-3 gap-6 text-right">
-          <div>
-            <p className="text-xs text-muted-foreground">Revenue</p>
-            <p className="text-sm font-semibold text-foreground mt-0.5">{formatCurrency(stats.monthly_revenue)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Expenses</p>
-            <p className="text-sm font-semibold text-rose-400 mt-0.5">{formatCurrency(stats.monthly_expenses)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Salaries</p>
-            <p className="text-sm font-semibold text-purple-400 mt-0.5">{formatCurrency(stats.monthly_salaries)}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Additional Stats Row ──────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          {
-            label: "Expiring This Week",
-            value: String(stats.expiring_this_week),
-            icon: AlertTriangle,
-            color: "text-[hsl(43_100%_50%)]",
-            bg: "bg-[hsl(43_100%_50%/0.1)]",
-            border: "border-[hsl(43_100%_50%/0.2)]",
-          },
-          {
-            label: "Expired Members",
-            value: String(stats.expired_members),
-            icon: TrendingDown,
-            color: "text-rose-400",
-            bg: "bg-rose-500/10",
-            border: "border-rose-500/20",
-          },
-          {
-            label: "Frozen Members",
-            value: String(stats.frozen_members),
-            icon: Target,
-            color: "text-sky-400",
-            bg: "bg-sky-500/10",
-            border: "border-sky-500/20",
-          },
-          {
-            label: "Staff Salaries",
-            value: formatCurrency(stats.monthly_salaries),
-            icon: UserCog,
-            color: "text-purple-400",
-            bg: "bg-purple-500/10",
-            border: "border-purple-500/20",
-          },
-        ].map(({ label, value, icon: Icon, color, bg, border }, i) => (
-          <div
-            key={label}
-            className="flex items-center gap-3 rounded-xl border border-sidebar-border bg-card/50 px-4 py-3 animate-fade-up"
-            style={{ animationDelay: `${400 + i * 50}ms` }}
-          >
-            <div className={`flex items-center justify-center w-8 h-8 rounded-lg ${bg} border ${border} shrink-0`}>
-              <Icon className={`w-4 h-4 ${color}`} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground truncate">{label}</p>
-              <p className={`text-sm font-bold truncate ${color}`}>{value}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Overdue Members + Chart ───────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-
-        {/* Overdue members */}
-        <div className="lg:col-span-2 rounded-2xl border border-sidebar-border bg-card p-6 animate-fade-up animate-delay-300">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">Overdue Payments</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Members with outstanding dues</p>
-            </div>
-            {overdueMembers.length > 0 && (
-              <Badge variant="destructive" className="text-xs tabular-nums">{overdueMembers.length}</Badge>
-            )}
-          </div>
-
-          {overdueMembers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-[180px] gap-2 text-muted-foreground">
-              <CheckCircle2 className="w-10 h-10 opacity-30 text-emerald-400" />
-              <p className="text-sm font-medium text-emerald-400">All caught up</p>
-              <p className="text-xs">No outstanding dues</p>
             </div>
           ) : (
-            <div className="space-y-2 max-h-[260px] overflow-y-auto scrollbar-hide">
-              {overdueMembers.map((m, i) => (
-                <div
-                  key={m.id}
-                  className="flex items-center gap-3 rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5 animate-fade-up"
-                  style={{ animationDelay: `${300 + i * 60}ms` }}
-                >
-                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[hsl(219_100%_50%/0.1)] border border-[hsl(219_100%_50%/0.2)] shrink-0">
-                    <span className="text-xs font-bold text-[hsl(219_100%_50%)]">{m.name.charAt(0).toUpperCase()}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{m.name}</p>
-                    <span className={`text-xs font-medium capitalize ${m.status === "overdue" ? "text-rose-400" : "text-[hsl(43_100%_50%)]"}`}>
-                      {m.status}{m.days_overdue ? ` · ${m.days_overdue}d` : ""}
-                    </span>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-bold text-foreground">{formatCurrency(m.amount)}</p>
-                    <Link href="/payments" className="text-[10px] text-[hsl(219_100%_50%)] hover:underline">
-                      Record
-                    </Link>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {overdueMembers.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-sidebar-border">
-              <Link href="/payments" className="text-xs text-[hsl(219_100%_50%)] hover:underline font-medium">
-                View all payments →
-              </Link>
-            </div>
+            <p className="text-xs text-muted-foreground">{stats.active_members} active members</p>
           )}
         </div>
 
-        {/* Revenue vs Expenses Chart */}
-        <div className="lg:col-span-3 rounded-2xl border border-sidebar-border bg-card p-6 animate-fade-up animate-delay-300">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">Revenue vs Expenses</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">6-month trend</p>
-            </div>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-0.5 rounded-full bg-[hsl(219_100%_50%)] inline-block" />
-                Collected
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-0.5 rounded-full bg-rose-400 inline-block" />
-                Costs
-              </span>
+        {/* Outstanding */}
+        <div className={`rounded-2xl border p-5 space-y-3 ${stats.monthly_outstanding > 0 ? "border-rose-500/25 bg-rose-500/[0.05]" : "border-sidebar-border bg-card"}`}>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Outstanding</p>
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${stats.monthly_outstanding > 0 ? "bg-rose-500/10 border-rose-500/20" : "bg-white/5 border-white/10"}`}>
+              <Clock className={`w-4 h-4 ${stats.monthly_outstanding > 0 ? "text-rose-400" : "text-muted-foreground"}`} />
             </div>
           </div>
-          <ExpenseChart data={monthlyData} />
+          <p className={`text-3xl font-bold leading-none ${stats.monthly_outstanding > 0 ? "text-rose-400" : "text-muted-foreground"}`}>
+            {formatCurrency(stats.monthly_outstanding)}
+          </p>
+          {overdueMembers.length > 0 ? (
+            <Link href="/payments" className="flex items-center justify-between group">
+              <p className="text-xs text-muted-foreground">
+                <span className="text-rose-400 font-semibold">{overdueMembers.length}</span> member{overdueMembers.length !== 1 ? "s" : ""} owe money
+              </p>
+              <span className="text-xs text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity">Collect →</span>
+            </Link>
+          ) : (
+            <p className="text-xs text-emerald-400 font-medium flex items-center gap-1.5">
+              <CheckCircle2 className="w-3 h-3" /> All caught up
+            </p>
+          )}
+        </div>
+
+        {/* Net Profit */}
+        <div className={`rounded-2xl border p-5 space-y-3 ${isProfit ? "border-sidebar-border bg-card" : "border-rose-500/25 bg-rose-500/[0.05]"}`}>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Net Profit</p>
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${isProfit ? "bg-emerald-500/10 border-emerald-500/20" : "bg-rose-500/10 border-rose-500/20"}`}>
+              {isProfit
+                ? <TrendingUp className="w-4 h-4 text-emerald-400" />
+                : <TrendingDown className="w-4 h-4 text-rose-400" />}
+            </div>
+          </div>
+          <p className={`text-3xl font-bold leading-none ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>
+            {isProfit ? "+" : ""}{formatCurrency(stats.net_profit)}
+          </p>
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Rev <span className="text-foreground font-medium">{formatCurrency(stats.monthly_collected)}</span></span>
+            <span>·</span>
+            <span>Exp <span className="text-rose-400 font-medium">{formatCurrency(stats.monthly_expenses)}</span></span>
+            <span>·</span>
+            <span>Sal <span className="text-purple-400 font-medium">{formatCurrency(stats.monthly_salaries)}</span></span>
+          </div>
         </div>
       </div>
 
-      {/* ── Action Items ──────────────────────────────────────── */}
-      {(stats.expiring_this_week > 0 || overdueMembers.length > 0 || stats.unpaid_bills > 0) && (
-        <div className="rounded-2xl border border-sidebar-border bg-card p-6 animate-fade-up animate-delay-400">
-          <div className="flex items-center gap-2 mb-4">
-            <TrendingUp className="w-4 h-4 text-[hsl(219_100%_50%)]" />
-            <h2 className="text-sm font-semibold text-foreground">Action Items</h2>
+      {/* ── Section 2: Trainer Performance ──────────────────── */}
+      {trainerStats.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Dumbbell className="w-4 h-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Trainer Performance</h2>
+              <span className="text-xs text-muted-foreground">— {new Date().toLocaleDateString("en-US", { month: "long" })}</span>
+            </div>
+            <Link href="/staff" className="text-xs text-muted-foreground hover:text-foreground transition-colors">Manage →</Link>
           </div>
-          <div className="space-y-2">
-            {stats.expiring_this_week > 0 && (
-              <Link
-                href="/members"
-                className="flex items-center justify-between px-4 py-3 rounded-xl bg-[hsl(43_100%_50%/0.06)] border border-[hsl(43_100%_50%/0.2)] hover:border-[hsl(43_100%_50%/0.4)] transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <AlertTriangle className="w-4 h-4 text-[hsl(43_100%_50%)]" />
-                  <span className="text-sm font-medium">
-                    <span className="font-bold text-[hsl(43_100%_50%)]">{stats.expiring_this_week}</span>
-                    {" "}member{stats.expiring_this_week !== 1 ? "s" : ""} expiring this week
-                  </span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {trainerStats.map((t) => {
+              const rateColor = t.rate >= 80 ? "text-emerald-400" : t.rate >= 50 ? "text-primary" : "text-rose-400";
+              const barColor  = t.rate >= 80 ? "bg-emerald-400"   : t.rate >= 50 ? "bg-primary"   : "bg-rose-400";
+              return (
+                <div key={t.id} className="rounded-2xl border border-sidebar-border bg-card p-4 space-y-3 hover:border-primary/20 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-primary/15 border border-primary/25 flex items-center justify-center text-sm font-bold text-primary shrink-0">
+                      {t.name[0]?.toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{t.name}</p>
+                      <p className="text-xs text-muted-foreground">{t.total} member{t.total !== 1 ? "s" : ""} assigned</p>
+                    </div>
+                    <span className={`text-lg font-bold tabular-nums shrink-0 ${rateColor}`}>{t.rate}%</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{t.paid} paid</span>
+                      <span>{t.unpaid} unpaid</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                      <div className={`h-full rounded-full transition-all duration-700 ${barColor}`} style={{ width: `${t.rate}%` }} />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-1 border-t border-sidebar-border/60">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Collected</p>
+                      <p className="text-sm font-bold text-emerald-400">{formatCurrency(t.collected)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Due</p>
+                      <p className="text-sm font-bold text-foreground">{formatCurrency(t.totalDue)}</p>
+                    </div>
+                  </div>
+                  {t.unpaid > 0 && (
+                    <Link href="/payments" className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-rose-500/[0.08] border border-rose-500/15 hover:border-rose-500/30 transition-colors group">
+                      <span className="text-xs text-rose-400 font-medium">{t.unpaid} haven&apos;t paid</span>
+                      <span className="text-[10px] text-muted-foreground group-hover:text-rose-400 transition-colors">Collect →</span>
+                    </Link>
+                  )}
                 </div>
-                <span className="text-xs text-muted-foreground group-hover:text-[hsl(43_100%_50%)] transition-colors">Renew →</span>
-              </Link>
-            )}
-            {overdueMembers.length > 0 && (
-              <Link
-                href="/payments"
-                className="flex items-center justify-between px-4 py-3 rounded-xl bg-rose-500/[0.06] border border-rose-500/20 hover:border-rose-500/40 transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <Clock className="w-4 h-4 text-rose-400" />
-                  <span className="text-sm font-medium">
-                    <span className="font-bold text-rose-400">{overdueMembers.length}</span>
-                    {" "}overdue payment{overdueMembers.length !== 1 ? "s" : ""}
-                  </span>
-                </div>
-                <span className="text-xs text-muted-foreground group-hover:text-rose-400 transition-colors">Collect →</span>
-              </Link>
-            )}
-            {stats.unpaid_bills > 0 && (
-              <Link
-                href="/bills"
-                className="flex items-center justify-between px-4 py-3 rounded-xl bg-[hsl(219_100%_50%/0.06)] border border-[hsl(219_100%_50%/0.2)] hover:border-[hsl(219_100%_50%/0.4)] transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <FileWarning className="w-4 h-4 text-[hsl(219_100%_50%)]" />
-                  <span className="text-sm font-medium">
-                    <span className="font-bold text-[hsl(219_100%_50%)]">{stats.unpaid_bills}</span>
-                    {" "}unpaid bill{stats.unpaid_bills !== 1 ? "s" : ""}{" "}
-                    <span className="text-muted-foreground font-normal">({formatCurrency(stats.unpaid_bills_amount)})</span>
-                  </span>
-                </div>
-                <span className="text-xs text-muted-foreground group-hover:text-[hsl(219_100%_50%)] transition-colors">View →</span>
-              </Link>
-            )}
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* ── Upcoming / Pending Bills ──────────────────────────── */}
-      {upcomingBills.length > 0 && (
-        <div className="rounded-2xl border border-sidebar-border bg-card p-6 animate-fade-up animate-delay-400">
-          <div className="flex items-center gap-2 mb-4">
-            <FileWarning className="w-4 h-4 text-rose-400" />
-            <h2 className="text-sm font-semibold text-foreground">Pending Bills</h2>
-            <Badge variant="destructive" className="text-xs ml-auto">{upcomingBills.length}</Badge>
+      {/* ── Section 3: Chart ────────────────────────────────── */}
+      <div className="rounded-2xl border border-sidebar-border bg-card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Revenue vs Costs</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">6-month trend</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {upcomingBills.map((bill, i) => (
-              <div
-                key={bill.id}
-                className="flex items-center gap-3 rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5 animate-fade-up"
-                style={{ animationDelay: `${400 + i * 60}ms` }}
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-0.5 rounded-full bg-emerald-400 inline-block" />Collected</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-0.5 rounded-full bg-rose-400 inline-block" />Costs</span>
+          </div>
+        </div>
+        <ExpenseChart data={monthlyData} />
+      </div>
+
+      {/* ── Section 4: Unified Action List ──────────────────── */}
+      {actionItems.length > 0 && (
+        <div className="rounded-2xl border border-sidebar-border bg-card p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-primary" />
+            <h2 className="text-sm font-semibold text-foreground">Needs Attention</h2>
+            <span className="ml-auto text-xs font-semibold text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
+              {actionItems.length}
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {actionItems.map((item) => (
+              <Link
+                key={item.key}
+                href={item.href}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-colors group ${item.bg} hover:opacity-90`}
               >
-                <div className={`w-1.5 h-8 rounded-full shrink-0 ${bill.status === "overdue" ? "bg-rose-500" : "bg-[hsl(219_100%_50%)]"}`} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{bill.title}</p>
-                  <p className="text-xs text-muted-foreground">Due {formatDate(bill.due_date)}</p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-semibold text-foreground">{formatCurrency(bill.amount)}</p>
-                  <p className={`text-xs font-medium capitalize ${bill.status === "overdue" ? "text-rose-400" : "text-[hsl(219_100%_50%)]"}`}>
-                    {bill.status}
-                  </p>
-                </div>
-              </div>
+                <item.icon className={`w-4 h-4 shrink-0 ${item.color}`} />
+                <span className="text-sm text-foreground flex-1 min-w-0 truncate">{item.text}</span>
+                <span className={`text-xs font-medium shrink-0 ${item.color} opacity-60 group-hover:opacity-100 transition-opacity`}>
+                  {item.action} →
+                </span>
+              </Link>
             ))}
           </div>
         </div>
       )}
+
     </div>
   );
 }

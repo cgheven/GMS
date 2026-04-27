@@ -7,6 +7,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const ctx = await getAuthContext();
   if (!ctx?.user) redirect("/login");
   if (ctx.profile?.is_admin) redirect("/admin/gyms");
+  if ((ctx.profile as { role?: string } | null)?.role === "trainer") redirect("/trainer");
 
   return (
     <GymProvider profile={ctx.profile} gym={ctx.gym} gyms={ctx.gyms ?? []}>

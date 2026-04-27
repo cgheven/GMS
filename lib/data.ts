@@ -7,7 +7,7 @@ import { getMonthRange, formatDateInput } from "@/lib/utils";
 import type {
   Profile, Gym, Member, MembershipPlan, Payment, Issue, Announcement,
   Expense, Bill, Staff, SalaryPayment, CheckIn, GymClass, Equipment,
-  DashboardStats, DashboardMember, RevenueMonth, AgingBucket,
+  DashboardStats, DashboardMember, RevenueMonth, AgingBucket, TrainerStat,
 } from "@/types";
 
 export const getAuthContext = cache(async () => {
@@ -70,8 +70,11 @@ export async function getDashboardData() {
     pendingPaymentsRes,
     allPayments6moRes,
     allExpenses6moRes,
+    trainersRes,
+    assignedMembersRes,
+    currentMonthPaymentsRes,
   ] = await Promise.all([
-    supabase.from("pulse_members").select("status, monthly_fee, plan_expiry_date").eq("gym_id", gymId),
+    supabase.from("pulse_members").select("id, full_name, status, monthly_fee, plan_expiry_date").eq("gym_id", gymId),
     supabase.from("pulse_check_ins").select("id").eq("gym_id", gymId).gte("checked_in_at", `${todayStr}T00:00:00`).lte("checked_in_at", `${todayStr}T23:59:59`),
     supabase.from("pulse_expenses").select("amount").eq("gym_id", gymId).gte("date", start).lte("date", end),
     supabase.from("pulse_salary_payments").select("total_amount").eq("gym_id", gymId).eq("for_month", currentMonthKey).eq("status", "paid"),
@@ -80,6 +83,9 @@ export async function getDashboardData() {
     supabase.from("pulse_payments").select("id,total_amount,status,member:pulse_members(full_name)").eq("gym_id", gymId).in("status", ["pending", "overdue"]),
     supabase.from("pulse_payments").select("for_period,total_amount,status,payment_date").eq("gym_id", gymId).gte("payment_date", ranges[0].start).lte("payment_date", ranges[5].end),
     supabase.from("pulse_expenses").select("amount,date").eq("gym_id", gymId).gte("date", ranges[0].start).lte("date", ranges[5].end),
+    supabase.from("pulse_staff").select("id,full_name").eq("gym_id", gymId).eq("status", "active").eq("role", "trainer"),
+    supabase.from("pulse_members").select("id,assigned_trainer_id,monthly_fee").eq("gym_id", gymId).eq("status", "active"),
+    supabase.from("pulse_payments").select("member_id,total_amount,status").eq("gym_id", gymId).eq("for_period", currentMonthKey),
   ]);
 
   const members = membersRes.data ?? [];
@@ -88,7 +94,12 @@ export async function getDashboardData() {
   const frozenMembers = members.filter((m) => m.status === "frozen");
   const expiringThisWeek = members.filter(
     (m) => m.status === "active" && m.plan_expiry_date && m.plan_expiry_date >= todayStr && m.plan_expiry_date <= weekEnd
-  );
+  ).map((m) => ({
+    id: m.id,
+    name: m.full_name as string,
+    plan_expiry_date: m.plan_expiry_date as string,
+    days_left: Math.ceil((new Date(m.plan_expiry_date!).getTime() - new Date(todayStr).getTime()) / 86400000),
+  })).sort((a, b) => a.days_left - b.days_left);
 
   const monthlyExpenses = (expensesRes.data ?? []).reduce((s, e) => s + Number(e.amount), 0);
   const monthlySalaries = (salariesRes.data ?? []).reduce((s, e) => s + Number(e.total_amount), 0);
@@ -132,10 +143,34 @@ export async function getDashboardData() {
     unpaid_bills: unpaidBills.length,
     unpaid_bills_amount: unpaidBills.reduce((s, b) => s + Number(b.amount), 0),
     expiring_this_week: expiringThisWeek.length,
+    // keep for compat
     revenue_target: gym?.monthly_revenue_target ?? 0,
   };
 
-  return { gymId, stats, upcomingBills: unpaidBills as Bill[], monthlyData, overdueMembers };
+  const trainers = trainersRes.data ?? [];
+  const assignedMembers = assignedMembersRes.data ?? [];
+  const currentMonthPayments = currentMonthPaymentsRes.data ?? [];
+
+  const trainerStats: TrainerStat[] = trainers.map((t) => {
+    const myMembers = assignedMembers.filter((m) => m.assigned_trainer_id === t.id);
+    const myMemberIds = new Set(myMembers.map((m) => m.id));
+    const myPayments = currentMonthPayments.filter((p) => p.member_id && myMemberIds.has(p.member_id));
+    const paidIds = new Set(myPayments.filter((p) => p.status === "paid").map((p) => p.member_id));
+    const collected = myPayments.filter((p) => p.status === "paid").reduce((s, p) => s + Number(p.total_amount), 0);
+    const totalDue = myMembers.reduce((s, m) => s + Number(m.monthly_fee), 0);
+    return {
+      id: t.id,
+      name: t.full_name,
+      total: myMembers.length,
+      paid: paidIds.size,
+      unpaid: myMembers.length - paidIds.size,
+      collected,
+      totalDue,
+      rate: myMembers.length > 0 ? Math.round((paidIds.size / myMembers.length) * 100) : 0,
+    };
+  });
+
+  return { gymId, stats, upcomingBills: unpaidBills as Bill[], monthlyData, overdueMembers, trainerStats, expiringMembers: expiringThisWeek };
 }
 
 export async function getMembers() {
@@ -206,6 +241,74 @@ export async function getPaymentsData() {
     { revalidate: 30, tags: [`payments-${gymId}`] }
   )();
   return { gymId, ...data };
+}
+
+export const getTrainerContext = cache(async () => {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: profile } = await supabase
+    .from("pulse_profiles")
+    .select("role, is_admin")
+    .eq("id", user.id)
+    .single();
+
+  if (profile?.role !== "trainer") return null;
+
+  const { data: staff } = await supabase
+    .from("pulse_staff")
+    .select("*, gym:pulse_gyms(name)")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!staff) return null;
+
+  return {
+    supabase,
+    user,
+    profile,
+    staff: staff as Staff & { gym?: { name: string } | null },
+    gymId: staff.gym_id as string,
+  };
+});
+
+export async function getTrainerPageData() {
+  const ctx = await getTrainerContext();
+  if (!ctx) return null;
+  const { supabase, staff, gymId } = ctx;
+
+  const [{ data: members }, { data: plans }] = await Promise.all([
+    supabase
+      .from("pulse_members")
+      .select("id,full_name,member_number,monthly_fee,plan_id,status,plan_expiry_date,outstanding_balance,plan:pulse_membership_plans(name)")
+      .eq("assigned_trainer_id", staff.id)
+      .eq("status", "active")
+      .order("full_name"),
+    supabase
+      .from("pulse_membership_plans")
+      .select("id,name,price,duration_type")
+      .eq("gym_id", gymId)
+      .eq("is_active", true),
+  ]);
+
+  const memberIds = (members ?? []).map((m) => m.id);
+  const { data: payments } = memberIds.length
+    ? await supabase
+        .from("pulse_payments")
+        .select("*, member:pulse_members(full_name,plan_id)")
+        .in("member_id", memberIds)
+        .order("created_at", { ascending: false })
+        .limit(500)
+    : { data: [] };
+
+  return {
+    staff: ctx.staff,
+    gymId,
+    members: (members ?? []) as unknown as (Pick<Member, "id" | "full_name" | "member_number" | "monthly_fee" | "plan_id" | "status" | "plan_expiry_date" | "outstanding_balance"> & { plan?: { name: string } | null })[],
+    payments: (payments ?? []) as Payment[],
+    plans: (plans ?? []) as Pick<MembershipPlan, "id" | "name" | "price" | "duration_type">[],
+  };
 }
 
 export async function getCheckIns() {

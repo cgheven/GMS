@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, CreditCard, FileText, Settings, X,
-  Shield, Building2, Globe, MessageSquareWarning, Megaphone,
+  Shield, Building2, Globe,
   BarChart3, UserCog, Dumbbell, CalendarDays,
   Wrench, Receipt, ClipboardList, Zap,
 } from "lucide-react";
@@ -38,8 +38,6 @@ const navGroups = [
       { href: "/expenses",      label: "Expenses",      icon: Receipt },
       { href: "/bills",         label: "Bills",          icon: FileText },
       { href: "/equipment",     label: "Equipment",      icon: Wrench },
-      { href: "/issues",        label: "Issues",         icon: MessageSquareWarning },
-      { href: "/announcements", label: "Announcements",  icon: Megaphone },
     ],
   },
   {

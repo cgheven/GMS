@@ -45,6 +45,7 @@ const emptyForm: {
   duration_type: PlanDurationType;
   duration_days: string;
   price: string;
+  admission_fee: string;
   includes_pt: boolean;
   unlimited_classes: boolean;
   access_hours: string;
@@ -56,6 +57,7 @@ const emptyForm: {
   duration_type: "monthly",
   duration_days: "",
   price: "",
+  admission_fee: "",
   includes_pt: false,
   unlimited_classes: false,
   access_hours: "",
@@ -136,6 +138,7 @@ export function PlansClient({ gymId, plans: initialPlans }: Props) {
       duration_type: plan.duration_type,
       duration_days: plan.duration_days?.toString() ?? "",
       price: plan.price.toString(),
+      admission_fee: plan.admission_fee > 0 ? plan.admission_fee.toString() : "",
       includes_pt: plan.includes_pt,
       unlimited_classes: plan.unlimited_classes,
       access_hours: plan.access_hours ?? "",
@@ -163,6 +166,7 @@ export function PlansClient({ gymId, plans: initialPlans }: Props) {
       duration_type: form.duration_type,
       duration_days: form.duration_days ? parseInt(form.duration_days) : null,
       price: parseFloat(form.price) || 0,
+      admission_fee: parseFloat(form.admission_fee) || 0,
       includes_pt: form.includes_pt,
       unlimited_classes: form.unlimited_classes,
       access_hours: form.access_hours || null,
@@ -285,11 +289,18 @@ export function PlansClient({ gymId, plans: initialPlans }: Props) {
 
               <CardContent className="space-y-3">
                 {/* Price */}
-                <div className="flex items-baseline gap-1">
-                  <span className="text-2xl font-bold text-foreground">{formatCurrency(plan.price)}</span>
-                  <span className="text-xs text-muted-foreground">
-                    /{plan.duration_type === "monthly" ? "mo" : plan.duration_type === "annual" ? "yr" : "plan"}
-                  </span>
+                <div className="space-y-1">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-bold text-foreground">{formatCurrency(plan.price)}</span>
+                    <span className="text-xs text-muted-foreground">
+                      /{plan.duration_type === "monthly" ? "mo" : plan.duration_type === "annual" ? "yr" : "plan"}
+                    </span>
+                  </div>
+                  {plan.admission_fee > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      + {formatCurrency(plan.admission_fee)} admission fee
+                    </p>
+                  )}
                 </div>
 
                 {/* Features */}
@@ -419,12 +430,21 @@ export function PlansClient({ gymId, plans: initialPlans }: Props) {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>Price (PKR) *</Label>
+                <Label>Monthly Fee (PKR) *</Label>
                 <Input
                   type="number"
                   placeholder="0"
                   value={form.price}
                   onChange={(e) => setForm({ ...form, price: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Admission Fee (PKR)</Label>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  value={form.admission_fee}
+                  onChange={(e) => setForm({ ...form, admission_fee: e.target.value })}
                 />
               </div>
               <div className="space-y-1.5">

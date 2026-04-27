@@ -27,10 +27,11 @@ export default function LoginPage() {
     }
     const { data: profile } = await supabase
       .from("pulse_profiles")
-      .select("is_admin")
+      .select("is_admin, role")
       .eq("id", data.user.id)
       .single();
-    router.push(profile?.is_admin ? "/admin/gyms" : "/dashboard");
+    const dest = profile?.is_admin ? "/admin/gyms" : profile?.role === "trainer" ? "/trainer" : "/dashboard";
+    router.push(dest);
     router.refresh();
   }
 

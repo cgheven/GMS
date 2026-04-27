@@ -2,20 +2,18 @@
 import { useState, useMemo } from "react";
 import {
   Plus, Edit2, Trash2, Wrench, Package, DollarSign,
-  Search, Filter, Bike, Dumbbell, BarChart2, Zap, Box,
+  Search, Bike, Dumbbell, BarChart2, Zap, Box, PenLine,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
-import { formatCurrency, formatDate, formatDateInput } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
 import type { Equipment, EquipmentCategory, EquipmentCondition } from "@/types";
 
 const CATEGORIES: { value: EquipmentCategory; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
@@ -27,6 +25,15 @@ const CATEGORIES: { value: EquipmentCategory; label: string; icon: React.Compone
   { value: "other",        label: "Other",        icon: Package },
 ];
 
+const PRESETS: Record<EquipmentCategory, string[]> = {
+  cardio:       ["Treadmill", "Stationary Bike", "Elliptical", "Rowing Machine", "Stair Climber", "Air Bike", "Jump Rope", "Spin Bike"],
+  strength:     ["Leg Press", "Chest Press Machine", "Lat Pulldown", "Cable Machine", "Smith Machine", "Leg Extension", "Leg Curl", "Shoulder Press Machine", "Seated Row"],
+  free_weights: ["Dumbbell Set", "Barbell", "EZ Bar", "Weight Plates", "Kettlebell", "Medicine Ball", "Hex Bar", "Curl Bar"],
+  functional:   ["Pull-up Bar", "Resistance Bands", "TRX Suspension", "Battle Ropes", "Plyometric Box", "Agility Ladder", "Slam Ball", "Speed Bag"],
+  accessories:  ["Yoga Mat", "Foam Roller", "Weight Belt", "Skipping Rope", "Gym Gloves", "Mirror", "Water Cooler", "Exercise Ball", "Ab Roller"],
+  other:        ["Locker", "Bench", "Storage Rack", "Clock", "Sound System", "Fan", "AC Unit", "CCTV Camera"],
+};
+
 const CONDITIONS: { value: EquipmentCondition; label: string; badge: string }[] = [
   { value: "excellent",    label: "Excellent",    badge: "bg-emerald-500/10 border-emerald-500/25 text-emerald-400" },
   { value: "good",         label: "Good",         badge: "bg-blue-500/10 border-blue-500/25 text-blue-400" },
@@ -35,47 +42,41 @@ const CONDITIONS: { value: EquipmentCondition; label: string; badge: string }[] 
   { value: "retired",      label: "Retired",      badge: "bg-white/5 border-white/10 text-muted-foreground" },
 ];
 
-const conditionBadge = (condition: EquipmentCondition) =>
-  CONDITIONS.find((c) => c.value === condition)?.badge ?? "";
-
-const conditionLabel = (condition: EquipmentCondition) =>
-  CONDITIONS.find((c) => c.value === condition)?.label ?? condition;
-
-const categoryLabel = (category: EquipmentCategory) =>
-  CATEGORIES.find((c) => c.value === category)?.label ?? category;
+const conditionBadge = (c: EquipmentCondition) => CONDITIONS.find((x) => x.value === c)?.badge ?? "";
+const conditionLabel  = (c: EquipmentCondition) => CONDITIONS.find((x) => x.value === c)?.label ?? c;
+const categoryLabel   = (c: EquipmentCategory)  => CATEGORIES.find((x) => x.value === c)?.label ?? c;
 
 const CategoryIcon = ({ category, className }: { category: EquipmentCategory; className?: string }) => {
-  const entry = CATEGORIES.find((c) => c.value === category);
-  const Icon = entry?.icon ?? Package;
+  const Icon = CATEGORIES.find((c) => c.value === category)?.icon ?? Package;
   return <Icon className={className} />;
 };
 
 const emptyForm = {
-  name: "",
-  category: "cardio" as EquipmentCategory,
-  quantity: "1",
-  purchase_date: "",
-  purchase_price: "",
-  condition: "good" as EquipmentCondition,
-  last_maintenance_date: "",
-  notes: "",
+  name: "", category: "cardio" as EquipmentCategory, quantity: "1",
+  purchase_date: "", purchase_price: "", condition: "good" as EquipmentCondition,
+  last_maintenance_date: "", notes: "",
 };
 
-interface Props {
-  gymId: string | null;
-  equipment: Equipment[];
-}
+interface QuickAdd { name: string; category: EquipmentCategory }
+
+interface Props { gymId: string | null; equipment: Equipment[] }
 
 export function EquipmentClient({ gymId, equipment: initialEquipment }: Props) {
-  const [equipment, setEquipment] = useState<Equipment[]>(initialEquipment);
-  const [search, setSearch] = useState("");
-  const [filterCategory, setFilterCategory] = useState("all");
+  const [equipment, setEquipment]         = useState<Equipment[]>(initialEquipment);
+  const [search, setSearch]               = useState("");
+  const [activeCategory, setActiveCategory] = useState<EquipmentCategory | "all">("all");
   const [filterCondition, setFilterCondition] = useState("all");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<Equipment | null>(null);
-  const [form, setForm] = useState(emptyForm);
-  const [saving, setSaving] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen]       = useState(false);
+  const [editing, setEditing]             = useState<Equipment | null>(null);
+  const [form, setForm]                   = useState(emptyForm);
+  const [saving, setSaving]               = useState(false);
+  const [deleteId, setDeleteId]           = useState<string | null>(null);
+
+  // Quick-add state
+  const [quickAdd, setQuickAdd]           = useState<QuickAdd | null>(null);
+  const [quickQty, setQuickQty]           = useState("1");
+  const [quickCondition, setQuickCondition] = useState<EquipmentCondition>("good");
+  const [quickSaving, setQuickSaving]     = useState(false);
 
   async function reload() {
     if (!gymId) return;
@@ -84,22 +85,46 @@ export function EquipmentClient({ gymId, equipment: initialEquipment }: Props) {
     setEquipment((data as Equipment[]) ?? []);
   }
 
-  function openAdd() {
+  function openQuickAdd(name: string, category: EquipmentCategory) {
+    setQuickAdd({ name, category });
+    setQuickQty("1");
+    setQuickCondition("good");
+  }
+
+  async function handleQuickAdd() {
+    if (!gymId || !quickAdd) return;
+    setQuickSaving(true);
+    const supabase = createClient();
+    const { error } = await supabase.from("pulse_equipment").insert({
+      gym_id: gymId,
+      name: quickAdd.name,
+      category: quickAdd.category,
+      quantity: parseInt(quickQty) || 1,
+      condition: quickCondition,
+      purchase_date: null, purchase_price: null,
+      last_maintenance_date: null, notes: null,
+    });
+    if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
+    else {
+      toast({ title: `${quickAdd.name} added` });
+      setQuickAdd(null);
+      await reload();
+    }
+    setQuickSaving(false);
+  }
+
+  function openAdd(category?: EquipmentCategory) {
     setEditing(null);
-    setForm(emptyForm);
+    setForm({ ...emptyForm, ...(category ? { category } : {}) });
     setDialogOpen(true);
   }
 
   function openEdit(item: Equipment) {
     setEditing(item);
     setForm({
-      name: item.name,
-      category: item.category,
-      quantity: item.quantity.toString(),
-      purchase_date: item.purchase_date ?? "",
-      purchase_price: item.purchase_price?.toString() ?? "",
-      condition: item.condition,
-      last_maintenance_date: item.last_maintenance_date ?? "",
+      name: item.name, category: item.category, quantity: item.quantity.toString(),
+      purchase_date: item.purchase_date ?? "", purchase_price: item.purchase_price?.toString() ?? "",
+      condition: item.condition, last_maintenance_date: item.last_maintenance_date ?? "",
       notes: item.notes ?? "",
     });
     setDialogOpen(true);
@@ -110,9 +135,7 @@ export function EquipmentClient({ gymId, equipment: initialEquipment }: Props) {
     setSaving(true);
     const supabase = createClient();
     const payload = {
-      gym_id: gymId,
-      name: form.name,
-      category: form.category,
+      gym_id: gymId, name: form.name, category: form.category,
       quantity: parseInt(form.quantity) || 1,
       purchase_date: form.purchase_date || null,
       purchase_price: form.purchase_price ? parseFloat(form.purchase_price) : null,
@@ -138,17 +161,19 @@ export function EquipmentClient({ gymId, equipment: initialEquipment }: Props) {
   const filtered = useMemo(() => {
     let list = equipment;
     if (search) list = list.filter((e) => e.name.toLowerCase().includes(search.toLowerCase()));
-    if (filterCategory !== "all") list = list.filter((e) => e.category === filterCategory);
+    if (activeCategory !== "all") list = list.filter((e) => e.category === activeCategory);
     if (filterCondition !== "all") list = list.filter((e) => e.condition === filterCondition);
     return list;
-  }, [equipment, search, filterCategory, filterCondition]);
+  }, [equipment, search, activeCategory, filterCondition]);
 
-  const stats = useMemo(() => {
-    const totalItems = equipment.reduce((s, e) => s + e.quantity, 0);
-    const needsRepair = equipment.filter((e) => e.condition === "needs_repair").length;
-    const totalValue = equipment.reduce((s, e) => s + (e.purchase_price ? Number(e.purchase_price) * e.quantity : 0), 0);
-    return { totalItems, needsRepair, totalValue };
-  }, [equipment]);
+  const stats = useMemo(() => ({
+    totalItems:  equipment.reduce((s, e) => s + e.quantity, 0),
+    needsRepair: equipment.filter((e) => e.condition === "needs_repair").length,
+    totalValue:  equipment.reduce((s, e) => s + (e.purchase_price ? Number(e.purchase_price) * e.quantity : 0), 0),
+  }), [equipment]);
+
+  const presets = activeCategory !== "all" ? PRESETS[activeCategory] : [];
+  const existingNames = useMemo(() => new Set(equipment.map((e) => e.name.toLowerCase())), [equipment]);
 
   return (
     <div className="space-y-6">
@@ -157,17 +182,17 @@ export function EquipmentClient({ gymId, equipment: initialEquipment }: Props) {
           <h1 className="text-3xl font-serif font-normal tracking-tight">Equipment</h1>
           <p className="text-muted-foreground text-sm mt-1">Manage gym equipment inventory</p>
         </div>
-        <Button onClick={openAdd} className="gap-2 w-full sm:w-auto">
-          <Plus className="w-4 h-4" /> Add Equipment
+        <Button onClick={() => openAdd()} className="gap-2 w-full sm:w-auto">
+          <PenLine className="w-4 h-4" /> Custom Entry
         </Button>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { label: "Total Items",   value: stats.totalItems,               icon: Package,  color: "text-blue-400",   bg: "bg-blue-500/10 border border-blue-500/20" },
-          { label: "Needs Repair",  value: stats.needsRepair,              icon: Wrench,   color: "text-rose-400",   bg: "bg-rose-500/10 border border-rose-500/20" },
-          { label: "Total Value",   value: formatCurrency(stats.totalValue), icon: DollarSign, color: "text-primary", bg: "bg-primary/10 border border-primary/20" },
+          { label: "Total Items",  value: stats.totalItems,                icon: Package,    color: "text-blue-400",  bg: "bg-blue-500/10 border border-blue-500/20" },
+          { label: "Needs Repair", value: stats.needsRepair,               icon: Wrench,     color: "text-rose-400",  bg: "bg-rose-500/10 border border-rose-500/20" },
+          { label: "Total Value",  value: formatCurrency(stats.totalValue), icon: DollarSign, color: "text-primary",   bg: "bg-primary/10 border border-primary/20" },
         ].map(({ label, value, icon: Icon, color, bg }) => (
           <Card key={label}>
             <CardContent className="p-4 flex items-center gap-3">
@@ -178,31 +203,105 @@ export function EquipmentClient({ gymId, equipment: initialEquipment }: Props) {
         ))}
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1 max-w-sm">
+      {/* Quick-add panel */}
+      <div className="rounded-2xl border border-sidebar-border bg-card p-5 space-y-4">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Quick Add</p>
+
+        {/* Category chips */}
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveCategory("all")}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+              activeCategory === "all"
+                ? "bg-primary/15 border-primary/40 text-primary"
+                : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+            }`}
+          >
+            <Package className="w-3 h-3" /> All
+          </button>
+          {CATEGORIES.map((c) => {
+            const Icon = c.icon;
+            const active = activeCategory === c.value;
+            return (
+              <button
+                key={c.value}
+                type="button"
+                onClick={() => setActiveCategory(active ? "all" : c.value)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  active
+                    ? "bg-primary/15 border-primary/40 text-primary"
+                    : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+                }`}
+              >
+                <Icon className="w-3 h-3" />
+                {c.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Preset item chips */}
+        {presets.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {presets.map((name) => {
+              const already = existingNames.has(name.toLowerCase());
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  disabled={already}
+                  onClick={() => openQuickAdd(name, activeCategory as EquipmentCategory)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                    already
+                      ? "border-white/5 text-white/20 cursor-default line-through"
+                      : "bg-white/[0.03] border-white/10 text-foreground hover:bg-primary/10 hover:border-primary/30 hover:text-primary"
+                  }`}
+                >
+                  {!already && <Plus className="w-3 h-3" />}
+                  {name}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {presets.length === 0 && (
+          <p className="text-xs text-muted-foreground">Select a category above to see preset items.</p>
+        )}
+      </div>
+
+      {/* Search + condition filter */}
+      <div className="space-y-3">
+        <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Search equipment..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <Select value={filterCategory} onValueChange={setFilterCategory}>
-          <SelectTrigger className="w-full sm:w-44">
-            <SelectValue placeholder="Category" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Categories</SelectItem>
-            {CATEGORIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={filterCondition} onValueChange={setFilterCondition}>
-          <SelectTrigger className="w-full sm:w-44">
-            <Filter className="w-3.5 h-3.5 mr-1.5" />
-            <SelectValue placeholder="Condition" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Conditions</SelectItem>
-            {CONDITIONS.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setFilterCondition("all")}
+            className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+              filterCondition === "all"
+                ? "bg-primary/15 border-primary/40 text-primary"
+                : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+            }`}
+          >
+            All Conditions
+          </button>
+          {CONDITIONS.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => setFilterCondition(c.value)}
+              className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                filterCondition === c.value ? c.badge : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+              }`}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Equipment list */}
@@ -210,9 +309,9 @@ export function EquipmentClient({ gymId, equipment: initialEquipment }: Props) {
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground">
             <Package className="w-10 h-10 mb-3 opacity-30" />
-            <p className="font-medium">{search || filterCategory !== "all" || filterCondition !== "all" ? "No equipment matches filters" : "No equipment yet"}</p>
-            {!search && filterCategory === "all" && filterCondition === "all" && (
-              <p className="text-sm mt-1">Add your first piece of equipment to get started</p>
+            <p className="font-medium">{search || activeCategory !== "all" || filterCondition !== "all" ? "No equipment matches filters" : "No equipment yet"}</p>
+            {!search && activeCategory === "all" && filterCondition === "all" && (
+              <p className="text-sm mt-1">Pick a category above and tap an item to add it</p>
             )}
           </CardContent>
         </Card>
@@ -246,7 +345,7 @@ export function EquipmentClient({ gymId, equipment: initialEquipment }: Props) {
                         </div>
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell">
-                        <span className="text-sm text-muted-foreground capitalize">{categoryLabel(item.category)}</span>
+                        <span className="text-sm text-muted-foreground">{categoryLabel(item.category)}</span>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs font-medium ${conditionBadge(item.condition)}`}>
@@ -282,44 +381,124 @@ export function EquipmentClient({ gymId, equipment: initialEquipment }: Props) {
         onCancel={() => setDeleteId(null)}
       />
 
-      {/* Add / Edit Dialog */}
+      {/* Quick-add dialog */}
+      <Dialog open={!!quickAdd} onOpenChange={(o) => { if (!o) setQuickAdd(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add {quickAdd?.name}</DialogTitle>
+          </DialogHeader>
+          {quickAdd && (
+            <div className="space-y-5 py-1">
+              {/* Category badge */}
+              <div className="flex items-center gap-2">
+                <CategoryIcon category={quickAdd.category} className="w-3.5 h-3.5 text-primary" />
+                <span className="text-xs text-primary font-medium">{categoryLabel(quickAdd.category)}</span>
+              </div>
+
+              {/* Quantity */}
+              <div className="space-y-2">
+                <Label>Quantity</Label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {[1, 2, 3, 5, 10].map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => setQuickQty(q.toString())}
+                      className={`w-10 h-10 rounded-xl text-sm font-semibold border transition-colors ${
+                        quickQty === q.toString()
+                          ? "bg-primary/15 border-primary/40 text-primary"
+                          : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+                      }`}
+                    >
+                      {q}
+                    </button>
+                  ))}
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="Other"
+                    value={[1,2,3,5,10].includes(parseInt(quickQty)) ? "" : quickQty}
+                    onChange={(e) => setQuickQty(e.target.value)}
+                    className="w-20 h-10"
+                  />
+                </div>
+              </div>
+
+              {/* Condition */}
+              <div className="space-y-2">
+                <Label>Condition</Label>
+                <div className="flex flex-wrap gap-2">
+                  {CONDITIONS.map((c) => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      onClick={() => setQuickCondition(c.value)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                        quickCondition === c.value ? c.badge : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+                      }`}
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setQuickAdd(null)}>Cancel</Button>
+            <Button onClick={handleQuickAdd} disabled={quickSaving}>
+              {quickSaving ? "Adding…" : "Add Equipment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Full Add / Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg">
-          <DialogHeader><DialogTitle>{editing ? "Edit Equipment" : "Add Equipment"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editing ? "Edit Equipment" : "Custom Equipment"}</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="space-y-1.5">
               <Label>Name *</Label>
-              <Input placeholder="e.g. Treadmill, Dumbbell Set…" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Input placeholder="e.g. Custom Machine…" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Category</Label>
-                <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v as EquipmentCategory })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Quantity</Label>
-                <Input type="number" min="1" placeholder="1" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
+            <div className="space-y-1.5">
+              <Label>Category</Label>
+              <div className="flex flex-wrap gap-2">
+                {CATEGORIES.map((c) => {
+                  const Icon = c.icon;
+                  const active = form.category === c.value;
+                  return (
+                    <button key={c.value} type="button" onClick={() => setForm({ ...form, category: c.value })}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                        active ? "bg-primary/15 border-primary/40 text-primary" : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+                      }`}>
+                      <Icon className="w-3 h-3" />{c.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Condition</Label>
-                <Select value={form.condition} onValueChange={(v) => setForm({ ...form, condition: v as EquipmentCondition })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {CONDITIONS.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+            <div className="space-y-1.5">
+              <Label>Condition</Label>
+              <div className="flex flex-wrap gap-2">
+                {CONDITIONS.map((c) => (
+                  <button key={c.value} type="button" onClick={() => setForm({ ...form, condition: c.value as EquipmentCondition })}
+                    className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                      form.condition === c.value ? c.badge : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+                    }`}>
+                    {c.label}
+                  </button>
+                ))}
               </div>
-              <div className="space-y-1.5">
-                <Label>Purchase Price (PKR)</Label>
-                <Input type="number" placeholder="0" value={form.purchase_price} onChange={(e) => setForm({ ...form, purchase_price: e.target.value })} />
-              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Quantity</Label>
+              <Input type="number" min="1" placeholder="1" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Purchase Price (PKR)</Label>
+              <Input type="number" placeholder="0" value={form.purchase_price} onChange={(e) => setForm({ ...form, purchase_price: e.target.value })} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">

@@ -1,3 +1,14 @@
+export interface TrainerStat {
+  id: string;
+  name: string;
+  total: number;
+  paid: number;
+  unpaid: number;
+  collected: number;
+  totalDue: number;
+  rate: number;
+}
+
 // ── Enums ──────────────────────────────────────────────────────────────────
 export type MemberStatus = "active" | "frozen" | "expired" | "cancelled";
 export type MemberGender = "male" | "female" | "other";
@@ -89,6 +100,7 @@ export interface MembershipPlan {
   duration_type: PlanDurationType;
   duration_days: number | null;
   price: number;
+  admission_fee: number;
   includes_pt: boolean;
   unlimited_classes: boolean;
   access_hours: string | null;
@@ -122,6 +134,7 @@ export interface Member {
   status: MemberStatus;
   freeze_start_date: string | null;
   freeze_end_date: string | null;
+  admission_fee: number;
   monthly_fee: number;
   outstanding_balance: number;
   notes: string | null;
@@ -180,6 +193,7 @@ export interface Staff {
   commission_percentage: number;
   status: StaffStatus;
   notes: string | null;
+  user_id: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -41,6 +41,8 @@ const emptyForm = {
   join_date: formatDateInput(new Date()),
   plan_start_date: formatDateInput(new Date()),
   plan_expiry_date: "",
+  admission_fee: "",
+  admission_fee_paid: false,
   monthly_fee: "",
   outstanding_balance: "0",
   emergency_contact: "",
@@ -124,6 +126,8 @@ export function MembersClient({
       join_date: m.join_date,
       plan_start_date: m.plan_start_date ?? "",
       plan_expiry_date: m.plan_expiry_date ?? "",
+      admission_fee: m.admission_fee > 0 ? m.admission_fee.toString() : "",
+      admission_fee_paid: false,
       monthly_fee: m.monthly_fee.toString(),
       outstanding_balance: m.outstanding_balance.toString(),
       emergency_contact: m.emergency_contact ?? "",
@@ -141,6 +145,10 @@ export function MembersClient({
     setSaving(true);
     const supabase = createClient();
 
+    const admissionFee = parseFloat(form.admission_fee) || 0;
+    const admissionPaid = !editing && admissionFee > 0 && form.admission_fee_paid;
+    const admissionUnpaid = !editing && admissionFee > 0 && !form.admission_fee_paid;
+
     const payload = {
       gym_id: gymId,
       full_name: form.full_name,
@@ -156,8 +164,9 @@ export function MembersClient({
       join_date: form.join_date || formatDateInput(new Date()),
       plan_start_date: form.plan_start_date || null,
       plan_expiry_date: form.plan_expiry_date || null,
+      admission_fee: admissionFee,
       monthly_fee: parseFloat(form.monthly_fee) || 0,
-      outstanding_balance: parseFloat(form.outstanding_balance) || 0,
+      outstanding_balance: (parseFloat(form.outstanding_balance) || 0) + (admissionUnpaid ? admissionFee : 0),
       emergency_contact: form.emergency_contact || null,
       emergency_phone: form.emergency_phone || null,
       medical_notes: form.medical_notes || null,
@@ -166,14 +175,41 @@ export function MembersClient({
       is_waiting: form.is_waiting,
     };
 
-    const { error } = editing
-      ? await supabase.from("pulse_members").update(payload).eq("id", editing.id)
-      : await supabase.from("pulse_members").insert(payload);
-
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-      setSaving(false);
-      return;
+    if (editing) {
+      const { error } = await supabase.from("pulse_members").update(payload).eq("id", editing.id);
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+        setSaving(false);
+        return;
+      }
+    } else {
+      const { data: newMember, error } = await supabase
+        .from("pulse_members")
+        .insert(payload)
+        .select("id")
+        .single();
+      if (error || !newMember) {
+        toast({ title: "Error", description: error?.message ?? "Unknown error", variant: "destructive" });
+        setSaving(false);
+        return;
+      }
+      // Auto-create paid admission fee payment record
+      if (admissionPaid) {
+        await supabase.from("pulse_payments").insert({
+          gym_id: gymId,
+          member_id: newMember.id,
+          plan_id: form.plan_id || null,
+          amount: admissionFee,
+          discount: 0,
+          late_fee: 0,
+          total_amount: admissionFee,
+          payment_method: "cash",
+          payment_date: form.join_date || formatDateInput(new Date()),
+          for_period: "admission",
+          status: "paid",
+          notes: "Admission fee",
+        });
+      }
     }
 
     toast({
@@ -220,6 +256,7 @@ export function MembersClient({
       ...f,
       plan_id: planId,
       monthly_fee: plan ? plan.price.toString() : f.monthly_fee,
+      admission_fee: plan?.admission_fee > 0 ? plan.admission_fee.toString() : f.admission_fee,
     }));
   }
 
@@ -314,7 +351,10 @@ export function MembersClient({
                   </td>
                   {/* Fee */}
                   <td className="px-4 py-3 text-right">
-                    <p className="font-semibold text-foreground">{formatCurrency(m.monthly_fee)}</p>
+                    <p className="font-semibold text-foreground">{formatCurrency(m.monthly_fee)}/mo</p>
+                    {m.admission_fee > 0 && (
+                      <p className="text-xs text-muted-foreground">+{formatCurrency(m.admission_fee)} admission</p>
+                    )}
                     {m.outstanding_balance > 0 && (
                       <p className="text-xs text-rose-400">Due: {formatCurrency(m.outstanding_balance)}</p>
                     )}
@@ -632,6 +672,49 @@ export function MembersClient({
                       onChange={(e) => setForm({ ...form, monthly_fee: e.target.value })}
                     />
                   </div>
+                  <div className="space-y-1.5">
+                    <Label>Admission Fee (PKR)</Label>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      value={form.admission_fee}
+                      onChange={(e) => setForm({ ...form, admission_fee: e.target.value })}
+                    />
+                  </div>
+                  {!editing && parseFloat(form.admission_fee) > 0 && (
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <Label>Admission Fee Status</Label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setForm({ ...form, admission_fee_paid: true })}
+                          className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                            form.admission_fee_paid
+                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                              : "border-sidebar-border text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Paid Now
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setForm({ ...form, admission_fee_paid: false })}
+                          className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                            !form.admission_fee_paid
+                              ? "bg-rose-500/10 border-rose-500/30 text-rose-400"
+                              : "border-sidebar-border text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Pending
+                        </button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {form.admission_fee_paid
+                          ? "A paid payment record will be created automatically."
+                          : "Amount will be added to outstanding balance."}
+                      </p>
+                    </div>
+                  )}
                   <div className="space-y-1.5">
                     <Label>Outstanding Balance (PKR)</Label>
                     <Input
