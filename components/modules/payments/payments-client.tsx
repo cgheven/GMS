@@ -308,6 +308,40 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
     members.filter((m) => currentMonthPayments.get(m.id)?.status === "paid").length,
     [members, currentMonthPayments]);
 
+  // Per-trainer + gym-only collection stats
+  const collectionStats = useMemo(() => {
+    const groups = new Map<string, { label: string; total: number; paid: number; collected: number; remaining: number }>();
+
+    for (const m of members) {
+      const key = m.assigned_trainer_id ?? "none";
+      const label = m.trainer?.full_name ?? "Gym Only";
+      if (!groups.has(key)) groups.set(key, { label, total: 0, paid: 0, collected: 0, remaining: 0 });
+      const g = groups.get(key)!;
+      g.total += 1;
+      const p = currentMonthPayments.get(m.id);
+      if (p?.status === "paid") {
+        g.paid += 1;
+        g.collected += Number(p.total_amount);
+      } else {
+        g.remaining += 1;
+      }
+    }
+
+    const list = Array.from(groups.entries())
+      .map(([id, g]) => ({ id, ...g }))
+      .sort((a, b) => {
+        if (a.id === "none") return 1;
+        if (b.id === "none") return -1;
+        return a.label.localeCompare(b.label);
+      });
+
+    const totalCollected = list.reduce((s, g) => s + g.collected, 0);
+    const totalPaid = list.reduce((s, g) => s + g.paid, 0);
+    const totalRemaining = list.reduce((s, g) => s + g.remaining, 0);
+
+    return { groups: list, totalCollected, totalPaid, totalRemaining };
+  }, [members, currentMonthPayments]);
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -341,46 +375,57 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
       {/* ── Members view ─────────────────────────────────────────────────────── */}
       {view === "members" && (
         <div className="space-y-4">
-          {/* Stats row */}
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <span className="text-foreground font-medium">{MONTH_LABEL}</span>
-            <span className="text-emerald-400 font-medium">{paidCount} paid</span>
-            <span className="text-rose-400 font-medium">{members.length - paidCount} pending</span>
+          {/* Collection stat cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {/* Total card */}
+            <button type="button" onClick={() => setMemberTrainerFilter("all")}
+              className={`flex flex-col gap-1.5 p-4 rounded-2xl border text-left transition-all ${
+                memberTrainerFilter === "all"
+                  ? "border-primary/30 bg-primary/10"
+                  : "border-sidebar-border bg-card hover:border-primary/20 hover:bg-primary/5"
+              }`}>
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Total</p>
+              <p className="text-xl font-bold text-foreground">{formatCurrency(collectionStats.totalCollected)}</p>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-emerald-400">{collectionStats.totalPaid} paid</span>
+                {collectionStats.totalRemaining > 0 && <span className="text-rose-400">{collectionStats.totalRemaining} left</span>}
+              </div>
+              <div className="w-full bg-white/5 rounded-full h-1 mt-0.5">
+                <div className="bg-emerald-500 h-1 rounded-full transition-all"
+                  style={{ width: members.length ? `${(collectionStats.totalPaid / members.length) * 100}%` : "0%" }} />
+              </div>
+            </button>
+
+            {/* Per-trainer + gym only cards */}
+            {collectionStats.groups.map((g) => (
+              <button key={g.id} type="button"
+                onClick={() => setMemberTrainerFilter(memberTrainerFilter === g.id ? "all" : g.id)}
+                className={`flex flex-col gap-1.5 p-4 rounded-2xl border text-left transition-all ${
+                  memberTrainerFilter === g.id
+                    ? "border-primary/30 bg-primary/10"
+                    : "border-sidebar-border bg-card hover:border-primary/20 hover:bg-primary/5"
+                }`}>
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider truncate">
+                  {g.id === "none" ? "Gym Only" : g.label}
+                </p>
+                <p className="text-xl font-bold text-foreground">{formatCurrency(g.collected)}</p>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-emerald-400">{g.paid}/{g.total} paid</span>
+                  {g.remaining > 0 && <span className="text-rose-400">{g.remaining} left</span>}
+                </div>
+                <div className="w-full bg-white/5 rounded-full h-1 mt-0.5">
+                  <div className="bg-emerald-500 h-1 rounded-full transition-all"
+                    style={{ width: g.total ? `${(g.paid / g.total) * 100}%` : "0%" }} />
+                </div>
+              </button>
+            ))}
           </div>
 
-          {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative max-w-sm w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search members…" value={memberSearch}
-                onChange={(e) => setMemberSearch(e.target.value)} className="pl-9" />
-            </div>
-            {trainers.length > 0 && (
-              <div className="flex gap-2 flex-wrap">
-                <button type="button" onClick={() => setMemberTrainerFilter("all")}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                    memberTrainerFilter === "all"
-                      ? "bg-primary/15 border-primary/30 text-primary"
-                      : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
-                  }`}>All</button>
-                {trainers.map((t) => (
-                  <button key={t.id} type="button"
-                    onClick={() => setMemberTrainerFilter(memberTrainerFilter === t.id ? "all" : t.id)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                      memberTrainerFilter === t.id
-                        ? "bg-primary/15 border-primary/30 text-primary"
-                        : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
-                    }`}>{t.name}</button>
-                ))}
-                <button type="button"
-                  onClick={() => setMemberTrainerFilter(memberTrainerFilter === "none" ? "all" : "none")}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                    memberTrainerFilter === "none"
-                      ? "bg-primary/15 border-primary/30 text-primary"
-                      : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
-                  }`}>Gym Only</button>
-              </div>
-            )}
+          {/* Search */}
+          <div className="relative max-w-sm w-full">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input placeholder="Search members…" value={memberSearch}
+              onChange={(e) => setMemberSearch(e.target.value)} className="pl-9" />
           </div>
 
           {/* Members table */}
