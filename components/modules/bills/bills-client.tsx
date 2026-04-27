@@ -6,7 +6,6 @@ import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -173,74 +172,128 @@ export function BillsClient({ gymId, bills: initialBills }: Props) {
         ))}
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1 max-w-sm">
+      {/* Search + status chips */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="relative max-w-sm w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Search bills..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-40"><SelectValue placeholder="Status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="unpaid">Unpaid</SelectItem>
-            <SelectItem value="paid">Paid</SelectItem>
-            <SelectItem value="overdue">Overdue</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex gap-2">
+          {[
+            { value: "all",     label: "All" },
+            { value: "unpaid",  label: "Unpaid" },
+            { value: "overdue", label: "Overdue" },
+            { value: "paid",    label: "Paid" },
+          ].map((s) => (
+            <button
+              key={s.value}
+              type="button"
+              onClick={() => setStatusFilter(s.value)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                statusFilter === s.value
+                  ? s.value === "overdue" ? "bg-rose-500/10 border-rose-500/30 text-rose-400"
+                  : s.value === "paid"    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                  : s.value === "unpaid"  ? "bg-yellow-500/10 border-yellow-500/30 text-yellow-400"
+                  : "bg-primary/15 border-primary/40 text-primary"
+                  : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-              <FileText className="w-10 h-10 mb-3 opacity-30" />
-              <p className="font-medium">No bills found</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-sidebar-border">
-              {filtered.map((bill) => {
-                const cfg = statusConfig[bill.status];
-                return (
-                  <div key={bill.id} className="flex items-center gap-3 px-4 py-4 hover:bg-white/[0.02] transition-colors">
-                    <div className="text-2xl shrink-0">{categoryIcons[bill.category]}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium text-sm">{bill.title}</p>
-                        <Badge variant={cfg.badge} className="text-xs">{cfg.label}</Badge>
-                      </div>
-                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
-                        <span className="text-xs text-muted-foreground capitalize">{bill.category}</span>
-                        <span className="text-xs text-muted-foreground">Due: {formatDate(bill.due_date)}</span>
-                        {bill.paid_date && <span className="text-xs text-muted-foreground">Paid: {formatDate(bill.paid_date)}</span>}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="font-bold text-sm">{formatCurrency(bill.amount)}</p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {bill.status !== "paid" && (
-                        <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 border border-emerald-500/20" onClick={() => markPaid(bill)}>
-                          <CheckCircle2 className="w-3 h-3" /> Pay
-                        </Button>
-                      )}
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
-                        setEditing(bill);
-                        setForm({ title: bill.title, category: bill.category, amount: bill.amount.toString(), due_date: bill.due_date, paid_date: bill.paid_date ?? "", status: bill.status, notes: bill.notes ?? "" });
-                        setDialogOpen(true);
-                      }}>
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteId(bill.id)}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Bills table */}
+      <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
+        {filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+            <FileText className="w-10 h-10 mb-3 opacity-30" />
+            <p className="font-medium">No bills found</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-sidebar-border">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Bill</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Due Date</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Paid Date</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Amount</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-sidebar-border/50">
+                {filtered.map((bill) => {
+                  const cfg = statusConfig[bill.status];
+                  const StatusIcon = cfg.icon;
+                  return (
+                    <tr key={bill.id} className="hover:bg-white/[0.02] transition-colors group">
+                      {/* Bill title */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/8 flex items-center justify-center text-base shrink-0">
+                            {categoryIcons[bill.category]}
+                          </div>
+                          <p className="font-medium text-foreground">{bill.title}</p>
+                        </div>
+                      </td>
+                      {/* Status */}
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                          bill.status === "paid"    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" :
+                          bill.status === "overdue" ? "bg-rose-500/10 border-rose-500/20 text-rose-400" :
+                                                      "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
+                        }`}>
+                          <StatusIcon className="w-3 h-3" />
+                          {cfg.label}
+                        </span>
+                      </td>
+                      {/* Due date */}
+                      <td className="px-4 py-3 hidden md:table-cell">
+                        <span className={`text-sm ${bill.status === "overdue" ? "text-rose-400 font-medium" : "text-muted-foreground"}`}>
+                          {formatDate(bill.due_date)}
+                        </span>
+                      </td>
+                      {/* Paid date */}
+                      <td className="px-4 py-3 hidden lg:table-cell">
+                        <span className="text-sm text-muted-foreground">
+                          {bill.paid_date ? formatDate(bill.paid_date) : "—"}
+                        </span>
+                      </td>
+                      {/* Amount */}
+                      <td className="px-4 py-3 text-right">
+                        <span className="font-semibold text-foreground">{formatCurrency(bill.amount)}</span>
+                      </td>
+                      {/* Actions */}
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {bill.status !== "paid" && (
+                            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10" onClick={() => markPaid(bill)}>
+                              <CheckCircle2 className="w-3 h-3" /> Pay
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
+                            setEditing(bill);
+                            setForm({ title: bill.title, category: bill.category, amount: bill.amount.toString(), due_date: bill.due_date, paid_date: bill.paid_date ?? "", status: bill.status, notes: bill.notes ?? "" });
+                            setDialogOpen(true);
+                          }}>
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteId(bill.id)}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <ConfirmDialog
         open={!!deleteId}

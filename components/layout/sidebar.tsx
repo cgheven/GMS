@@ -22,7 +22,7 @@ const navGroups = [
     items: [
       { href: "/members",  label: "Members",   icon: Users },
       { href: "/plans",    label: "Plans",      icon: Zap },
-      { href: "/payments", label: "Payments",   icon: CreditCard },
+      { href: "/payments", label: "Transactions", icon: CreditCard },
     ],
   },
   {

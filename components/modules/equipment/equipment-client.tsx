@@ -26,12 +26,40 @@ const CATEGORIES: { value: EquipmentCategory; label: string; icon: React.Compone
 ];
 
 const PRESETS: Record<EquipmentCategory, string[]> = {
-  cardio:       ["Treadmill", "Stationary Bike", "Elliptical", "Rowing Machine", "Stair Climber", "Air Bike", "Jump Rope", "Spin Bike"],
-  strength:     ["Leg Press", "Chest Press Machine", "Lat Pulldown", "Cable Machine", "Smith Machine", "Leg Extension", "Leg Curl", "Shoulder Press Machine", "Seated Row"],
-  free_weights: ["Dumbbell Set", "Barbell", "EZ Bar", "Weight Plates", "Kettlebell", "Medicine Ball", "Hex Bar", "Curl Bar"],
-  functional:   ["Pull-up Bar", "Resistance Bands", "TRX Suspension", "Battle Ropes", "Plyometric Box", "Agility Ladder", "Slam Ball", "Speed Bag"],
-  accessories:  ["Yoga Mat", "Foam Roller", "Weight Belt", "Skipping Rope", "Gym Gloves", "Mirror", "Water Cooler", "Exercise Ball", "Ab Roller"],
-  other:        ["Locker", "Bench", "Storage Rack", "Clock", "Sound System", "Fan", "AC Unit", "CCTV Camera"],
+  cardio: [
+    "Treadmill", "Spin Bike", "Stationary Bike", "Recumbent Bike", "Elliptical",
+    "Rowing Machine", "Stair Climber", "Stepper", "Air Bike", "Vertical Climber",
+    "Ski Erg", "Jump Rope",
+  ],
+  strength: [
+    "Chest Press Machine", "Shoulder Press Machine", "Lat Pulldown", "Seated Row",
+    "Cable Machine", "Cable Crossover", "Smith Machine", "Leg Press", "Leg Extension",
+    "Leg Curl", "Hack Squat Machine", "Hip Thrust Machine", "Pec Deck Machine",
+    "Preacher Curl Machine", "Assisted Pull-Up Machine", "Hip Abductor Machine",
+    "Hip Adductor Machine", "Calf Raise Machine", "Ab Crunch Machine", "Multi-Station Gym",
+  ],
+  free_weights: [
+    "Dumbbell Set", "Dumbbell Rack", "Barbell", "Olympic Bar", "EZ Bar", "Curl Bar",
+    "Swiss Bar", "Hex Bar", "Weight Plates", "Weight Tree", "Kettlebell",
+    "Power Rack", "Squat Rack", "Flat Bench", "Adjustable Bench", "Medicine Ball",
+  ],
+  functional: [
+    "Pull-up Bar", "Dip Station", "Gymnastics Rings", "Parallettes", "TRX Suspension",
+    "Battle Ropes", "Resistance Bands", "Plyometric Box", "Slam Ball", "Wall Ball",
+    "Sandbag", "Power Sled", "Agility Ladder", "Speed Bag", "Monkey Bars",
+  ],
+  accessories: [
+    "Yoga Mat", "Foam Roller", "Exercise Ball", "Bosu Ball", "Step Platform",
+    "Balance Board", "Ab Roller", "Weight Belt", "Wrist Wraps", "Knee Sleeves",
+    "Ankle Weights", "Gym Gloves", "Pull-up Assist Band", "Massage Gun",
+    "Skipping Rope", "Mirror", "Water Cooler",
+  ],
+  other: [
+    "Locker", "Storage Rack", "Dumbbell Storage Tree", "Reception Desk",
+    "Weighing Scale", "First Aid Kit", "Towel Rack", "Water Dispenser",
+    "TV Screen", "Sound System", "Whiteboard", "Clock",
+    "Fan", "AC Unit", "CCTV Camera", "Vending Machine",
+  ],
 };
 
 const CONDITIONS: { value: EquipmentCondition; label: string; badge: string }[] = [
