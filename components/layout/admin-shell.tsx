@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Shield, Users, Building2, UserCog, LayoutDashboard,
-  Menu, X, LogOut, ClipboardList, Zap,
+  Menu, X, LogOut, ClipboardList, Zap, CreditCard,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 const adminNav = [
   { href: "/admin/users",     label: "User Management", icon: Users },
   { href: "/admin/gyms",      label: "Gyms",            icon: Building2 },
+  { href: "/admin/plans",     label: "Default Plans",   icon: CreditCard },
   { href: "/admin/prospects", label: "Gym Pipeline",    icon: UserCog },
   { href: "/admin/audit",     label: "Audit Log",       icon: ClipboardList },
 ];

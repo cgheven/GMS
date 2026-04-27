@@ -6,6 +6,7 @@ import { DashboardShell } from "@/components/layout/dashboard-shell";
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const ctx = await getAuthContext();
   if (!ctx?.user) redirect("/login");
+  if (ctx.profile?.is_admin) redirect("/admin/gyms");
 
   return (
     <GymProvider profile={ctx.profile} gym={ctx.gym} gyms={ctx.gyms ?? []}>

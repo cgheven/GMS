@@ -150,7 +150,7 @@ export function MembersClient({
       gender: form.gender || null,
       date_of_birth: form.date_of_birth || null,
       address: form.address || null,
-      member_number: form.member_number || null,
+      ...(editing ? { member_number: form.member_number || null } : {}),
       plan_id: form.plan_id || null,
       assigned_trainer_id: form.assigned_trainer_id || null,
       join_date: form.join_date || formatDateInput(new Date()),
@@ -536,14 +536,14 @@ export function MembersClient({
                     onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })}
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Member ID / Number</Label>
-                  <Input
-                    placeholder="GYM-001"
-                    value={form.member_number}
-                    onChange={(e) => setForm({ ...form, member_number: e.target.value })}
-                  />
-                </div>
+                {editing && form.member_number && (
+                  <div className="space-y-1.5">
+                    <Label>Member ID</Label>
+                    <div className="h-10 px-3 flex items-center rounded-lg border border-sidebar-border bg-muted/30 font-mono text-sm text-muted-foreground">
+                      {form.member_number}
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label>Address</Label>
                   <Input

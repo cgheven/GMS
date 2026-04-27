@@ -470,8 +470,7 @@ export function GymsClient({ data: initialData }: Props) {
               <Trash2 className="w-4 h-4" /> Delete Gym
             </DialogTitle>
             <DialogDescription>
-              Permanently delete <strong>{selected?.name}</strong> and all its data — members,
-              payments. This cannot be undone. An owner&apos;s last gym cannot be deleted.
+              Permanently delete <strong>{selected?.name}</strong> and all its data — members, payments. This cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

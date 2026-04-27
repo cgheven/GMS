@@ -154,12 +154,6 @@ export async function deleteGym(gymId: string): Promise<{ error?: string }> {
       .single();
     if (!gym) throw new Error("Gym not found");
 
-    const { count } = await admin
-      .from("pulse_gyms")
-      .select("*", { count: "exact", head: true })
-      .eq("owner_id", gym.owner_id);
-    if ((count ?? 0) <= 1) throw new Error("Cannot delete the owner's last gym");
-
     const { error } = await admin.from("pulse_gyms").delete().eq("id", gymId);
     if (error) throw error;
 

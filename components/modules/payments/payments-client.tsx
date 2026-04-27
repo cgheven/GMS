@@ -1,8 +1,8 @@
 "use client";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import {
   CreditCard, CheckCircle2, Clock, AlertTriangle, Wallet,
-  TrendingUp, Edit2, Banknote, RefreshCw, Plus, XCircle,
+  TrendingUp, Edit2, Banknote, RefreshCw, Plus, XCircle, Search, X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,107 @@ const statusConfig: Record<PaymentStatus, { label: string; color: string }> = {
   refunded: { label: "Refunded", color: "text-sky-400" },
   waived:   { label: "Waived",   color: "text-muted-foreground" },
 };
+
+function MemberSearch({
+  members,
+  value,
+  onChange,
+}: {
+  members: MemberRow[];
+  value: string;
+  onChange: (id: string, member: MemberRow | null) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = members.find((m) => m.id === value) ?? null;
+
+  const filtered = useMemo(() => {
+    if (!query.trim()) return members.slice(0, 8);
+    const q = query.toLowerCase();
+    return members
+      .filter((m) => m.full_name.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [query, members]);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  function select(m: MemberRow) {
+    onChange(m.id, m);
+    setQuery("");
+    setOpen(false);
+  }
+
+  function clear() {
+    onChange("", null);
+    setQuery("");
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      {selected ? (
+        <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-sidebar-border bg-card text-sm">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+              {selected.full_name[0].toUpperCase()}
+            </div>
+            <span className="font-medium truncate">{selected.full_name}</span>
+            <span className="text-xs text-muted-foreground shrink-0">
+              {selected.status === "active" ? "Active" : selected.status}
+            </span>
+          </div>
+          <button type="button" onClick={clear} className="text-muted-foreground hover:text-foreground ml-2 shrink-0">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ) : (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+          <input
+            className="w-full h-10 pl-8 pr-3 rounded-lg border border-sidebar-border bg-card text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/50"
+            placeholder="Search by name..."
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+            autoComplete="off"
+          />
+        </div>
+      )}
+      {open && !selected && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 rounded-lg border border-sidebar-border bg-card shadow-xl overflow-hidden">
+          {filtered.length === 0 ? (
+            <p className="px-3 py-3 text-sm text-muted-foreground">No members found</p>
+          ) : (
+            filtered.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 transition-colors text-left"
+                onMouseDown={(e) => { e.preventDefault(); select(m); }}
+              >
+                <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                  {m.full_name[0].toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{m.full_name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Fee: {formatCurrency(m.monthly_fee)} · {m.status}
+                  </p>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function genReceipt(memberName: string, period: string) {
   const initials = memberName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -416,17 +517,15 @@ export function PaymentsClient({ gymId, payments: initialPayments, members, plan
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label>Member *</Label>
-              <Select value={addForm.member_id} onValueChange={(v) => {
-                const m = memberMap[v];
-                setAddForm({ ...addForm, member_id: v, total_amount: m ? String(m.monthly_fee) : addForm.total_amount });
-              }}>
-                <SelectTrigger><SelectValue placeholder="Select member" /></SelectTrigger>
-                <SelectContent>
-                  {members.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>{m.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MemberSearch
+                members={members}
+                value={addForm.member_id}
+                onChange={(id, m) => setAddForm({
+                  ...addForm,
+                  member_id: id,
+                  total_amount: m ? String(m.monthly_fee) : "",
+                })}
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">

@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, CreditCard, FileText, Settings, X,
   Shield, Building2, Globe, MessageSquareWarning, Megaphone,
-  BarChart3, UserCog, Dumbbell, CalendarDays, ScanLine,
+  BarChart3, UserCog, Dumbbell, CalendarDays,
   Wrench, Receipt, ClipboardList, Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -23,7 +23,6 @@ const navGroups = [
       { href: "/members",  label: "Members",   icon: Users },
       { href: "/plans",    label: "Plans",      icon: Zap },
       { href: "/payments", label: "Payments",   icon: CreditCard },
-      { href: "/checkins", label: "Attendance", icon: ScanLine },
     ],
   },
   {

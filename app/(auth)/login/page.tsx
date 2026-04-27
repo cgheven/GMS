@@ -19,13 +19,18 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       toast({ title: "Login failed", description: error.message, variant: "destructive" });
       setLoading(false);
       return;
     }
-    router.push("/dashboard");
+    const { data: profile } = await supabase
+      .from("pulse_profiles")
+      .select("is_admin")
+      .eq("id", data.user.id)
+      .single();
+    router.push(profile?.is_admin ? "/admin/gyms" : "/dashboard");
     router.refresh();
   }
 
