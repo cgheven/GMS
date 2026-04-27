@@ -1,7 +1,7 @@
 "use client";
-import { useState, useMemo, useRef, useEffect, useTransition } from "react";
+import { useState, useMemo, useTransition } from "react";
 import {
-  CreditCard, AlertTriangle, Plus, XCircle, Search, X,
+  CreditCard, AlertTriangle, Plus, XCircle, Search,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -17,8 +17,8 @@ import type { Payment, PaymentMethod, PaymentStatus, Member, MembershipPlan } fr
 
 type MemberRow = Pick<Member,
   "id" | "full_name" | "member_number" | "monthly_fee" | "plan_id" |
-  "status" | "plan_expiry_date" | "outstanding_balance"
-> & { plan?: { name: string } | null };
+  "assigned_trainer_id" | "status" | "plan_expiry_date" | "outstanding_balance"
+> & { plan?: { name: string } | null; trainer?: { full_name: string } | null };
 
 type PlanRow = Pick<MembershipPlan, "id" | "name" | "price" | "duration_type">;
 
@@ -64,70 +64,108 @@ const CURRENT_MONTH = (() => {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`;
 })();
 
-// ─── Member search combobox ───────────────────────────────────────────────────
-function MemberSearch({ members, value, onChange }: {
+const MONTH_LABEL = new Date().toLocaleString("default", { month: "long", year: "numeric" });
+
+// ─── Inline member picker (Add Entry dialog) ──────────────────────────────────
+function MemberPicker({ members, value, onChange }: {
   members: MemberRow[];
   value: string;
   onChange: (id: string, member: MemberRow | null) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const selected = members.find((m) => m.id === value) ?? null;
-  const filtered = useMemo(() => {
-    if (!query.trim()) return members.slice(0, 8);
-    const q = query.toLowerCase();
-    return members.filter((m) => m.full_name.toLowerCase().includes(q)).slice(0, 8);
-  }, [query, members]);
+  const [trainerFilter, setTrainerFilter] = useState<string>("all");
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  const trainers = useMemo(() => {
+    const seen = new Set<string>();
+    const list: { id: string; name: string }[] = [];
+    for (const m of members) {
+      if (m.assigned_trainer_id && m.trainer?.full_name && !seen.has(m.assigned_trainer_id)) {
+        seen.add(m.assigned_trainer_id);
+        list.push({ id: m.assigned_trainer_id, name: m.trainer.full_name });
+      }
+    }
+    return list.sort((a, b) => a.name.localeCompare(b.name));
+  }, [members]);
+
+  const filtered = useMemo(() => {
+    let list = members;
+    if (trainerFilter !== "all") {
+      list = trainerFilter === "none"
+        ? list.filter((m) => !m.assigned_trainer_id)
+        : list.filter((m) => m.assigned_trainer_id === trainerFilter);
+    }
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      list = list.filter((m) => m.full_name.toLowerCase().includes(q));
+    }
+    return list;
+  }, [members, query, trainerFilter]);
 
   return (
-    <div className="relative" ref={ref}>
-      {selected ? (
-        <div className="flex items-center justify-between h-10 px-3 rounded-lg border border-sidebar-border bg-card text-sm">
-          <span className="font-medium truncate">{selected.full_name}</span>
-          <button type="button" onClick={() => { onChange("", null); setQuery(""); }} className="text-muted-foreground hover:text-foreground ml-2 shrink-0">
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      ) : (
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-          <input
-            className="w-full h-10 pl-8 pr-3 rounded-lg border border-sidebar-border bg-card text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/50"
-            placeholder="Search member..." value={query}
-            onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-            onFocus={() => setOpen(true)} autoComplete="off"
-          />
-        </div>
-      )}
-      {open && !selected && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 rounded-lg border border-sidebar-border bg-card shadow-xl overflow-hidden">
-          {filtered.length === 0
-            ? <p className="px-3 py-3 text-sm text-muted-foreground">No members found</p>
-            : filtered.map((m) => (
-              <button key={m.id} type="button"
-                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 transition-colors text-left"
-                onMouseDown={(e) => { e.preventDefault(); onChange(m.id, m); setQuery(""); setOpen(false); }}>
-                <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0">
-                  {m.full_name[0].toUpperCase()}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{m.full_name}</p>
-                  <p className="text-xs text-muted-foreground">{formatCurrency(m.monthly_fee)} · {m.plan?.name ?? "No plan"}</p>
-                </div>
-              </button>
-            ))
-          }
+    <div className="space-y-2">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+        <input
+          className="w-full h-9 pl-8 pr-3 rounded-lg border border-sidebar-border bg-card text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/50"
+          placeholder="Search members…" value={query}
+          onChange={(e) => setQuery(e.target.value)} autoComplete="off"
+        />
+      </div>
+      {trainers.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          <button type="button" onClick={() => setTrainerFilter("all")}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+              trainerFilter === "all"
+                ? "bg-primary/15 border-primary/30 text-primary"
+                : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+            }`}>All</button>
+          {trainers.map((t) => (
+            <button key={t.id} type="button" onClick={() => setTrainerFilter(trainerFilter === t.id ? "all" : t.id)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                trainerFilter === t.id
+                  ? "bg-primary/15 border-primary/30 text-primary"
+                  : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+              }`}>{t.name}</button>
+          ))}
+          <button type="button" onClick={() => setTrainerFilter(trainerFilter === "none" ? "all" : "none")}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+              trainerFilter === "none"
+                ? "bg-primary/15 border-primary/30 text-primary"
+                : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+            }`}>Gym Only</button>
         </div>
       )}
+      <div className="max-h-52 overflow-y-auto rounded-lg border border-sidebar-border divide-y divide-sidebar-border/50">
+        {filtered.length === 0 ? (
+          <p className="px-3 py-3 text-sm text-muted-foreground text-center">No members found</p>
+        ) : filtered.map((m) => {
+          const selected = value === m.id;
+          return (
+            <button key={m.id} type="button"
+              onClick={() => onChange(selected ? "" : m.id, selected ? null : m)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left ${
+                selected ? "bg-primary/10" : "hover:bg-white/5"
+              }`}
+            >
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                selected ? "bg-primary text-primary-foreground" : "bg-primary/20 text-primary"
+              }`}>
+                {m.full_name[0].toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className={`text-sm font-medium truncate ${selected ? "text-primary" : "text-foreground"}`}>
+                  {m.full_name}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {formatCurrency(m.monthly_fee)} · {m.plan?.name ?? "No plan"}
+                  {m.trainer?.full_name && <span className="ml-1 text-muted-foreground/60">· {m.trainer.full_name}</span>}
+                </p>
+              </div>
+              {selected && <span className="text-[10px] font-semibold text-primary uppercase tracking-wide shrink-0">Selected</span>}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -135,22 +173,71 @@ function MemberSearch({ members, value, onChange }: {
 // ─── Main component ───────────────────────────────────────────────────────────
 export function PaymentsClient({ gymId, payments: initialPayments, members }: Props) {
   const [payments, setPayments] = useState<Payment[]>(initialPayments);
+  const [view, setView] = useState<"members" | "history">("members");
+
+  // Members view state
+  const [memberSearch, setMemberSearch] = useState("");
+  const [memberTrainerFilter, setMemberTrainerFilter] = useState("all");
+
+  // History view state
   const [histSearch, setHistSearch] = useState("");
   const [histStatus, setHistStatus] = useState<PaymentStatus | "all">("all");
+
   const [addDialog, setAddDialog] = useState(false);
   const [saving, setSaving] = useState(false);
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
 
-  const [addForm, setAddForm] = useState({
+  const emptyForm = {
     member_id: "", total_amount: "", discount: "0", late_fee: "0",
     method: "cash" as PaymentMethod, date: formatDateInput(new Date()),
     for_period: CURRENT_MONTH, receipt_number: "", notes: "",
-  });
+  };
+  const [addForm, setAddForm] = useState(emptyForm);
 
-  function hardRefresh() {
-    startRefresh(async () => { await revalidatePayments(); router.refresh(); });
-  }
+  // Map member_id → their latest payment for current month
+  const currentMonthPayments = useMemo(() => {
+    const map = new Map<string, Payment>();
+    for (const p of payments) {
+      if (p.for_period === CURRENT_MONTH && p.status !== "refunded") {
+        const existing = map.get(p.member_id ?? "");
+        if (!existing || p.status === "paid") map.set(p.member_id ?? "", p);
+      }
+    }
+    return map;
+  }, [payments]);
+
+  // Unique trainers derived from members
+  const trainers = useMemo(() => {
+    const seen = new Set<string>();
+    const list: { id: string; name: string }[] = [];
+    for (const m of members) {
+      if (m.assigned_trainer_id && m.trainer?.full_name && !seen.has(m.assigned_trainer_id)) {
+        seen.add(m.assigned_trainer_id);
+        list.push({ id: m.assigned_trainer_id, name: m.trainer.full_name });
+      }
+    }
+    return list.sort((a, b) => a.name.localeCompare(b.name));
+  }, [members]);
+
+  // Filtered + sorted members for members view (unpaid first)
+  const memberRows = useMemo(() => {
+    let list = members;
+    if (memberTrainerFilter !== "all") {
+      list = memberTrainerFilter === "none"
+        ? list.filter((m) => !m.assigned_trainer_id)
+        : list.filter((m) => m.assigned_trainer_id === memberTrainerFilter);
+    }
+    if (memberSearch.trim()) {
+      const q = memberSearch.toLowerCase();
+      list = list.filter((m) => m.full_name.toLowerCase().includes(q));
+    }
+    return [...list].sort((a, b) => {
+      const aPaid = currentMonthPayments.get(a.id)?.status === "paid" ? 1 : 0;
+      const bPaid = currentMonthPayments.get(b.id)?.status === "paid" ? 1 : 0;
+      return aPaid - bPaid;
+    });
+  }, [members, memberSearch, memberTrainerFilter, currentMonthPayments]);
 
   const historyRows = useMemo(() => {
     let list = payments;
@@ -164,6 +251,15 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
     }
     return list;
   }, [payments, histStatus, histSearch]);
+
+  function hardRefresh() {
+    startRefresh(async () => { await revalidatePayments(); router.refresh(); });
+  }
+
+  function recordPayment(m: MemberRow) {
+    setAddForm({ ...emptyForm, member_id: m.id, total_amount: String(m.monthly_fee) });
+    setAddDialog(true);
+  }
 
   async function updateStatus(p: Payment, status: PaymentStatus) {
     setPayments((prev) => prev.map((pay) => pay.id === p.id ? { ...pay, status } : pay));
@@ -200,9 +296,17 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
       })
       .select("*, member:pulse_members(full_name,plan_id)").single();
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-    else { toast({ title: "Entry added" }); setAddDialog(false); setPayments((prev) => [newRow as Payment, ...prev]); }
+    else {
+      toast({ title: "Payment recorded" });
+      setAddDialog(false);
+      setPayments((prev) => [newRow as Payment, ...prev]);
+    }
     setSaving(false);
   }
+
+  const paidCount = useMemo(() =>
+    members.filter((m) => currentMonthPayments.get(m.id)?.status === "paid").length,
+    [members, currentMonthPayments]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -213,135 +317,265 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
           <p className="text-muted-foreground text-sm mt-1">Full payment history and records</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={hardRefresh} disabled={refreshing} variant="outline" size="sm" className="gap-2">
+          <Button onClick={hardRefresh} disabled={refreshing} variant="outline" size="sm">
             {refreshing ? "Refreshing…" : "Refresh"}
           </Button>
-          <Button onClick={() => setAddDialog(true)} className="gap-2">
+          <Button onClick={() => { setAddForm(emptyForm); setAddDialog(true); }} className="gap-2">
             <Plus className="w-4 h-4" /> Add Entry
           </Button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative max-w-sm w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search by name or receipt…" value={histSearch}
-            onChange={(e) => setHistSearch(e.target.value)} className="pl-9" />
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {([["all", "All"], ["paid", "Paid"], ["pending", "Pending"], ["overdue", "Overdue"], ["refunded", "Refunded"], ["waived", "Waived"]] as const).map(([val, label]) => (
-            <button key={val} type="button" onClick={() => setHistStatus(val as PaymentStatus | "all")}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                histStatus === val
-                  ? val === "paid"     ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                  : val === "overdue"  ? "bg-rose-500/10 border-rose-500/30 text-rose-400"
-                  : val === "pending"  ? "bg-primary/10 border-primary/30 text-primary"
-                  : "bg-primary/15 border-primary/40 text-primary"
-                  : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
-              }`}>{label}</button>
-          ))}
-        </div>
+      {/* View toggle */}
+      <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-sidebar-border w-fit">
+        {(["members", "history"] as const).map((v) => (
+          <button key={v} type="button" onClick={() => setView(v)}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize ${
+              view === v
+                ? "bg-primary/15 text-primary border border-primary/20"
+                : "text-muted-foreground hover:text-foreground"
+            }`}>{v === "members" ? `Members` : "History"}</button>
+        ))}
       </div>
 
-      {/* Transactions table */}
-      <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
-        {historyRows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
-            <CreditCard className="w-10 h-10 opacity-20" />
-            <p className="text-sm">No transactions found</p>
+      {/* ── Members view ─────────────────────────────────────────────────────── */}
+      {view === "members" && (
+        <div className="space-y-4">
+          {/* Stats row */}
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <span className="text-foreground font-medium">{MONTH_LABEL}</span>
+            <span className="text-emerald-400 font-medium">{paidCount} paid</span>
+            <span className="text-rose-400 font-medium">{members.length - paidCount} pending</span>
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-sidebar-border">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Member</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Period</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Method</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Date</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden xl:table-cell">Receipt</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Amount</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-sidebar-border/50">
-                {historyRows.map((p) => {
-                  const name = p.member?.full_name ?? "—";
-                  return (
-                    <tr key={p.id} className="hover:bg-white/[0.02] transition-colors group">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary shrink-0">
-                            {name[0]?.toUpperCase() ?? "?"}
-                          </div>
-                          <p className="font-medium text-foreground">{name}</p>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 hidden md:table-cell">
-                        <span className="text-sm text-muted-foreground">{p.for_period ?? "—"}</span>
-                      </td>
-                      <td className="px-4 py-3 hidden lg:table-cell">
-                        <span className="text-sm text-muted-foreground">
-                          {p.payment_method ? methodLabels[p.payment_method] : "—"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 hidden lg:table-cell">
-                        <span className="text-sm text-muted-foreground">
-                          {p.payment_date ? formatDate(p.payment_date) : "—"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 hidden xl:table-cell">
-                        <span className="text-xs text-muted-foreground font-mono">{p.receipt_number ?? "—"}</span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <p className="font-semibold text-foreground">{formatCurrency(Number(p.total_amount))}</p>
-                        {Number(p.discount) > 0 && <p className="text-xs text-emerald-400">-{formatCurrency(p.discount)} disc</p>}
-                        {Number(p.late_fee) > 0 && <p className="text-xs text-rose-400">+{formatCurrency(p.late_fee)} late</p>}
-                      </td>
-                      <td className="px-4 py-3 text-center"><StatusBadge status={p.status} /></td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {p.status !== "paid" && p.status !== "waived" && p.status !== "refunded" && (
-                            <>
-                              {p.status !== "overdue" && (
-                                <button title="Mark Overdue" onClick={() => updateStatus(p, "overdue")}
-                                  className="p-1.5 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors">
-                                  <AlertTriangle className="w-3.5 h-3.5" />
+
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative max-w-sm w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Search members…" value={memberSearch}
+                onChange={(e) => setMemberSearch(e.target.value)} className="pl-9" />
+            </div>
+            {trainers.length > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                <button type="button" onClick={() => setMemberTrainerFilter("all")}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                    memberTrainerFilter === "all"
+                      ? "bg-primary/15 border-primary/30 text-primary"
+                      : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+                  }`}>All</button>
+                {trainers.map((t) => (
+                  <button key={t.id} type="button"
+                    onClick={() => setMemberTrainerFilter(memberTrainerFilter === t.id ? "all" : t.id)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                      memberTrainerFilter === t.id
+                        ? "bg-primary/15 border-primary/30 text-primary"
+                        : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+                    }`}>{t.name}</button>
+                ))}
+                <button type="button"
+                  onClick={() => setMemberTrainerFilter(memberTrainerFilter === "none" ? "all" : "none")}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                    memberTrainerFilter === "none"
+                      ? "bg-primary/15 border-primary/30 text-primary"
+                      : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+                  }`}>Gym Only</button>
+              </div>
+            )}
+          </div>
+
+          {/* Members table */}
+          <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
+            {memberRows.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
+                <CreditCard className="w-10 h-10 opacity-20" />
+                <p className="text-sm">No members found</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-sidebar-border">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Member</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Trainer</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Plan</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fee</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{MONTH_LABEL}</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-sidebar-border/50">
+                    {memberRows.map((m) => {
+                      const payment = currentMonthPayments.get(m.id);
+                      const paid = payment?.status === "paid";
+                      return (
+                        <tr key={m.id} className="hover:bg-white/[0.02] transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                                {m.full_name[0].toUpperCase()}
+                              </div>
+                              <p className="font-medium text-foreground">{m.full_name}</p>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell">
+                            <span className="text-sm text-muted-foreground">
+                              {m.trainer?.full_name ?? <span className="text-muted-foreground/40">—</span>}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 hidden lg:table-cell">
+                            <span className="text-sm text-muted-foreground">{m.plan?.name ?? "—"}</span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className="font-medium text-foreground">{formatCurrency(m.monthly_fee)}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {payment
+                              ? <StatusBadge status={payment.status} />
+                              : <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-white/5 text-muted-foreground border-white/10">Not recorded</span>
+                            }
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {!paid && (
+                              <button type="button" onClick={() => recordPayment(m)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors">
+                                Record
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── History view ─────────────────────────────────────────────────────── */}
+      {view === "history" && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative max-w-sm w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Search by name or receipt…" value={histSearch}
+                onChange={(e) => setHistSearch(e.target.value)} className="pl-9" />
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {([["all", "All"], ["paid", "Paid"], ["pending", "Pending"], ["overdue", "Overdue"], ["refunded", "Refunded"], ["waived", "Waived"]] as const).map(([val, label]) => (
+                <button key={val} type="button" onClick={() => setHistStatus(val as PaymentStatus | "all")}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                    histStatus === val
+                      ? val === "paid"     ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                      : val === "overdue"  ? "bg-rose-500/10 border-rose-500/30 text-rose-400"
+                      : val === "pending"  ? "bg-primary/10 border-primary/30 text-primary"
+                      : "bg-primary/15 border-primary/40 text-primary"
+                      : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+                  }`}>{label}</button>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
+            {historyRows.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
+                <CreditCard className="w-10 h-10 opacity-20" />
+                <p className="text-sm">No transactions found</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-sidebar-border">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Member</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Period</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Method</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Date</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden xl:table-cell">Receipt</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Amount</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-sidebar-border/50">
+                    {historyRows.map((p) => {
+                      const name = p.member?.full_name ?? "—";
+                      return (
+                        <tr key={p.id} className="hover:bg-white/[0.02] transition-colors group">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                                {name[0]?.toUpperCase() ?? "?"}
+                              </div>
+                              <p className="font-medium text-foreground">{name}</p>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell">
+                            <span className="text-sm text-muted-foreground">{p.for_period ?? "—"}</span>
+                          </td>
+                          <td className="px-4 py-3 hidden lg:table-cell">
+                            <span className="text-sm text-muted-foreground">
+                              {p.payment_method ? methodLabels[p.payment_method] : "—"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 hidden lg:table-cell">
+                            <span className="text-sm text-muted-foreground">
+                              {p.payment_date ? formatDate(p.payment_date) : "—"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 hidden xl:table-cell">
+                            <span className="text-xs text-muted-foreground font-mono">{p.receipt_number ?? "—"}</span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <p className="font-semibold text-foreground">{formatCurrency(Number(p.total_amount))}</p>
+                            {Number(p.discount) > 0 && <p className="text-xs text-emerald-400">-{formatCurrency(p.discount)} disc</p>}
+                            {Number(p.late_fee) > 0 && <p className="text-xs text-rose-400">+{formatCurrency(p.late_fee)} late</p>}
+                          </td>
+                          <td className="px-4 py-3 text-center"><StatusBadge status={p.status} /></td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {p.status !== "paid" && p.status !== "waived" && p.status !== "refunded" && (
+                                <>
+                                  {p.status !== "overdue" && (
+                                    <button title="Mark Overdue" onClick={() => updateStatus(p, "overdue")}
+                                      className="p-1.5 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors">
+                                      <AlertTriangle className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                  <button title="Waive" onClick={() => updateStatus(p, "waived")}
+                                    className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors">
+                                    <XCircle className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
+                              {p.status === "paid" && (
+                                <button title="Mark Refunded" onClick={() => updateStatus(p, "refunded")}
+                                  className="p-1.5 rounded text-muted-foreground hover:text-sky-400 hover:bg-sky-500/10 transition-colors">
+                                  <XCircle className="w-3.5 h-3.5" />
                                 </button>
                               )}
-                              <button title="Waive" onClick={() => updateStatus(p, "waived")}
-                                className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors">
-                                <XCircle className="w-3.5 h-3.5" />
-                              </button>
-                            </>
-                          )}
-                          {p.status === "paid" && (
-                            <button title="Mark Refunded" onClick={() => updateStatus(p, "refunded")}
-                              className="p-1.5 rounded text-muted-foreground hover:text-sky-400 hover:bg-sky-500/10 transition-colors">
-                              <XCircle className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Add Entry Dialog */}
       <Dialog open={addDialog} onOpenChange={(o) => !o && setAddDialog(false)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Add Manual Entry</DialogTitle></DialogHeader>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader><DialogTitle>Record Payment</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label>Member *</Label>
-              <MemberSearch members={members} value={addForm.member_id}
+              <MemberPicker members={members} value={addForm.member_id}
                 onChange={(id, m) => setAddForm({ ...addForm, member_id: id, total_amount: m ? String(m.monthly_fee) : "" })} />
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -393,7 +627,7 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddDialog(false)}>Cancel</Button>
             <Button onClick={handleAddPayment} disabled={saving}>
-              {saving ? "Saving…" : "Add Entry"}
+              {saving ? "Saving…" : "Record Payment"}
             </Button>
           </DialogFooter>
         </DialogContent>

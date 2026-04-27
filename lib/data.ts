@@ -215,7 +215,7 @@ async function _fetchPayments(gymId: string) {
       .order("created_at", { ascending: false })
       .limit(200),
     supabase.from("pulse_members")
-      .select("id,full_name,member_number,monthly_fee,plan_id,status,plan_expiry_date,outstanding_balance,plan:pulse_membership_plans(name)")
+      .select("id,full_name,member_number,monthly_fee,plan_id,assigned_trainer_id,status,plan_expiry_date,outstanding_balance,plan:pulse_membership_plans(name),trainer:pulse_staff(full_name)")
       .eq("gym_id", gymId)
       .eq("status", "active")
       .order("full_name"),
@@ -226,7 +226,7 @@ async function _fetchPayments(gymId: string) {
   ]);
   return {
     payments: (payments ?? []) as Payment[],
-    members: (members ?? []) as unknown as (Pick<Member, "id" | "full_name" | "member_number" | "monthly_fee" | "plan_id" | "status" | "plan_expiry_date" | "outstanding_balance"> & { plan?: { name: string } | null })[],
+    members: (members ?? []) as unknown as (Pick<Member, "id" | "full_name" | "member_number" | "monthly_fee" | "plan_id" | "assigned_trainer_id" | "status" | "plan_expiry_date" | "outstanding_balance"> & { plan?: { name: string } | null; trainer?: { full_name: string } | null })[],
     plans: (plans ?? []) as Pick<MembershipPlan, "id" | "name" | "price" | "duration_type">[],
   };
 }
