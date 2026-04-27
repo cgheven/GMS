@@ -2,7 +2,7 @@
 import { useState, useMemo } from "react";
 import {
   CheckCircle2, Clock, Wallet, Users,
-  ChevronLeft, ChevronRight, Search,
+  ChevronLeft, ChevronRight, Search, TrendingUp,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -86,6 +86,19 @@ export function TrainerClient({ staff, gymId, members, payments: initialPayments
     const collected = monthPayments.filter((p) => p.status === "paid").reduce((s, p) => s + Number(p.total_amount), 0);
     return { total: members.length, paid, unpaid: members.length - paid, collected };
   }, [members, paidMemberIds, monthPayments]);
+
+  const earnings = useMemo(() => {
+    const pct = staff.commission_percentage / 100;
+    const earnedCommission = members
+      .filter((m) => paidMemberIds.has(m.id))
+      .reduce((s, m) => s + m.monthly_fee * pct, 0);
+    const pendingCommission = members
+      .filter((m) => !paidMemberIds.has(m.id))
+      .reduce((s, m) => s + m.monthly_fee * pct, 0);
+    const totalPotential = earnedCommission + pendingCommission;
+    const totalEarned = staff.monthly_salary + earnedCommission;
+    return { earnedCommission, pendingCommission, totalPotential, totalEarned, pct: staff.commission_percentage };
+  }, [members, paidMemberIds, staff]);
 
   const memberRows = useMemo(() => {
     const q = search.toLowerCase();
@@ -208,7 +221,7 @@ export function TrainerClient({ staff, gymId, members, payments: initialPayments
           { label: "My Members",  value: stats.total,                    icon: Users,        color: "text-foreground",  bg: "bg-white/5 border border-white/10" },
           { label: "Paid",        value: stats.paid,                     icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
           { label: "Unpaid",      value: stats.unpaid,                   icon: Clock,        color: "text-primary",     bg: "bg-primary/10 border border-primary/20" },
-          { label: "Collected",   value: formatCurrency(stats.collected), icon: Wallet,       color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
+          { label: "Gym Collected", value: formatCurrency(stats.collected), icon: Wallet,     color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
         ].map(({ label, value, icon: Icon, color, bg }) => (
           <div key={label} className="rounded-2xl border border-sidebar-border bg-card p-4">
             <div className="flex items-center gap-3">
@@ -222,6 +235,40 @@ export function TrainerClient({ staff, gymId, members, payments: initialPayments
             </div>
           </div>
         ))}
+      </div>
+
+      {/* My Earnings */}
+      <div className="rounded-2xl border border-primary/20 bg-primary/[0.04] overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-primary/10">
+          <TrendingUp className="w-4 h-4 text-primary" />
+          <p className="text-sm font-semibold text-primary">My Earnings — {monthLabel(selectedMonth)}</p>
+          <span className="ml-auto text-xs text-muted-foreground">{earnings.pct}% PT commission</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-primary/10">
+          {[
+            { label: "Base Salary",      value: formatCurrency(staff.monthly_salary),    sub: "fixed",                    dim: false },
+            { label: "Earned Commission", value: formatCurrency(earnings.earnedCommission), sub: `${stats.paid} paid members`, dim: false },
+            { label: "Still Pending",    value: formatCurrency(earnings.pendingCommission), sub: `${stats.unpaid} unpaid`,  dim: true  },
+            { label: "Total This Month", value: formatCurrency(earnings.totalEarned),    sub: `of ${formatCurrency(staff.monthly_salary + earnings.totalPotential)} potential`, dim: false },
+          ].map(({ label, value, sub, dim }) => (
+            <div key={label} className="px-4 py-3">
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</p>
+              <p className={`text-xl font-bold mt-0.5 ${dim ? "text-muted-foreground" : "text-foreground"}`}>{value}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>
+            </div>
+          ))}
+        </div>
+        {earnings.totalPotential > 0 && (
+          <div className="px-4 pb-3">
+            <div className="w-full bg-white/5 rounded-full h-1.5">
+              <div className="bg-primary h-1.5 rounded-full transition-all"
+                style={{ width: `${(earnings.earnedCommission / earnings.totalPotential) * 100}%` }} />
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              {Math.round((earnings.earnedCommission / earnings.totalPotential) * 100)}% of commission collected
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Search */}
@@ -251,6 +298,7 @@ export function TrainerClient({ staff, gymId, members, payments: initialPayments
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Member</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Plan</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fee</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-primary/70 uppercase tracking-wider">My Cut</th>
                   <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Paid On</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Action</th>
@@ -279,6 +327,11 @@ export function TrainerClient({ staff, gymId, members, payments: initialPayments
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="font-medium text-foreground">{formatCurrency(member.monthly_fee)}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={`text-sm font-semibold ${isPaid ? "text-primary" : "text-muted-foreground"}`}>
+                          {formatCurrency(member.monthly_fee * earnings.pct / 100)}
+                        </span>
                       </td>
                       <td className="px-4 py-3 text-center">
                         {payment ? (
