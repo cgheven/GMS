@@ -557,3 +557,42 @@ export interface MetricSkip {
   closed_by: string | null;
   created_at: string;
 }
+
+export type LeadSource = "walk_in" | "instagram" | "facebook" | "tiktok" | "referral" | "ad" | "website" | "google" | "other";
+export type LeadStatus = "new" | "contacted" | "visited" | "trial" | "negotiating" | "won" | "lost";
+export type LeadLostReason = "price" | "location" | "schedule" | "competitor" | "not_ready" | "no_response" | "other";
+export type LeadActivityType = "note" | "call" | "message" | "offer" | "visit" | "trial" | "status_change";
+
+export interface Lead {
+  id: string;
+  gym_id: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+  source: LeadSource;
+  source_detail: string | null;
+  interested_plan_id: string | null;
+  fitness_goals: string | null;
+  status: LeadStatus;
+  next_followup_at: string | null;
+  assigned_to: string | null;
+  lost_reason: LeadLostReason | null;
+  lost_note: string | null;
+  converted_member_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  plan?: { name: string } | null;
+  assignee?: { full_name: string } | null;
+  last_activity_at?: string | null;
+  activities_count?: number;
+}
+
+export interface LeadActivity {
+  id: string;
+  lead_id: string;
+  type: LeadActivityType;
+  content: string | null;
+  created_by: string | null;
+  created_at: string;
+}

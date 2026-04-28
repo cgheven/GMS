@@ -4,7 +4,7 @@ import Link from "next/link";
 import {
   Dumbbell, Wallet,
   AlertTriangle, Clock, CheckCircle2,
-  TrendingUp, TrendingDown, FileWarning, Zap, Trophy,
+  TrendingUp, TrendingDown, FileWarning, Zap, Trophy, Target,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import type { DashboardStats, DashboardMember, Bill, TrainerStat, GoalsOverview } from "@/types";
@@ -15,6 +15,14 @@ const ExpenseChart = dynamic(
 );
 
 interface ExpiringMember { id: string; name: string; plan_expiry_date: string; days_left: number }
+
+interface LeadsSummary {
+  open: number;
+  overdue: number;
+  dueToday: number;
+  upcoming: { id: string; name: string; source: string }[];
+  conversionRate: number;
+}
 
 interface Props {
   data: {
@@ -27,9 +35,10 @@ interface Props {
     expiringMembers: ExpiringMember[];
     goalsOverview: GoalsOverview;
   } | null;
+  leadsSummary?: LeadsSummary | null;
 }
 
-export function DashboardClient({ data }: Props) {
+export function DashboardClient({ data, leadsSummary }: Props) {
   if (!data) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-3 text-muted-foreground">
@@ -164,6 +173,52 @@ export function DashboardClient({ data }: Props) {
           </div>
         </div>
       </div>
+
+      {/* ── Leads strip ──────────────────────────────────────── */}
+      {leadsSummary && (leadsSummary.open > 0 || leadsSummary.dueToday > 0 || leadsSummary.overdue > 0) && (
+        <Link href="/leads"
+          className={`flex items-center gap-3 rounded-2xl border p-4 transition-colors group ${
+            leadsSummary.overdue > 0
+              ? "border-rose-500/20 bg-rose-500/[0.04] hover:bg-rose-500/[0.08]"
+              : leadsSummary.dueToday > 0
+              ? "border-amber-500/20 bg-amber-500/[0.04] hover:bg-amber-500/[0.08]"
+              : "border-primary/20 bg-primary/[0.04] hover:bg-primary/[0.08]"
+          }`}>
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+            leadsSummary.overdue > 0
+              ? "bg-rose-500/15 border border-rose-500/25"
+              : leadsSummary.dueToday > 0
+              ? "bg-amber-500/15 border border-amber-500/25"
+              : "bg-primary/15 border border-primary/25"
+          }`}>
+            <Target className={`w-4 h-4 ${
+              leadsSummary.overdue > 0 ? "text-rose-400" :
+              leadsSummary.dueToday > 0 ? "text-amber-400" : "text-primary"
+            }`} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground">Leads & Follow-ups</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              <span className="text-primary">{leadsSummary.open} open</span>
+              {leadsSummary.dueToday > 0 && <>
+                <span className="opacity-50"> · </span>
+                <span className="text-amber-400">{leadsSummary.dueToday} due today</span>
+              </>}
+              {leadsSummary.overdue > 0 && <>
+                <span className="opacity-50"> · </span>
+                <span className="text-rose-400">⚠ {leadsSummary.overdue} overdue</span>
+              </>}
+              {leadsSummary.upcoming.length > 0 && <>
+                <span className="opacity-50"> · </span>
+                <span>Today: {leadsSummary.upcoming.map((u) => u.name).join(", ")}</span>
+              </>}
+              <span className="opacity-50"> · </span>
+              <span>{leadsSummary.conversionRate}% conversion</span>
+            </p>
+          </div>
+          <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors shrink-0">View →</span>
+        </Link>
+      )}
 
       {/* ── Compact: Leaderboard hint strip ─────────────────── */}
       {(trainerStats.length > 0 || goalsOverview.activeCount > 0 || goalsOverview.recentWins.length > 0) && (

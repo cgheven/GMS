@@ -46,7 +46,7 @@ export default function ProspectsClient() {
   const [search, setSearch]         = useState("");
   const [statusFilter, setStatusFilter]     = useState<"all" | ProspectStatus>("all");
   const [areaFilter, setAreaFilter]         = useState<string>("all");
-  const [locationFilter, setLocationFilter] = useState<string>("all");
+  const [locationFilter, setLocationFilter] = useState<string>("Karachi");
   const [openDropdown, setOpenDropdown]     = useState<"area" | "status" | "city" | null>(null);
   const [dialogMode, setDialogMode] = useState<DialogMode>(null);
   const [selected, setSelected]     = useState<Prospect | null>(null);
@@ -168,6 +168,15 @@ export default function ProspectsClient() {
     Array.from(new Set(prospects.map((p) => p.area?.trim()).filter(Boolean) as string[])).sort(),
   [prospects]);
 
+  const cityCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const p of prospects) {
+      const c = p.city?.trim();
+      if (c) counts[c] = (counts[c] ?? 0) + 1;
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [prospects]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return prospects.filter((p) => {
@@ -288,6 +297,31 @@ export default function ProspectsClient() {
             </Card>
           ))}
         </div>
+
+        {/* City filter chips */}
+        {cityCounts.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            <button type="button" onClick={() => setLocationFilter("all")}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors inline-flex items-center gap-1.5 ${
+                locationFilter === "all"
+                  ? "bg-primary/15 border-primary/30 text-primary"
+                  : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+              }`}>
+              All cities <span className="text-[10px] opacity-70">{prospects.length}</span>
+            </button>
+            {cityCounts.map(([city, count]) => (
+              <button key={city} type="button"
+                onClick={() => setLocationFilter(locationFilter === city ? "all" : city)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors inline-flex items-center gap-1.5 ${
+                  locationFilter === city
+                    ? "bg-primary/15 border-primary/30 text-primary"
+                    : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+                }`}>
+                {city} <span className="text-[10px] opacity-70">{count}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Search */}
         <div className="flex items-center gap-3">

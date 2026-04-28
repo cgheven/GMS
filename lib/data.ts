@@ -8,7 +8,7 @@ import type {
   Profile, Gym, Member, MembershipPlan, Payment, Issue, Announcement,
   Expense, Bill, Staff, SalaryPayment, CheckIn, GymClass, Equipment,
   DashboardStats, DashboardMember, RevenueMonth, AgingBucket, TrainerStat,
-  MemberGoal, GoalProgressEntry, BodyMetric, MetricSkip,
+  MemberGoal, GoalProgressEntry, BodyMetric, MetricSkip, Lead, LeadActivity,
 } from "@/types";
 
 export const getAuthContext = cache(async () => {
@@ -740,4 +740,94 @@ export async function getReportsData() {
     { revalidate: 60, tags: [`reports-${gymId}`] }
   )();
   return { gymId, ...data };
+}
+
+// ── Leads / Pipeline ───────────────────────────────────────────────────────
+
+export async function getLeadsData() {
+  const ctx = await getAuthContext();
+  if (!ctx?.gymId) return { gymId: null, leads: [], plans: [], staff: [] };
+  const { gymId } = ctx;
+
+  const admin = createAdminClient();
+  const [leadsRes, plansRes, staffRes, activitiesRes] = await Promise.all([
+    admin.from("pulse_leads")
+      .select("*, plan:pulse_membership_plans(name), assignee:pulse_staff(full_name)")
+      .eq("gym_id", gymId)
+      .order("created_at", { ascending: false }),
+    admin.from("pulse_membership_plans").select("id,name,price").eq("gym_id", gymId).eq("is_active", true),
+    admin.from("pulse_staff").select("id,full_name,role").eq("gym_id", gymId).eq("status", "active"),
+    admin.from("pulse_lead_activities")
+      .select("lead_id, created_at")
+      .order("created_at", { ascending: false }),
+  ]);
+
+  const lastActivityByLead = new Map<string, string>();
+  const countByLead = new Map<string, number>();
+  for (const a of (activitiesRes.data ?? []) as { lead_id: string; created_at: string }[]) {
+    if (!lastActivityByLead.has(a.lead_id)) lastActivityByLead.set(a.lead_id, a.created_at);
+    countByLead.set(a.lead_id, (countByLead.get(a.lead_id) ?? 0) + 1);
+  }
+
+  const leads = ((leadsRes.data ?? []) as unknown as Lead[]).map((l) => ({
+    ...l,
+    last_activity_at: lastActivityByLead.get(l.id) ?? null,
+    activities_count: countByLead.get(l.id) ?? 0,
+  }));
+
+  return {
+    gymId,
+    leads,
+    plans: (plansRes.data ?? []) as Pick<MembershipPlan, "id" | "name" | "price">[],
+    staff: (staffRes.data ?? []) as Pick<Staff, "id" | "full_name" | "role">[],
+  };
+}
+
+export async function getLeadActivities(leadId: string) {
+  const ctx = await getAuthContext();
+  if (!ctx?.gymId) return [];
+  const admin = createAdminClient();
+  const { data: lead } = await admin
+    .from("pulse_leads")
+    .select("id, gym_id")
+    .eq("id", leadId)
+    .single();
+  if (!lead || lead.gym_id !== ctx.gymId) return [];
+  const { data } = await admin
+    .from("pulse_lead_activities")
+    .select("*")
+    .eq("lead_id", leadId)
+    .order("created_at", { ascending: false });
+  return (data ?? []) as LeadActivity[];
+}
+
+// Lightweight summary used by the dashboard widget — counts only.
+export async function getLeadsSummary() {
+  const ctx = await getAuthContext();
+  if (!ctx?.gymId) return null;
+  const { gymId } = ctx;
+  const admin = createAdminClient();
+  const today = formatDateInput(new Date());
+
+  const { data: leads } = await admin
+    .from("pulse_leads")
+    .select("id, full_name, source, status, next_followup_at, created_at")
+    .eq("gym_id", gymId);
+
+  const all = (leads ?? []) as { id: string; full_name: string; source: string; status: string; next_followup_at: string | null; created_at: string }[];
+  const open = all.filter((l) => l.status !== "won" && l.status !== "lost");
+  const overdue = open.filter((l) => l.next_followup_at && l.next_followup_at < today);
+  const dueToday = open.filter((l) => l.next_followup_at === today);
+  const upcoming = dueToday.slice(0, 3).map((l) => ({ id: l.id, name: l.full_name, source: l.source }));
+
+  const won = all.filter((l) => l.status === "won").length;
+  const total = all.length;
+
+  return {
+    open: open.length,
+    overdue: overdue.length,
+    dueToday: dueToday.length,
+    upcoming,
+    conversionRate: total > 0 ? Math.round((won / total) * 100) : 0,
+  };
 }
