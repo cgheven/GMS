@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, CreditCard, FileText, Settings, X,
-  Shield, Building2, Globe, LogIn,
+  Shield, Building2, Globe, LogIn, Trophy,
   BarChart3, UserCog, Dumbbell, CalendarDays,
   Wrench, Receipt, ClipboardList, Zap,
 } from "lucide-react";
@@ -44,7 +44,8 @@ const navGroups = [
   {
     label: "Analytics",
     items: [
-      { href: "/reports", label: "Reports", icon: BarChart3 },
+      { href: "/reports",     label: "Reports",     icon: BarChart3 },
+      { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
     ],
   },
   {

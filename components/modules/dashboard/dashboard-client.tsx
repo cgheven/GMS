@@ -4,10 +4,10 @@ import Link from "next/link";
 import {
   Dumbbell, Wallet,
   AlertTriangle, Clock, CheckCircle2,
-  TrendingUp, TrendingDown, FileWarning, Zap,
+  TrendingUp, TrendingDown, FileWarning, Zap, Trophy,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
-import type { DashboardStats, DashboardMember, Bill, TrainerStat } from "@/types";
+import type { DashboardStats, DashboardMember, Bill, TrainerStat, GoalsOverview } from "@/types";
 
 const ExpenseChart = dynamic(
   () => import("./expense-chart").then((m) => m.ExpenseChart),
@@ -25,6 +25,7 @@ interface Props {
     overdueMembers: DashboardMember[];
     trainerStats: TrainerStat[];
     expiringMembers: ExpiringMember[];
+    goalsOverview: GoalsOverview;
   } | null;
 }
 
@@ -38,7 +39,7 @@ export function DashboardClient({ data }: Props) {
     );
   }
 
-  const { stats, upcomingBills, monthlyData, overdueMembers, trainerStats, expiringMembers } = data;
+  const { stats, upcomingBills, monthlyData, overdueMembers, trainerStats, expiringMembers, goalsOverview } = data;
 
   const isProfit = stats.net_profit >= 0;
   const targetProgress = stats.revenue_target > 0
@@ -164,13 +165,40 @@ export function DashboardClient({ data }: Props) {
         </div>
       </div>
 
-      {/* ── Section 2: Trainer Performance ──────────────────── */}
+      {/* ── Compact: Leaderboard hint strip ─────────────────── */}
+      {(trainerStats.length > 0 || goalsOverview.activeCount > 0 || goalsOverview.recentWins.length > 0) && (
+        <Link href="/leaderboard"
+          className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-primary/[0.04] p-4 hover:bg-primary/[0.08] hover:border-primary/30 transition-colors group">
+          <div className="w-9 h-9 rounded-xl bg-primary/15 border border-primary/25 flex items-center justify-center shrink-0">
+            <Trophy className="w-4 h-4 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground">Team Leaderboard</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {trainerStats.length} trainer{trainerStats.length !== 1 ? "s" : ""}
+              <span className="opacity-50"> · </span>
+              <span className="text-primary">{goalsOverview.activeCount} active goals</span>
+              {goalsOverview.achievedThisMonth > 0 && <>
+                <span className="opacity-50"> · </span>
+                <span className="text-emerald-400">🎉 {goalsOverview.achievedThisMonth} wins this month</span>
+              </>}
+              {goalsOverview.behindCount > 0 && <>
+                <span className="opacity-50"> · </span>
+                <span className="text-rose-400">{goalsOverview.behindCount} behind</span>
+              </>}
+            </p>
+          </div>
+          <span className="text-xs text-muted-foreground group-hover:text-primary transition-colors shrink-0">View →</span>
+        </Link>
+      )}
+
+      {/* ── Collection Performance ──────────────────────────── */}
       {trainerStats.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Dumbbell className="w-4 h-4 text-primary" />
-              <h2 className="text-sm font-semibold text-foreground">Trainer Performance</h2>
+              <h2 className="text-sm font-semibold text-foreground">Collection Performance</h2>
               <span className="text-xs text-muted-foreground">— {new Date().toLocaleDateString("en-US", { month: "long" })}</span>
             </div>
             <Link href="/staff" className="text-xs text-muted-foreground hover:text-foreground transition-colors">Manage →</Link>
@@ -187,7 +215,7 @@ export function DashboardClient({ data }: Props) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-foreground truncate">{t.name}</p>
-                      <p className="text-xs text-muted-foreground">{t.total} member{t.total !== 1 ? "s" : ""} assigned</p>
+                      <p className="text-xs text-muted-foreground">{t.total} member{t.total !== 1 ? "s" : ""}</p>
                     </div>
                     <span className={`text-lg font-bold tabular-nums shrink-0 ${rateColor}`}>{t.rate}%</span>
                   </div>

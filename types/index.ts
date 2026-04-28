@@ -437,3 +437,121 @@ export interface AgingBucket {
   count: number;
   amount: number;
 }
+
+export interface GoalWin {
+  id: string;
+  memberName: string;
+  trainerId: string | null;
+  trainerName: string;
+  title: string;
+  category: string;
+  unit: string;
+  startValue: number | null;
+  finalValue: number;
+  targetValue: number;
+  direction: "down" | "up";
+  startDate: string;
+  achievedAt: string;
+}
+
+export interface TrainerGoalRow {
+  id: string;
+  name: string;
+  activeCount: number;
+  achievedCount: number;
+  recentAchieved: number;
+  winRate: number;
+}
+
+export interface GoalsOverview {
+  activeCount: number;
+  achievedThisMonth: number;
+  totalAchieved: number;
+  behindCount: number;
+  recentWins: GoalWin[];
+  byTrainer: TrainerGoalRow[];
+}
+
+export type GoalCategory =
+  | "weight_loss" | "muscle_gain" | "strength" | "endurance" | "flexibility"
+  | "yoga" | "pilates" | "postnatal" | "toning"
+  | "custom";
+export type GoalStatus = "active" | "achieved" | "paused" | "abandoned";
+export type GoalDirection = "down" | "up";
+
+export interface MemberGoal {
+  id: string;
+  gym_id: string;
+  member_id: string;
+  trainer_id: string | null;
+  title: string;
+  category: GoalCategory;
+  unit: string;
+  start_value: number | null;
+  target_value: number;
+  current_value: number | null;
+  direction: GoalDirection;
+  start_date: string;
+  target_date: string;
+  status: GoalStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  progress?: GoalProgressEntry[];
+}
+
+export interface GoalProgressEntry {
+  id: string;
+  goal_id: string;
+  value: number;
+  recorded_at: string;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface BodyMetric {
+  id: string;
+  gym_id: string;
+  member_id: string;
+  measurement_date: string;
+  weight_kg: number | null;
+  height_cm: number | null;
+  body_fat_percentage: number | null;
+  muscle_mass_kg: number | null;
+  bmi: number | null;
+  shoulders_cm: number | null;
+  neck_cm: number | null;
+  chest_cm: number | null;
+  bicep_l_cm: number | null;
+  bicep_r_cm: number | null;
+  bicep_cm: number | null;
+  forearm_l_cm: number | null;
+  forearm_r_cm: number | null;
+  waist_cm: number | null;
+  abdomen_cm: number | null;
+  hips_cm: number | null;
+  thigh_l_cm: number | null;
+  thigh_r_cm: number | null;
+  calf_l_cm: number | null;
+  calf_r_cm: number | null;
+  resting_heart_rate: number | null;
+  bp_systolic: number | null;
+  bp_diastolic: number | null;
+  visceral_fat: number | null;
+  water_percentage: number | null;
+  bone_mass_kg: number | null;
+  custom_metrics: Record<string, number> | null;
+  notes: string | null;
+  measured_by: string | null;
+  created_at: string;
+}
+
+export interface MetricSkip {
+  id: string;
+  gym_id: string;
+  member_id: string;
+  week_start: string;
+  reason: string | null;
+  closed_by: string | null;
+  created_at: string;
+}

@@ -3,10 +3,11 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2, Clock, Wallet, Users,
-  ChevronLeft, ChevronRight, Search, TrendingUp, UserPlus, Pencil, LogIn,
+  ChevronLeft, ChevronRight, Search, TrendingUp, UserPlus, Pencil, LogIn, Target,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { createMemberAsTrainer, updateMemberAsTrainer, checkInMemberAsTrainer } from "@/app/actions/trainer";
+import { MemberDetailDialog } from "./member-detail-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate, formatDateInput } from "@/lib/utils";
-import type { Payment, PaymentMethod, PaymentStatus, Member, MembershipPlan, Staff } from "@/types";
+import type { Payment, PaymentMethod, PaymentStatus, Member, MembershipPlan, Staff, MemberGoal, BodyMetric, MetricSkip } from "@/types";
 
 type MemberRow = Pick<Member,
   "id" | "full_name" | "member_number" | "phone" | "email" | "cnic" |
@@ -50,6 +51,9 @@ interface Props {
   plans: PlanRow[];
   trainers: TrainerOption[];
   checkedInToday: string[];
+  goals: MemberGoal[];
+  bodyMetrics: BodyMetric[];
+  metricSkips: MetricSkip[];
 }
 
 const methodLabels: Record<PaymentMethod, string> = {
@@ -77,7 +81,7 @@ function genReceipt(name: string, period: string) {
   return `PLS-${period.replace("-", "")}-${initials}-${Math.floor(Math.random() * 900 + 100)}`;
 }
 
-export function TrainerClient({ staff, gymId, members, selfMembers, payments: initialPayments, plans, trainers, checkedInToday: initialCheckedIn }: Props) {
+export function TrainerClient({ staff, gymId, members, selfMembers, payments: initialPayments, plans, trainers, checkedInToday: initialCheckedIn, goals, bodyMetrics, metricSkips }: Props) {
   const router = useRouter();
   const [payments, setPayments] = useState<Payment[]>(initialPayments);
   const [selectedMonth, setSelectedMonth] = useState(CURRENT_MONTH);
@@ -85,6 +89,16 @@ export function TrainerClient({ staff, gymId, members, selfMembers, payments: in
   const [activeTab, setActiveTab] = useState<"my" | "self">("my");
   const [checkedInToday, setCheckedInToday] = useState<Set<string>>(new Set(initialCheckedIn));
   const [checkingIn, setCheckingIn] = useState<string | null>(null);
+
+  // Member detail (goals) dialog
+  const [detailMember, setDetailMember] = useState<MemberRow | null>(null);
+  const activeGoalsByMember = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const g of goals) {
+      if (g.status === "active") map[g.member_id] = (map[g.member_id] ?? 0) + 1;
+    }
+    return map;
+  }, [goals]);
 
   async function handleCheckIn(memberId: string) {
     setCheckingIn(memberId);
@@ -481,17 +495,25 @@ export function TrainerClient({ staff, gymId, members, selfMembers, payments: in
                   return (
                     <tr key={member.id} className="hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
+                        <button type="button" onClick={() => setDetailMember(member)}
+                          className="flex items-center gap-3 text-left hover:text-primary transition-colors group">
                           <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary shrink-0">
                             {member.full_name[0]?.toUpperCase()}
                           </div>
                           <div>
-                            <p className="font-medium text-foreground">{member.full_name}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="font-medium text-foreground group-hover:text-primary transition-colors">{member.full_name}</p>
+                              {(activeGoalsByMember[member.id] ?? 0) > 0 && (
+                                <span title="Active goals" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary border border-primary/20">
+                                  <Target className="w-2.5 h-2.5" /> {activeGoalsByMember[member.id]}
+                                </span>
+                              )}
+                            </div>
                             {member.member_number && (
                               <p className="text-xs text-muted-foreground">#{member.member_number}</p>
                             )}
                           </div>
-                        </div>
+                        </button>
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell">
                         <span className="text-sm text-muted-foreground">{member.plan?.name ?? "—"}</span>
@@ -678,6 +700,16 @@ export function TrainerClient({ staff, gymId, members, selfMembers, payments: in
           </div>
         </div>
       )}
+
+      {/* Member detail (goals + metrics) dialog */}
+      <MemberDetailDialog
+        open={!!detailMember}
+        onClose={() => setDetailMember(null)}
+        member={detailMember}
+        goals={goals}
+        bodyMetrics={bodyMetrics}
+        metricSkips={metricSkips}
+      />
 
       {/* Pay dialog */}
       <Dialog open={!!payDialog} onOpenChange={(o) => !o && setPayDialog(null)}>

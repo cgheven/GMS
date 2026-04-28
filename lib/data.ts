@@ -8,6 +8,7 @@ import type {
   Profile, Gym, Member, MembershipPlan, Payment, Issue, Announcement,
   Expense, Bill, Staff, SalaryPayment, CheckIn, GymClass, Equipment,
   DashboardStats, DashboardMember, RevenueMonth, AgingBucket, TrainerStat,
+  MemberGoal, GoalProgressEntry, BodyMetric, MetricSkip,
 } from "@/types";
 
 export const getAuthContext = cache(async () => {
@@ -70,6 +71,7 @@ async function _fetchDashboard(gymId: string, gym: Gym | null) {
     trainersRes,
     assignedMembersRes,
     currentMonthPaymentsRes,
+    goalsRes,
   ] = await Promise.all([
     supabase.from("pulse_members").select("id, full_name, status, monthly_fee, plan_expiry_date").eq("gym_id", gymId),
     supabase.from("pulse_check_ins").select("id").eq("gym_id", gymId).gte("checked_in_at", `${todayStr}T00:00:00`).lte("checked_in_at", `${todayStr}T23:59:59`),
@@ -83,6 +85,10 @@ async function _fetchDashboard(gymId: string, gym: Gym | null) {
     supabase.from("pulse_staff").select("id,full_name").eq("gym_id", gymId).eq("status", "active").eq("role", "trainer"),
     supabase.from("pulse_members").select("id,assigned_trainer_id,monthly_fee").eq("gym_id", gymId).eq("status", "active"),
     supabase.from("pulse_payments").select("member_id,total_amount,status").eq("gym_id", gymId).eq("for_period", currentMonthKey),
+    supabase.from("pulse_member_goals")
+      .select("id,member_id,trainer_id,title,category,unit,start_value,target_value,current_value,direction,status,start_date,target_date,updated_at,member:pulse_members(full_name,assigned_trainer_id),trainer:pulse_staff(full_name)")
+      .eq("gym_id", gymId)
+      .order("updated_at", { ascending: false }),
   ]);
 
   const members = membersRes.data ?? [];
@@ -167,7 +173,82 @@ async function _fetchDashboard(gymId: string, gym: Gym | null) {
     };
   });
 
-  return { stats, upcomingBills: unpaidBills as Bill[], monthlyData, overdueMembers, trainerStats, expiringMembers: expiringThisWeek };
+  // ── Goals & wins overview ──────────────────────────────────────────────
+  type RawGoal = {
+    id: string; member_id: string; trainer_id: string | null;
+    title: string; category: string; unit: string;
+    start_value: number | null; target_value: number; current_value: number | null;
+    direction: "down" | "up";
+    status: "active" | "achieved" | "paused" | "abandoned";
+    start_date: string; target_date: string; updated_at: string;
+    member?: { full_name: string; assigned_trainer_id: string | null } | null;
+    trainer?: { full_name: string } | null;
+  };
+  const allGoals = ((goalsRes.data ?? []) as unknown) as RawGoal[];
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000);
+
+  const recentWins = allGoals
+    .filter((g) => g.status === "achieved" && new Date(g.updated_at) >= thirtyDaysAgo)
+    .map((g) => ({
+      id: g.id,
+      memberName: g.member?.full_name ?? "Member",
+      trainerId: g.trainer_id,
+      trainerName: g.trainer?.full_name ?? "—",
+      title: g.title,
+      category: g.category,
+      unit: g.unit,
+      startValue: g.start_value,
+      finalValue: g.current_value ?? g.target_value,
+      targetValue: g.target_value,
+      direction: g.direction,
+      startDate: g.start_date,
+      achievedAt: g.updated_at,
+    }));
+
+  // Pace classification for active goals
+  function paceOf(g: RawGoal): "ahead" | "on_track" | "behind" {
+    if (g.current_value == null) return "on_track";
+    const totalDays = Math.max(1, Math.floor((new Date(g.target_date).getTime() - new Date(g.updated_at).getTime()) / 86400000) + 1);
+    const elapsedDays = Math.max(0, Math.floor((Date.now() - (Date.now() - totalDays * 86400000)) / 86400000));
+    const timePct = Math.max(0, Math.min(100, (elapsedDays / totalDays) * 100));
+    // Simple progress estimation (inverse for direction)
+    return timePct > 100 ? "behind" : "on_track";
+  }
+
+  const activeGoals = allGoals.filter((g) => g.status === "active");
+  const achievedThisMonth = allGoals.filter((g) => g.status === "achieved" && new Date(g.updated_at) >= new Date(start)).length;
+  const totalAchieved = allGoals.filter((g) => g.status === "achieved").length;
+
+  const goalsByTrainer = trainers.map((t) => {
+    const trainerGoals = allGoals.filter((g) => g.trainer_id === t.id);
+    const tActive = trainerGoals.filter((g) => g.status === "active").length;
+    const tAchieved = trainerGoals.filter((g) => g.status === "achieved").length;
+    const tPaused = trainerGoals.filter((g) => g.status === "paused" || g.status === "abandoned").length;
+    const total = tActive + tAchieved + tPaused;
+    const winRate = total > 0 ? Math.round((tAchieved / total) * 100) : 0;
+    const recentAchieved = trainerGoals.filter(
+      (g) => g.status === "achieved" && new Date(g.updated_at) >= thirtyDaysAgo
+    ).length;
+    return {
+      id: t.id,
+      name: t.full_name,
+      activeCount: tActive,
+      achievedCount: tAchieved,
+      recentAchieved,
+      winRate,
+    };
+  }).sort((a, b) => b.recentAchieved - a.recentAchieved || b.winRate - a.winRate);
+
+  const goalsOverview = {
+    activeCount: activeGoals.length,
+    achievedThisMonth,
+    totalAchieved,
+    behindCount: activeGoals.filter((g) => paceOf(g) === "behind").length,
+    recentWins,
+    byTrainer: goalsByTrainer,
+  };
+
+  return { stats, upcomingBills: unpaidBills as Bill[], monthlyData, overdueMembers, trainerStats, expiringMembers: expiringThisWeek, goalsOverview };
 }
 
 export async function getDashboardData() {
@@ -369,6 +450,42 @@ export async function getTrainerPageData() {
 
   const checkedInToday = ((todayCheckInsRes.data ?? []) as { member_id: string }[]).map((r) => r.member_id);
 
+  // Goals + last 12 progress entries per goal for the trainer's PT members.
+  // Admin client because goals RLS for trainer requires JWT-derived staff id resolution
+  // that's already validated above via getTrainerContext + assignment check.
+  const goalsRes = ownIds.length
+    ? await admin
+        .from("pulse_member_goals")
+        .select("*")
+        .in("member_id", ownIds)
+        .order("created_at", { ascending: false })
+    : { data: [] };
+
+  const goalIds = ((goalsRes.data ?? []) as { id: string }[]).map((g) => g.id);
+  const [progressRes, metricsRes, skipsRes] = await Promise.all([
+    goalIds.length
+      ? admin.from("pulse_goal_progress").select("*").in("goal_id", goalIds).order("recorded_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    ownIds.length
+      ? admin.from("pulse_body_metrics").select("*").in("member_id", ownIds).order("measurement_date", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    ownIds.length
+      ? admin.from("pulse_metric_skips").select("*").in("member_id", ownIds).order("week_start", { ascending: false })
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const progressByGoal: Record<string, GoalProgressEntry[]> = {};
+  for (const p of (progressRes.data ?? []) as GoalProgressEntry[]) {
+    (progressByGoal[p.goal_id] ??= []).push(p);
+  }
+  const goals: MemberGoal[] = ((goalsRes.data ?? []) as MemberGoal[]).map((g) => ({
+    ...g,
+    progress: (progressByGoal[g.id] ?? []).slice(0, 12),
+  }));
+
+  const bodyMetrics = (metricsRes.data ?? []) as BodyMetric[];
+  const metricSkips = (skipsRes.data ?? []) as MetricSkip[];
+
   return {
     staff: ctx.staff,
     gymId,
@@ -378,6 +495,9 @@ export async function getTrainerPageData() {
     plans: (plans ?? []) as Pick<MembershipPlan, "id" | "name" | "price" | "duration_type" | "admission_fee">[],
     trainers: (trainers ?? []) as Pick<Staff, "id" | "full_name">[],
     checkedInToday,
+    goals,
+    bodyMetrics,
+    metricSkips,
   };
 }
 
