@@ -77,8 +77,10 @@ const methodLabels: Record<PaymentMethod, string> = {
 
 const emptyForm = {
   full_name: "", role: "other" as StaffRole, specialization: "", phone: "", cnic: "",
-  join_date: formatDateInput(new Date()), monthly_salary: "", pt_rate: "0",
-  commission_percentage: "0", status: "active" as StaffStatus, notes: "",
+  join_date: formatDateInput(new Date()), monthly_salary: "",
+  commission_percentage: "0", commission_floor: "0",
+  status: "active" as StaffStatus, notes: "",
+  can_add_members: false,
 };
 
 function currentMonth() {
@@ -185,10 +187,11 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
       cnic: s.cnic ?? "",
       join_date: s.join_date,
       monthly_salary: s.monthly_salary.toString(),
-      pt_rate: s.pt_rate.toString(),
       commission_percentage: s.commission_percentage.toString(),
+      commission_floor: (s.commission_floor ?? 0).toString(),
       status: s.status,
       notes: s.notes ?? "",
+      can_add_members: s.can_add_members ?? false,
     });
     setDialogOpen(true);
   }
@@ -206,10 +209,11 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
       cnic: form.cnic || null,
       join_date: form.join_date,
       monthly_salary: parseFloat(form.monthly_salary) || 0,
-      pt_rate: parseFloat(form.pt_rate) || 0,
       commission_percentage: parseFloat(form.commission_percentage) || 0,
+      commission_floor: parseFloat(form.commission_floor) || 0,
       status: form.status,
       notes: form.notes || null,
+      can_add_members: form.can_add_members,
     };
     const { error } = editing
       ? await supabase.from("pulse_staff").update(payload).eq("id", editing.id)
@@ -391,8 +395,8 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
                       <div className="text-right shrink-0 hidden sm:block">
                         <p className="text-sm font-semibold">{formatCurrency(member.monthly_salary)}</p>
                         <p className="text-xs text-muted-foreground">/month</p>
-                        {isTrainer && member.pt_rate > 0 && (
-                          <p className="text-xs text-primary/70">{formatCurrency(member.pt_rate)}/PT</p>
+                        {isTrainer && member.commission_percentage > 0 && (
+                          <p className="text-xs text-primary/70">{member.commission_percentage}% commission</p>
                         )}
                       </div>
                       {/* Actions */}
@@ -556,15 +560,30 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>PT Rate (PKR/session)</Label>
-                <Input type="number" placeholder="0" value={form.pt_rate} onChange={(e) => setForm({ ...form, pt_rate: e.target.value })} />
-              </div>
-              <div className="space-y-1.5">
                 <Label>Commission %</Label>
                 <Input type="number" placeholder="0" value={form.commission_percentage} onChange={(e) => setForm({ ...form, commission_percentage: e.target.value })} />
               </div>
+              <div className="space-y-1.5">
+                <Label>Gym Cost Floor (PKR)</Label>
+                <Input type="number" placeholder="0" value={form.commission_floor} onChange={(e) => setForm({ ...form, commission_floor: e.target.value })} />
+                <p className="text-[11px] text-muted-foreground leading-snug">Deducted from each member's fee before commission applies.</p>
+              </div>
             </div>
             <div className="space-y-1.5"><Label>Notes</Label><Textarea placeholder="Optional…" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} /></div>
+
+            {/* Permissions */}
+            <div className="rounded-lg border border-sidebar-border bg-white/[0.02] p-3 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Permissions</p>
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <input type="checkbox" checked={form.can_add_members}
+                  onChange={(e) => setForm({ ...form, can_add_members: e.target.checked })}
+                  className="mt-0.5 w-4 h-4 rounded border-sidebar-border bg-card accent-primary cursor-pointer" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-foreground">Onboard new members</p>
+                  <p className="text-xs text-muted-foreground">Allow this staff to add new clients from their portal when you're absent.</p>
+                </div>
+              </label>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>

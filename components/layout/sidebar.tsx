@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, CreditCard, FileText, Settings, X,
-  Shield, Building2, Globe,
+  Shield, Building2, Globe, LogIn,
   BarChart3, UserCog, Dumbbell, CalendarDays,
   Wrench, Receipt, ClipboardList, Zap,
 } from "lucide-react";
@@ -20,9 +20,10 @@ const navGroups = [
   {
     label: "Members",
     items: [
-      { href: "/members",  label: "Members",   icon: Users },
-      { href: "/plans",    label: "Plans",      icon: Zap },
-      { href: "/payments", label: "Transactions", icon: CreditCard },
+      { href: "/members",   label: "Members",     icon: Users },
+      { href: "/check-ins", label: "Check-ins",   icon: LogIn },
+      { href: "/plans",     label: "Plans",        icon: Zap },
+      { href: "/payments",  label: "Transactions", icon: CreditCard },
     ],
   },
   {

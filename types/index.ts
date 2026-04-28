@@ -191,9 +191,11 @@ export interface Staff {
   monthly_salary: number;
   pt_rate: number;
   commission_percentage: number;
+  commission_floor: number;
   status: StaffStatus;
   notes: string | null;
   user_id: string | null;
+  can_add_members: boolean;
   created_at: string;
   updated_at: string;
 }

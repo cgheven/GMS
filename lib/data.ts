@@ -39,11 +39,8 @@ export const getAuthContext = cache(async () => {
   };
 });
 
-export async function getDashboardData() {
-  const ctx = await getAuthContext();
-  if (!ctx?.gymId) return null;
-  const { supabase, gymId, gym } = ctx;
-
+async function _fetchDashboard(gymId: string, gym: Gym | null) {
+  const supabase = createAdminClient();
   const now = new Date();
   const { start, end } = getMonthRange();
   const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -170,14 +167,23 @@ export async function getDashboardData() {
     };
   });
 
-  return { gymId, stats, upcomingBills: unpaidBills as Bill[], monthlyData, overdueMembers, trainerStats, expiringMembers: expiringThisWeek };
+  return { stats, upcomingBills: unpaidBills as Bill[], monthlyData, overdueMembers, trainerStats, expiringMembers: expiringThisWeek };
 }
 
-export async function getMembers() {
+export async function getDashboardData() {
   const ctx = await getAuthContext();
-  if (!ctx?.gymId) return { gymId: null, active: [], waiting: [], expired: [], plans: [], staff: [] };
-  const { supabase, gymId } = ctx;
+  if (!ctx?.gymId) return null;
+  const { gymId, gym } = ctx;
+  const data = await unstable_cache(
+    () => _fetchDashboard(gymId, gym),
+    ["dashboard", gymId],
+    { revalidate: 30, tags: [`dashboard-${gymId}`] }
+  )();
+  return { gymId, ...data };
+}
 
+async function _fetchMembers(gymId: string) {
+  const supabase = createAdminClient();
   const [{ data: members }, { data: plans }, { data: staff }] = await Promise.all([
     supabase.from("pulse_members")
       .select("*, plan:pulse_membership_plans(name,duration_type,price,color), trainer:pulse_staff(full_name)")
@@ -189,7 +195,6 @@ export async function getMembers() {
 
   const all = (members ?? []) as Member[];
   return {
-    gymId,
     active: all.filter((m) => m.status === "active"),
     waiting: all.filter((m) => m.is_waiting),
     expired: all.filter((m) => m.status === "expired" || m.status === "cancelled"),
@@ -198,12 +203,34 @@ export async function getMembers() {
   };
 }
 
+export async function getMembers() {
+  const ctx = await getAuthContext();
+  if (!ctx?.gymId) return { gymId: null, active: [], waiting: [], expired: [], plans: [], staff: [] };
+  const gymId = ctx.gymId;
+  const data = await unstable_cache(
+    () => _fetchMembers(gymId),
+    ["members", gymId],
+    { revalidate: 30, tags: [`members-${gymId}`] }
+  )();
+  return { gymId, ...data };
+}
+
+async function _fetchMembershipPlans(gymId: string) {
+  const supabase = createAdminClient();
+  const { data } = await supabase.from("pulse_membership_plans").select("*").eq("gym_id", gymId).order("price");
+  return { plans: (data as MembershipPlan[]) ?? [] };
+}
+
 export async function getMembershipPlans() {
   const ctx = await getAuthContext();
   if (!ctx?.gymId) return { gymId: null, plans: [] };
-  const { supabase, gymId } = ctx;
-  const { data } = await supabase.from("pulse_membership_plans").select("*").eq("gym_id", gymId).order("price");
-  return { gymId, plans: (data as MembershipPlan[]) ?? [] };
+  const gymId = ctx.gymId;
+  const data = await unstable_cache(
+    () => _fetchMembershipPlans(gymId),
+    ["plans", gymId],
+    { revalidate: 60, tags: [`plans-${gymId}`] }
+  )();
+  return { gymId, ...data };
 }
 
 async function _fetchPayments(gymId: string) {
@@ -278,36 +305,79 @@ export async function getTrainerPageData() {
   if (!ctx) return null;
   const { supabase, staff, gymId } = ctx;
 
-  const [{ data: members }, { data: plans }] = await Promise.all([
+  const [{ data: members }, { data: plans }, { data: trainers }] = await Promise.all([
     supabase
       .from("pulse_members")
-      .select("id,full_name,member_number,monthly_fee,plan_id,status,plan_expiry_date,outstanding_balance,plan:pulse_membership_plans(name)")
+      .select("id,full_name,member_number,phone,email,cnic,gender,date_of_birth,emergency_contact,address,monthly_fee,admission_fee,plan_id,assigned_trainer_id,status,plan_expiry_date,outstanding_balance,join_date,notes,plan:pulse_membership_plans(name)")
       .eq("assigned_trainer_id", staff.id)
       .eq("status", "active")
       .order("full_name"),
     supabase
       .from("pulse_membership_plans")
-      .select("id,name,price,duration_type")
+      .select("id,name,price,duration_type,admission_fee")
       .eq("gym_id", gymId)
       .eq("is_active", true),
+    supabase
+      .from("pulse_staff")
+      .select("id,full_name")
+      .eq("gym_id", gymId)
+      .eq("status", "active")
+      .eq("role", "trainer")
+      .order("full_name"),
   ]);
 
-  const memberIds = (members ?? []).map((m) => m.id);
-  const { data: payments } = memberIds.length
-    ? await supabase
-        .from("pulse_payments")
-        .select("*, member:pulse_members(full_name,plan_id)")
-        .in("member_id", memberIds)
-        .order("created_at", { ascending: false })
-        .limit(500)
+  // SELF clients (no assigned trainer) — only fetched if trainer has onboarding permission.
+  // Trainers with this permission help walk-ins / handle payments when owner is absent.
+  // Uses admin client because RLS restricts trainer SELECT to their own assigned members,
+  // which would filter out null-trainer rows. Permission check above gates access.
+  const selfRes = staff.can_add_members
+    ? await createAdminClient()
+        .from("pulse_members")
+        .select("id,full_name,member_number,phone,email,cnic,gender,date_of_birth,emergency_contact,address,monthly_fee,admission_fee,plan_id,assigned_trainer_id,status,plan_expiry_date,outstanding_balance,join_date,notes,plan:pulse_membership_plans(name)")
+        .eq("gym_id", gymId)
+        .eq("status", "active")
+        .is("assigned_trainer_id", null)
+        .order("full_name")
     : { data: [] };
+
+  const ownIds = (members ?? []).map((m) => m.id);
+  const selfIds = (selfRes.data ?? []).map((m) => m.id);
+  const allIds = [...ownIds, ...selfIds];
+  const today = new Date();
+  const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+
+  // Payments via admin client: trainer's RLS only allows SELECT for own assigned members,
+  // which would hide SELF clients' payments. Query is already bounded to member IDs we just fetched.
+  const admin = createAdminClient();
+  const [paymentsRes, todayCheckInsRes] = await Promise.all([
+    allIds.length
+      ? admin
+          .from("pulse_payments")
+          .select("*, member:pulse_members(full_name,plan_id)")
+          .in("member_id", allIds)
+          .order("created_at", { ascending: false })
+          .limit(500)
+      : Promise.resolve({ data: [] }),
+    ownIds.length
+      ? supabase
+          .from("pulse_check_ins")
+          .select("member_id")
+          .in("member_id", ownIds)
+          .gte("checked_in_at", dayStart)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const checkedInToday = ((todayCheckInsRes.data ?? []) as { member_id: string }[]).map((r) => r.member_id);
 
   return {
     staff: ctx.staff,
     gymId,
-    members: (members ?? []) as unknown as (Pick<Member, "id" | "full_name" | "member_number" | "monthly_fee" | "plan_id" | "status" | "plan_expiry_date" | "outstanding_balance"> & { plan?: { name: string } | null })[],
-    payments: (payments ?? []) as Payment[],
-    plans: (plans ?? []) as Pick<MembershipPlan, "id" | "name" | "price" | "duration_type">[],
+    members: (members ?? []) as unknown as (Pick<Member, "id" | "full_name" | "member_number" | "phone" | "email" | "cnic" | "gender" | "date_of_birth" | "emergency_contact" | "address" | "monthly_fee" | "admission_fee" | "plan_id" | "assigned_trainer_id" | "status" | "plan_expiry_date" | "outstanding_balance" | "join_date" | "notes"> & { plan?: { name: string } | null })[],
+    selfMembers: (selfRes.data ?? []) as unknown as (Pick<Member, "id" | "full_name" | "member_number" | "phone" | "email" | "cnic" | "gender" | "date_of_birth" | "emergency_contact" | "address" | "monthly_fee" | "admission_fee" | "plan_id" | "assigned_trainer_id" | "status" | "plan_expiry_date" | "outstanding_balance" | "join_date" | "notes"> & { plan?: { name: string } | null })[],
+    payments: (paymentsRes.data ?? []) as Payment[],
+    plans: (plans ?? []) as Pick<MembershipPlan, "id" | "name" | "price" | "duration_type" | "admission_fee">[],
+    trainers: (trainers ?? []) as Pick<Staff, "id" | "full_name">[],
+    checkedInToday,
   };
 }
 
@@ -319,19 +389,27 @@ export async function getCheckIns() {
   const today = formatDateInput(new Date());
   const [{ data: checkIns }, { data: members }] = await Promise.all([
     supabase.from("pulse_check_ins")
-      .select("*, member:pulse_members(full_name,photo_url,member_number,status)")
+      .select("*, member:pulse_members(full_name,photo_url,member_number,status,assigned_trainer_id,trainer:pulse_staff(full_name))")
       .eq("gym_id", gymId)
       .gte("checked_in_at", `${today}T00:00:00`)
       .order("checked_in_at", { ascending: false }),
+    // Only PT clients (members with an assigned trainer) — SELF members aren't attendance-tracked.
     supabase.from("pulse_members")
-      .select("id,full_name,member_number,photo_url,status,plan_expiry_date")
+      .select("id,full_name,member_number,photo_url,status,plan_expiry_date,assigned_trainer_id,trainer:pulse_staff(full_name)")
       .eq("gym_id", gymId)
-      .eq("status", "active"),
+      .eq("status", "active")
+      .not("assigned_trainer_id", "is", null),
   ]);
+
+  // Filter check-ins to PT clients only (drop SELF check-ins from owner view).
+  const ptCheckIns = (checkIns ?? []).filter((c) => {
+    const m = (c as { member?: { assigned_trainer_id?: string | null } | null }).member;
+    return m?.assigned_trainer_id != null;
+  });
 
   return {
     gymId,
-    checkIns: (checkIns ?? []) as CheckIn[],
+    checkIns: ptCheckIns as CheckIn[],
     members: (members ?? []) as Pick<Member, "id" | "full_name" | "member_number" | "photo_url" | "status" | "plan_expiry_date">[],
   };
 }
@@ -356,11 +434,8 @@ export async function getClasses() {
   };
 }
 
-export async function getStaffData() {
-  const ctx = await getAuthContext();
-  if (!ctx?.gymId) return { gymId: null, staff: [], salaryPayments: [] };
-  const { supabase, gymId } = ctx;
-
+async function _fetchStaffData(gymId: string) {
+  const supabase = createAdminClient();
   const [{ data: staff }, { data: salaryPayments }] = await Promise.all([
     supabase.from("pulse_staff").select("*").eq("gym_id", gymId).order("full_name"),
     supabase.from("pulse_salary_payments")
@@ -369,12 +444,22 @@ export async function getStaffData() {
       .order("for_month", { ascending: false })
       .limit(200),
   ]);
-
   return {
-    gymId,
     staff: (staff ?? []) as Staff[],
     salaryPayments: (salaryPayments ?? []) as SalaryPayment[],
   };
+}
+
+export async function getStaffData() {
+  const ctx = await getAuthContext();
+  if (!ctx?.gymId) return { gymId: null, staff: [], salaryPayments: [] };
+  const gymId = ctx.gymId;
+  const data = await unstable_cache(
+    () => _fetchStaffData(gymId),
+    ["staff", gymId],
+    { revalidate: 60, tags: [`staff-${gymId}`] }
+  )();
+  return { gymId, ...data };
 }
 
 export async function getEquipment() {
@@ -442,11 +527,8 @@ export async function getAnnouncements() {
   return { gymId, announcements: (data ?? []) as Announcement[] };
 }
 
-export async function getReportsData() {
-  const ctx = await getAuthContext();
-  if (!ctx?.gymId) return null;
-  const { supabase, gymId } = ctx;
-
+async function _fetchReports(gymId: string) {
+  const supabase = createAdminClient();
   const now = new Date();
   const ranges = Array.from({ length: 12 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
@@ -459,11 +541,25 @@ export async function getReportsData() {
     };
   });
 
+  // Bound queries to the 12-month report window so they don't grow unbounded.
+  const windowStart = ranges[0].start;
+  const windowEnd = ranges[11].end;
   const [paymentsRes, expensesRes, membersRes, salariesRes] = await Promise.all([
-    supabase.from("pulse_payments").select("payment_date,total_amount,status").eq("gym_id", gymId),
-    supabase.from("pulse_expenses").select("amount,date").eq("gym_id", gymId),
-    supabase.from("pulse_members").select("join_date,plan_expiry_date,status").eq("gym_id", gymId),
-    supabase.from("pulse_salary_payments").select("for_month,total_amount,status").eq("gym_id", gymId),
+    supabase.from("pulse_payments").select("payment_date,total_amount,status")
+      .eq("gym_id", gymId)
+      .gte("payment_date", windowStart)
+      .lte("payment_date", windowEnd),
+    supabase.from("pulse_expenses").select("amount,date")
+      .eq("gym_id", gymId)
+      .gte("date", windowStart)
+      .lte("date", windowEnd),
+    supabase.from("pulse_members").select("join_date,plan_expiry_date,status")
+      .eq("gym_id", gymId)
+      .lte("join_date", windowEnd),
+    supabase.from("pulse_salary_payments").select("for_month,total_amount,status")
+      .eq("gym_id", gymId)
+      .gte("for_month", ranges[0].monthKey)
+      .lte("for_month", ranges[11].monthKey),
   ]);
 
   const payments = paymentsRes.data ?? [];
@@ -511,5 +607,17 @@ export async function getReportsData() {
     else                   { aging.d90plus.count++; aging.d90plus.amount += amt; }
   });
 
-  return { gymId, revenueByMonth, aging };
+  return { revenueByMonth, aging };
+}
+
+export async function getReportsData() {
+  const ctx = await getAuthContext();
+  if (!ctx?.gymId) return null;
+  const gymId = ctx.gymId;
+  const data = await unstable_cache(
+    () => _fetchReports(gymId),
+    ["reports", gymId],
+    { revalidate: 60, tags: [`reports-${gymId}`] }
+  )();
+  return { gymId, ...data };
 }

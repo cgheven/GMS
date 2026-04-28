@@ -1,10 +1,12 @@
 "use client";
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   CheckCircle2, Clock, Wallet, Users,
-  ChevronLeft, ChevronRight, Search, TrendingUp,
+  ChevronLeft, ChevronRight, Search, TrendingUp, UserPlus, Pencil, LogIn,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { createMemberAsTrainer, updateMemberAsTrainer, checkInMemberAsTrainer } from "@/app/actions/trainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,18 +17,39 @@ import { formatCurrency, formatDate, formatDateInput } from "@/lib/utils";
 import type { Payment, PaymentMethod, PaymentStatus, Member, MembershipPlan, Staff } from "@/types";
 
 type MemberRow = Pick<Member,
-  "id" | "full_name" | "member_number" | "monthly_fee" | "plan_id" |
-  "status" | "plan_expiry_date" | "outstanding_balance"
+  "id" | "full_name" | "member_number" | "phone" | "email" | "cnic" |
+  "gender" | "date_of_birth" | "emergency_contact" | "address" |
+  "monthly_fee" | "admission_fee" | "plan_id" | "assigned_trainer_id" |
+  "status" | "plan_expiry_date" | "outstanding_balance" | "join_date" | "notes"
 > & { plan?: { name: string } | null };
 
-type PlanRow = Pick<MembershipPlan, "id" | "name" | "price" | "duration_type">;
+type TrainerOption = Pick<Staff, "id" | "full_name">;
+
+type PlanRow = Pick<MembershipPlan, "id" | "name" | "price" | "duration_type"> & {
+  admission_fee?: number;
+};
+
+const DURATION_MONTHS: Record<string, number> = {
+  daily: 0, monthly: 1, quarterly: 3, biannual: 6, annual: 12, dropin: 0,
+};
+
+function computeExpiry(joinDate: string, durationType: string | undefined): string | null {
+  const months = DURATION_MONTHS[durationType ?? ""] ?? 1;
+  if (months === 0) return joinDate;
+  const d = new Date(joinDate);
+  d.setMonth(d.getMonth() + months);
+  return formatDateInput(d);
+}
 
 interface Props {
   staff: Staff & { gym?: { name: string } | null };
   gymId: string;
   members: MemberRow[];
+  selfMembers: MemberRow[];
   payments: Payment[];
   plans: PlanRow[];
+  trainers: TrainerOption[];
+  checkedInToday: string[];
 }
 
 const methodLabels: Record<PaymentMethod, string> = {
@@ -54,10 +77,111 @@ function genReceipt(name: string, period: string) {
   return `PLS-${period.replace("-", "")}-${initials}-${Math.floor(Math.random() * 900 + 100)}`;
 }
 
-export function TrainerClient({ staff, gymId, members, payments: initialPayments, plans }: Props) {
+export function TrainerClient({ staff, gymId, members, selfMembers, payments: initialPayments, plans, trainers, checkedInToday: initialCheckedIn }: Props) {
+  const router = useRouter();
   const [payments, setPayments] = useState<Payment[]>(initialPayments);
   const [selectedMonth, setSelectedMonth] = useState(CURRENT_MONTH);
   const [search, setSearch] = useState("");
+  const [activeTab, setActiveTab] = useState<"my" | "self">("my");
+  const [checkedInToday, setCheckedInToday] = useState<Set<string>>(new Set(initialCheckedIn));
+  const [checkingIn, setCheckingIn] = useState<string | null>(null);
+
+  async function handleCheckIn(memberId: string) {
+    setCheckingIn(memberId);
+    setCheckedInToday((prev) => new Set(prev).add(memberId)); // optimistic
+    const res = await checkInMemberAsTrainer(memberId);
+    setCheckingIn(null);
+    if (res.error) {
+      setCheckedInToday((prev) => { const n = new Set(prev); n.delete(memberId); return n; });
+      toast({ title: "Error", description: res.error, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Checked in" });
+  }
+
+  // Add/Edit Member (permission-gated)
+  const NO_TRAINER = "__none__";
+  const emptyMemberForm = {
+    full_name: "", phone: "", email: "", cnic: "",
+    plan_id: "", monthly_fee: "", admission_fee: "0", admission_fee_paid: true,
+    join_date: formatDateInput(new Date()),
+    notes: "",
+    assigned_trainer_id: staff.id,
+  };
+  const [addMemberOpen, setAddMemberOpen] = useState(false);
+  const [memberForm, setMemberForm] = useState(emptyMemberForm);
+  const [savingMember, setSavingMember] = useState(false);
+  const [editingMember, setEditingMember] = useState<MemberRow | null>(null);
+
+  function openEditMember(m: MemberRow) {
+    setEditingMember(m);
+    setMemberForm({
+      full_name: m.full_name,
+      phone: m.phone ?? "",
+      email: m.email ?? "",
+      cnic: m.cnic ?? "",
+      plan_id: m.plan_id ?? "",
+      monthly_fee: String(m.monthly_fee ?? ""),
+      admission_fee: String(m.admission_fee ?? "0"),
+      admission_fee_paid: true,
+      join_date: m.join_date ?? formatDateInput(new Date()),
+      notes: m.notes ?? "",
+      assigned_trainer_id: m.assigned_trainer_id ?? NO_TRAINER,
+    });
+    setAddMemberOpen(true);
+  }
+
+  function openAddMember() {
+    setEditingMember(null);
+    setMemberForm(emptyMemberForm);
+    setAddMemberOpen(true);
+  }
+
+  function onPlanPick(planId: string) {
+    const plan = plans.find((p) => p.id === planId);
+    setMemberForm((f) => ({
+      ...f,
+      plan_id: planId,
+      monthly_fee: plan ? String(plan.price) : f.monthly_fee,
+      admission_fee: plan?.admission_fee && plan.admission_fee > 0 ? String(plan.admission_fee) : f.admission_fee,
+    }));
+  }
+
+  async function handleAddMember() {
+    if (!memberForm.full_name || !memberForm.phone || !memberForm.plan_id) {
+      toast({ title: "Name, phone and plan are required", variant: "destructive" });
+      return;
+    }
+    setSavingMember(true);
+    const plan = plans.find((p) => p.id === memberForm.plan_id);
+    const expiry = computeExpiry(memberForm.join_date, plan?.duration_type);
+    const basePayload = {
+      full_name: memberForm.full_name,
+      phone: memberForm.phone,
+      email: memberForm.email || null,
+      cnic: memberForm.cnic || null,
+      plan_id: memberForm.plan_id,
+      monthly_fee: parseFloat(memberForm.monthly_fee) || 0,
+      admission_fee: parseFloat(memberForm.admission_fee) || 0,
+      join_date: memberForm.join_date,
+      plan_expiry_date: expiry,
+      notes: memberForm.notes || null,
+      assigned_trainer_id: memberForm.assigned_trainer_id === NO_TRAINER ? null : memberForm.assigned_trainer_id,
+    };
+    const res = editingMember
+      ? await updateMemberAsTrainer(editingMember.id, basePayload)
+      : await createMemberAsTrainer({ ...basePayload, admission_fee_paid: memberForm.admission_fee_paid });
+    setSavingMember(false);
+    if (res.error) {
+      toast({ title: "Error", description: res.error, variant: "destructive" });
+      return;
+    }
+    toast({ title: editingMember ? "Member updated" : "Member added" });
+    setAddMemberOpen(false);
+    setMemberForm(emptyMemberForm);
+    setEditingMember(null);
+    router.refresh();
+  }
 
   const [payDialog, setPayDialog] = useState<{ member: MemberRow; payment: Payment | null } | null>(null);
   const [payForm, setPayForm] = useState({
@@ -87,17 +211,20 @@ export function TrainerClient({ staff, gymId, members, payments: initialPayments
     return { total: members.length, paid, unpaid: members.length - paid, collected };
   }, [members, paidMemberIds, monthPayments]);
 
+  // Commission per member = max(0, fee − floor) × %  (floor=0 ⇒ gross % of fee)
   const earnings = useMemo(() => {
     const pct = staff.commission_percentage / 100;
+    const floor = staff.commission_floor ?? 0;
+    const cutFor = (fee: number) => Math.max(0, fee - floor) * pct;
     const earnedCommission = members
       .filter((m) => paidMemberIds.has(m.id))
-      .reduce((s, m) => s + m.monthly_fee * pct, 0);
+      .reduce((s, m) => s + cutFor(m.monthly_fee), 0);
     const pendingCommission = members
       .filter((m) => !paidMemberIds.has(m.id))
-      .reduce((s, m) => s + m.monthly_fee * pct, 0);
+      .reduce((s, m) => s + cutFor(m.monthly_fee), 0);
     const totalPotential = earnedCommission + pendingCommission;
     const totalEarned = staff.monthly_salary + earnedCommission;
-    return { earnedCommission, pendingCommission, totalPotential, totalEarned, pct: staff.commission_percentage };
+    return { earnedCommission, pendingCommission, totalPotential, totalEarned, pct: staff.commission_percentage, floor, cutFor };
   }, [members, paidMemberIds, staff]);
 
   const memberRows = useMemo(() => {
@@ -110,6 +237,17 @@ export function TrainerClient({ staff, gymId, members, payments: initialPayments
         return rank(a) - rank(b);
       });
   }, [members, monthPayments, search]);
+
+  const selfRows = useMemo(() => {
+    const q = search.toLowerCase();
+    return selfMembers
+      .filter((m) => !q || m.full_name.toLowerCase().includes(q))
+      .map((m) => ({ member: m, payment: monthPayments.find((p) => p.member_id === m.id) ?? null }))
+      .sort((a, b) => {
+        const rank = (r: typeof a) => (r.payment?.status === "paid" ? 2 : r.payment?.status === "overdue" ? 0 : 1);
+        return rank(a) - rank(b);
+      });
+  }, [selfMembers, monthPayments, search]);
 
   function openPay(member: MemberRow, payment: Payment | null) {
     setPayDialog({ member, payment });
@@ -188,11 +326,18 @@ export function TrainerClient({ staff, gymId, members, payments: initialPayments
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">My Members</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          {members.length} member{members.length !== 1 ? "s" : ""} assigned to you
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">My Members</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {members.length} member{members.length !== 1 ? "s" : ""} assigned to you
+          </p>
+        </div>
+        {staff.can_add_members && (
+          <Button onClick={openAddMember} className="gap-2 self-start sm:self-auto">
+            <UserPlus className="w-4 h-4" /> Add Member
+          </Button>
+        )}
       </div>
 
       {/* Month navigator */}
@@ -216,9 +361,10 @@ export function TrainerClient({ staff, gymId, members, payments: initialPayments
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         {[
           { label: "My Members",  value: stats.total,                    icon: Users,        color: "text-foreground",  bg: "bg-white/5 border border-white/10" },
+          { label: "In Today",    value: checkedInToday.size,            icon: LogIn,        color: "text-sky-400",     bg: "bg-sky-500/10 border border-sky-500/20" },
           { label: "Paid",        value: stats.paid,                     icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
           { label: "Unpaid",      value: stats.unpaid,                   icon: Clock,        color: "text-primary",     bg: "bg-primary/10 border border-primary/20" },
           { label: "Gym Collected", value: formatCurrency(stats.collected), icon: Wallet,     color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
@@ -242,7 +388,9 @@ export function TrainerClient({ staff, gymId, members, payments: initialPayments
         <div className="flex items-center gap-2 px-4 py-3 border-b border-primary/10">
           <TrendingUp className="w-4 h-4 text-primary" />
           <p className="text-sm font-semibold text-primary">My Earnings — {monthLabel(selectedMonth)}</p>
-          <span className="ml-auto text-xs text-muted-foreground">{earnings.pct}% PT commission</span>
+          <span className="ml-auto text-xs text-muted-foreground">
+            {earnings.pct}% commission{earnings.floor > 0 ? ` after ${formatCurrency(earnings.floor)} gym cost` : ""}
+          </span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-primary/10">
           {[
@@ -282,7 +430,30 @@ export function TrainerClient({ staff, gymId, members, payments: initialPayments
         />
       </div>
 
-      {/* Member table */}
+      {/* Tabs (only when SELF section available) */}
+      {staff.can_add_members && (
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-sidebar-border w-fit">
+          <button type="button" onClick={() => setActiveTab("my")}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === "my"
+                ? "bg-primary/15 text-primary border border-primary/20"
+                : "text-muted-foreground hover:text-foreground"
+            }`}>
+            My Members <span className="ml-1 text-xs opacity-70">{members.length}</span>
+          </button>
+          <button type="button" onClick={() => setActiveTab("self")}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === "self"
+                ? "bg-primary/15 text-primary border border-primary/20"
+                : "text-muted-foreground hover:text-foreground"
+            }`}>
+            Self-Service <span className="ml-1 text-xs opacity-70">{selfMembers.length}</span>
+          </button>
+        </div>
+      )}
+
+      {/* My Members table */}
+      {(!staff.can_add_members || activeTab === "my") && (
       <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
         {members.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-2 text-muted-foreground">
@@ -330,7 +501,7 @@ export function TrainerClient({ staff, gymId, members, payments: initialPayments
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className={`text-sm font-semibold ${isPaid ? "text-primary" : "text-muted-foreground"}`}>
-                          {formatCurrency(member.monthly_fee * earnings.pct / 100)}
+                          {formatCurrency(earnings.cutFor(member.monthly_fee))}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -353,21 +524,48 @@ export function TrainerClient({ staff, gymId, members, payments: initialPayments
                           {payment?.payment_date ? formatDate(payment.payment_date) : "—"}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        {isPaid ? (
-                          <span className="flex items-center justify-end gap-1 text-xs text-emerald-400 font-medium">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Paid
-                          </span>
-                        ) : (
-                          <Button
-                            size="sm"
-                            className="h-7 text-xs gap-1 bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
-                            variant="ghost"
-                            onClick={() => openPay(member, payment)}
-                          >
-                            <CheckCircle2 className="w-3 h-3" /> Pay
-                          </Button>
-                        )}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {checkedInToday.has(member.id) ? (
+                            <span title="Checked in today" className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
+                              <CheckCircle2 className="w-3 h-3" /> In
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              title="Check in"
+                              disabled={checkingIn === member.id}
+                              onClick={() => handleCheckIn(member.id)}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground bg-white/[0.03] border border-white/10 hover:border-white/20 hover:bg-white/5 transition-colors disabled:opacity-50"
+                            >
+                              <LogIn className="w-3 h-3" /> Check In
+                            </button>
+                          )}
+                          {staff.can_add_members && (
+                            <button
+                              type="button"
+                              title="Edit member"
+                              onClick={() => openEditMember(member)}
+                              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {isPaid ? (
+                            <span className="flex items-center gap-1 text-xs text-emerald-400 font-medium px-2">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Paid
+                            </span>
+                          ) : (
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs gap-1 bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
+                              variant="ghost"
+                              onClick={() => openPay(member, payment)}
+                            >
+                              <CheckCircle2 className="w-3 h-3" /> Pay
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -377,6 +575,109 @@ export function TrainerClient({ staff, gymId, members, payments: initialPayments
           </div>
         )}
       </div>
+      )}
+
+      {/* SELF clients tab content */}
+      {staff.can_add_members && activeTab === "self" && (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">Gym-only members (no PT). No commission earned — payments only.</p>
+          <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
+            {selfMembers.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-2 text-muted-foreground">
+                <Users className="w-8 h-8 opacity-20" />
+                <p className="text-sm">No self-service clients yet</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-sidebar-border">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Member</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Plan</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fee</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Paid On</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-sidebar-border/50">
+                    {selfRows.map(({ member, payment }) => {
+                      const isPaid = payment?.status === "paid";
+                      return (
+                        <tr key={member.id} className="hover:bg-white/[0.02] transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xs font-bold text-muted-foreground shrink-0">
+                                {member.full_name[0]?.toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="font-medium text-foreground">{member.full_name}</p>
+                                {member.member_number && <p className="text-xs text-muted-foreground">#{member.member_number}</p>}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell">
+                            <span className="text-sm text-muted-foreground">{member.plan?.name ?? "—"}</span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className="font-medium text-foreground">{formatCurrency(member.monthly_fee)}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {payment ? (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
+                                payment.status === "paid"     ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
+                                payment.status === "overdue"  ? "bg-rose-500/10 text-rose-400 border-rose-500/20" :
+                                                                "bg-primary/10 text-primary border-primary/20"
+                              }`}>
+                                {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-white/5 text-muted-foreground border-white/10">
+                                Unpaid
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 hidden lg:table-cell">
+                            <span className="text-sm text-muted-foreground">
+                              {payment?.payment_date ? formatDate(payment.payment_date) : "—"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                title="Edit member"
+                                onClick={() => openEditMember(member)}
+                                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              {isPaid ? (
+                                <span className="flex items-center gap-1 text-xs text-emerald-400 font-medium px-2">
+                                  <CheckCircle2 className="w-3.5 h-3.5" /> Paid
+                                </span>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-xs gap-1 bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
+                                  variant="ghost"
+                                  onClick={() => openPay(member, payment)}
+                                >
+                                  <CheckCircle2 className="w-3 h-3" /> Pay
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Pay dialog */}
       <Dialog open={!!payDialog} onOpenChange={(o) => !o && setPayDialog(null)}>
@@ -437,6 +738,111 @@ export function TrainerClient({ staff, gymId, members, payments: initialPayments
             <Button variant="outline" onClick={() => setPayDialog(null)}>Cancel</Button>
             <Button onClick={handlePay} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700 text-white">
               {saving ? "Saving…" : "Confirm Payment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add/Edit Member dialog (permission-gated) */}
+      <Dialog open={addMemberOpen} onOpenChange={(o) => { if (!o) { setAddMemberOpen(false); setEditingMember(null); } }}>
+        <DialogContent className="sm:max-w-xl p-7">
+          <DialogHeader className="pb-1">
+            <DialogTitle>{editingMember ? "Edit Member" : "Onboard New Member"}</DialogTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              {editingMember ? "Update details for your assigned member." : "Member auto-assigned to you."}
+            </p>
+          </DialogHeader>
+          <div className="space-y-4 py-1 max-h-[65vh] overflow-y-auto px-1">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Full Name *</Label>
+                <Input value={memberForm.full_name} onChange={(e) => setMemberForm({ ...memberForm, full_name: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Phone *</Label>
+                <Input placeholder="+92 300 0000000" value={memberForm.phone} onChange={(e) => setMemberForm({ ...memberForm, phone: e.target.value })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Email</Label>
+                <Input type="email" value={memberForm.email} onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>CNIC</Label>
+                <Input placeholder="00000-0000000-0" value={memberForm.cnic} onChange={(e) => setMemberForm({ ...memberForm, cnic: e.target.value })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Plan *</Label>
+                <Select value={memberForm.plan_id} onValueChange={onPlanPick}>
+                  <SelectTrigger><SelectValue placeholder="Select plan" /></SelectTrigger>
+                  <SelectContent>
+                    {plans.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name} · {formatCurrency(p.price)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Assign Trainer</Label>
+                <Select value={memberForm.assigned_trainer_id}
+                  onValueChange={(v) => setMemberForm({ ...memberForm, assigned_trainer_id: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={staff.id}>Me ({staff.full_name})</SelectItem>
+                    {trainers.filter((t) => t.id !== staff.id).map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.full_name}</SelectItem>
+                    ))}
+                    <SelectItem value={NO_TRAINER}>SELF</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Monthly Fee (PKR)</Label>
+                <Input type="number" value={memberForm.monthly_fee} onChange={(e) => setMemberForm({ ...memberForm, monthly_fee: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Join Date</Label>
+                <Input type="date" value={memberForm.join_date} onChange={(e) => setMemberForm({ ...memberForm, join_date: e.target.value })} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Admission Fee (PKR)</Label>
+              <Input type="number" value={memberForm.admission_fee} onChange={(e) => setMemberForm({ ...memberForm, admission_fee: e.target.value })} />
+            </div>
+            {!editingMember && parseFloat(memberForm.admission_fee) > 0 && (
+              <div className="flex items-center gap-2 rounded-lg border border-sidebar-border bg-white/[0.02] p-2.5">
+                <button type="button"
+                  onClick={() => setMemberForm({ ...memberForm, admission_fee_paid: true })}
+                  className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    memberForm.admission_fee_paid
+                      ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                      : "bg-white/5 text-muted-foreground border border-transparent hover:text-foreground"
+                  }`}>Paid Now</button>
+                <button type="button"
+                  onClick={() => setMemberForm({ ...memberForm, admission_fee_paid: false })}
+                  className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    !memberForm.admission_fee_paid
+                      ? "bg-rose-500/15 text-rose-400 border border-rose-500/30"
+                      : "bg-white/5 text-muted-foreground border border-transparent hover:text-foreground"
+                  }`}>Pending</button>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label>Notes</Label>
+              <Input placeholder="Optional" value={memberForm.notes} onChange={(e) => setMemberForm({ ...memberForm, notes: e.target.value })} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAddMemberOpen(false); setEditingMember(null); }}>Cancel</Button>
+            <Button onClick={handleAddMember} disabled={savingMember || !memberForm.full_name || !memberForm.phone || !memberForm.plan_id}>
+              {savingMember ? "Saving…" : editingMember ? "Update" : "Add Member"}
             </Button>
           </DialogFooter>
         </DialogContent>

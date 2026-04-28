@@ -111,6 +111,7 @@ export function MembersClient({
   const [staff] = useState(initialStaff);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("active");
+  const [trainerFilter, setTrainerFilter] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -343,18 +344,38 @@ export function MembersClient({
   }
 
   function filterList(list: Member[]) {
-    if (!search) return list;
-    const q = search.toLowerCase();
-    return list.filter(
-      (m) =>
-        m.full_name.toLowerCase().includes(q) ||
-        (m.phone ?? "").includes(q) ||
-        (m.cnic ?? "").toLowerCase().includes(q) ||
-        (m.member_number ?? "").toLowerCase().includes(q)
-    );
+    let filtered = list;
+    if (trainerFilter === "self") {
+      filtered = filtered.filter((m) => !m.assigned_trainer_id);
+    } else if (trainerFilter !== "all") {
+      filtered = filtered.filter((m) => m.assigned_trainer_id === trainerFilter);
+    }
+    if (search) {
+      const q = search.toLowerCase();
+      filtered = filtered.filter(
+        (m) =>
+          m.full_name.toLowerCase().includes(q) ||
+          (m.phone ?? "").includes(q) ||
+          (m.cnic ?? "").toLowerCase().includes(q) ||
+          (m.member_number ?? "").toLowerCase().includes(q)
+      );
+    }
+    return filtered;
   }
 
   const planMap = useMemo(() => Object.fromEntries(plans.map((p) => [p.id, p])), [plans]);
+
+  // Counts per trainer chip (across active + waiting + expired pools).
+  const trainerCounts = useMemo(() => {
+    const all = [...active, ...waiting, ...expired];
+    const counts: Record<string, number> = { all: all.length, self: 0 };
+    for (const t of staff) counts[t.id] = 0;
+    for (const m of all) {
+      if (!m.assigned_trainer_id) counts.self += 1;
+      else if (counts[m.assigned_trainer_id] !== undefined) counts[m.assigned_trainer_id] += 1;
+    }
+    return counts;
+  }, [active, waiting, expired, staff]);
 
   // Auto-fill monthly fee when plan is selected
   function handlePlanChange(planId: string) {
@@ -527,15 +548,47 @@ export function MembersClient({
         ))}
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Search by name, phone, CNIC, member ID…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-        />
+      {/* Search + trainer filter chips */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="relative max-w-sm w-full sm:w-auto sm:flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by name, phone, CNIC, member ID…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          <button type="button" onClick={() => setTrainerFilter("all")}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors inline-flex items-center gap-1.5 ${
+              trainerFilter === "all"
+                ? "bg-primary/15 border-primary/30 text-primary"
+                : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+            }`}>
+            All <span className="text-[10px] opacity-70">{trainerCounts.all}</span>
+          </button>
+          {staff.map((t) => (
+            <button key={t.id} type="button"
+              onClick={() => setTrainerFilter(trainerFilter === t.id ? "all" : t.id)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors inline-flex items-center gap-1.5 ${
+                trainerFilter === t.id
+                  ? "bg-primary/15 border-primary/30 text-primary"
+                  : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+              }`}>
+              {t.full_name} <span className="text-[10px] opacity-70">{trainerCounts[t.id] ?? 0}</span>
+            </button>
+          ))}
+          <button type="button"
+            onClick={() => setTrainerFilter(trainerFilter === "self" ? "all" : "self")}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors inline-flex items-center gap-1.5 ${
+              trainerFilter === "self"
+                ? "bg-primary/15 border-primary/30 text-primary"
+                : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+            }`}>
+            SELF <span className="text-[10px] opacity-70">{trainerCounts.self}</span>
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
