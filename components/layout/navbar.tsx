@@ -2,9 +2,15 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Menu, LogOut, ChevronDown, Building2, Check, Shield, Users, ClipboardList, UserCog, Zap } from "lucide-react";
+import { Menu, LogOut, ChevronDown, Building2, Check, Shield, Users, ClipboardList, UserCog, Zap, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { createBranch } from "@/app/actions/owner-branches";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { toast } from "@/hooks/use-toast";
 import type { Profile, Gym } from "@/types";
 
 const ADMIN_LINKS = [
@@ -36,7 +42,34 @@ export function Navbar({ onMenuClick, profile, gym, gyms, setActiveGym }: Navbar
     .toUpperCase()
     .slice(0, 2);
 
-  const multiGym = gyms.length > 1;
+  const branchLimit = profile?.branch_limit ?? 1;
+  const branchesUsed = gyms.length;
+  const canAddBranch = branchesUsed < branchLimit;
+  const showSwitcher = gyms.length > 1 || branchLimit > 1; // show dropdown if multi-branch capable
+
+  // Add Branch dialog
+  const [addOpen, setAddOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [branchForm, setBranchForm] = useState({ name: "", address: "", phone: "", email: "" });
+
+  async function handleCreateBranch() {
+    if (!branchForm.name.trim()) {
+      toast({ title: "Branch name is required", variant: "destructive" });
+      return;
+    }
+    setAdding(true);
+    const res = await createBranch(branchForm);
+    setAdding(false);
+    if (res.error) {
+      toast({ title: "Error", description: res.error, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Branch created" });
+    setAddOpen(false);
+    setBranchForm({ name: "", address: "", phone: "", email: "" });
+    if (res.gymId) setActiveGym(res.gymId);
+    router.refresh();
+  }
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -61,7 +94,7 @@ export function Navbar({ onMenuClick, profile, gym, gyms, setActiveGym }: Navbar
           <Zap className="w-3.5 h-3.5 text-primary" />
         </div>
 
-        {multiGym ? (
+        {showSwitcher ? (
           <>
             <button
               onClick={() => setGymDrop((p) => !p)}
@@ -74,11 +107,12 @@ export function Navbar({ onMenuClick, profile, gym, gyms, setActiveGym }: Navbar
             {gymDrop && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setGymDrop(false)} />
-                <div className="absolute left-0 top-full mt-2 w-56 z-20 rounded-xl border border-sidebar-border bg-sidebar shadow-2xl overflow-hidden animate-fade-up">
-                  <div className="px-3 py-2.5 border-b border-sidebar-border">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Switch Gym</p>
+                <div className="absolute left-0 top-full mt-2 w-64 z-20 rounded-xl border border-sidebar-border bg-sidebar shadow-2xl overflow-hidden animate-fade-up">
+                  <div className="px-3 py-2.5 border-b border-sidebar-border flex items-center justify-between">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Branches</p>
+                    <span className="text-[10px] text-muted-foreground">{branchesUsed} / {branchLimit}</span>
                   </div>
-                  <div className="p-1">
+                  <div className="p-1 max-h-64 overflow-y-auto">
                     {gyms.map((g) => (
                       <button
                         key={g.id}
@@ -88,13 +122,30 @@ export function Navbar({ onMenuClick, profile, gym, gyms, setActiveGym }: Navbar
                           g.id === gym?.id ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                         )}
                       >
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">{g.name}</p>
-                          {g.total_capacity > 0 && <p className="text-xs opacity-60">{g.total_capacity} capacity</p>}
+                        <div className="min-w-0 flex items-center gap-2">
+                          <Building2 className="w-3.5 h-3.5 shrink-0 opacity-60" />
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">{g.name}</p>
+                            {g.total_capacity > 0 && <p className="text-xs opacity-60">{g.total_capacity} capacity</p>}
+                          </div>
                         </div>
                         {g.id === gym?.id && <Check className="w-3.5 h-3.5 shrink-0" />}
                       </button>
                     ))}
+                  </div>
+                  <div className="p-1 border-t border-sidebar-border">
+                    {canAddBranch ? (
+                      <button
+                        onClick={() => { setGymDrop(false); setAddOpen(true); }}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-primary hover:bg-primary/10 transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Branch
+                      </button>
+                    ) : (
+                      <div className="px-3 py-2 text-[11px] text-muted-foreground/80 leading-snug">
+                        Branch limit reached. Contact admin to add more.
+                      </div>
+                    )}
                   </div>
                 </div>
               </>
@@ -182,6 +233,65 @@ export function Navbar({ onMenuClick, profile, gym, gyms, setActiveGym }: Navbar
           </>
         )}
       </div>
+
+      {/* Add Branch dialog */}
+      <Dialog open={addOpen} onOpenChange={(o) => !o && setAddOpen(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add New Branch</DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              {branchesUsed + 1} of {branchLimit} branches after creation.
+            </p>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label>Branch Name *</Label>
+              <Input
+                placeholder="e.g. Gulberg Branch"
+                value={branchForm.name}
+                onChange={(e) => setBranchForm({ ...branchForm, name: e.target.value })}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Address</Label>
+              <Input
+                placeholder="Street, area, city"
+                value={branchForm.address}
+                onChange={(e) => setBranchForm({ ...branchForm, address: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Phone</Label>
+                <Input
+                  placeholder="+92 300 0000000"
+                  value={branchForm.phone}
+                  onChange={(e) => setBranchForm({ ...branchForm, phone: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Email</Label>
+                <Input
+                  type="email"
+                  placeholder="branch@gym.com"
+                  value={branchForm.email}
+                  onChange={(e) => setBranchForm({ ...branchForm, email: e.target.value })}
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              You can fill in capacity, hours and other details after creation in Settings.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
+            <Button onClick={handleCreateBranch} disabled={adding || !branchForm.name.trim()}>
+              {adding ? "Creating…" : "Create Branch"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }

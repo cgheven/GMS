@@ -40,6 +40,7 @@ export interface Profile {
   full_name: string | null;
   avatar_url: string | null;
   is_admin: boolean;
+  branch_limit: number;
   created_at: string;
 }
 
@@ -48,6 +49,7 @@ export interface AdminUser {
   email: string;
   full_name: string | null;
   is_admin: boolean;
+  branch_limit: number;
   created_at: string;
   last_sign_in_at: string | null;
   gyms: { id: string; name: string; total_capacity: number }[];

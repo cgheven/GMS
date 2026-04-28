@@ -14,6 +14,7 @@ import {
   deleteAdminUser,
   resetUserPassword,
 } from "@/app/actions/admin-users";
+import { createGym, deleteGym } from "@/app/actions/admin-gyms";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,8 +28,8 @@ import type { AdminUser } from "@/types";
 
 type DialogMode = "create" | "invite" | "edit" | "reset" | "delete" | null;
 
-const emptyCreate = { email: "", full_name: "", password: "", confirmPassword: "" };
-const emptyEdit = { email: "", full_name: "", is_admin: false };
+const emptyCreate = { email: "", full_name: "", password: "", confirmPassword: "", branch_limit: 1, initial_branch_name: "", initial_branch_address: "", initial_branch_phone: "" };
+const emptyEdit = { email: "", full_name: "", is_admin: false, branch_limit: 1 };
 const emptyReset = { password: "", confirmPassword: "" };
 
 export default function AdminUsersPage() {
@@ -39,7 +40,7 @@ export default function AdminUsersPage() {
   const [dialogMode, setDialogMode] = useState<DialogMode>(null);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [createForm, setCreateForm] = useState(emptyCreate);
-  const [inviteEmail, setInviteEmail] = useState({ email: "", full_name: "" });
+  const [inviteEmail, setInviteEmail] = useState({ email: "", full_name: "", branch_limit: 1 });
   const [editForm, setEditForm] = useState(emptyEdit);
   const [resetForm, setResetForm] = useState(emptyReset);
   const [showPw, setShowPw] = useState(false);
@@ -72,10 +73,10 @@ export default function AdminUsersPage() {
   }
 
   function openCreate() { setCreateForm(emptyCreate); setShowPw(false); setDialogMode("create"); }
-  function openInvite() { setInviteEmail({ email: "", full_name: "" }); setDialogMode("invite"); }
+  function openInvite() { setInviteEmail({ email: "", full_name: "", branch_limit: 1 }); setDialogMode("invite"); }
   function openEdit(u: AdminUser) {
     setSelectedUser(u);
-    setEditForm({ email: u.email, full_name: u.full_name ?? "", is_admin: u.is_admin });
+    setEditForm({ email: u.email, full_name: u.full_name ?? "", is_admin: u.is_admin, branch_limit: u.branch_limit ?? 1 });
     setDialogMode("edit");
   }
   function openReset(u: AdminUser) {
@@ -96,14 +97,31 @@ export default function AdminUsersPage() {
         email: createForm.email,
         password: createForm.password,
         full_name: createForm.full_name,
+        branch_limit: createForm.branch_limit,
       });
       if (res.error) {
         toast({ title: "Failed to create user", description: res.error, variant: "destructive" });
+        return;
+      }
+
+      // Optional initial branch
+      if (res.userId && createForm.initial_branch_name.trim()) {
+        const branchRes = await createGym({
+          owner_id: res.userId,
+          name: createForm.initial_branch_name.trim(),
+          address: createForm.initial_branch_address.trim() || undefined,
+          phone: createForm.initial_branch_phone.trim() || undefined,
+        });
+        if (branchRes.error) {
+          toast({ title: "User created, but branch failed", description: branchRes.error, variant: "destructive" });
+        } else {
+          toast({ title: "User & branch created" });
+        }
       } else {
         toast({ title: "User created successfully" });
-        setDialogMode(null);
-        loadUsers();
       }
+      setDialogMode(null);
+      loadUsers();
     });
   }
 
@@ -127,6 +145,7 @@ export default function AdminUsersPage() {
         email: editForm.email !== selectedUser.email ? editForm.email : undefined,
         full_name: editForm.full_name,
         is_admin: editForm.is_admin,
+        branch_limit: editForm.branch_limit,
       });
       if (res.error) {
         toast({ title: "Failed to update user", description: res.error, variant: "destructive" });
@@ -440,6 +459,55 @@ export default function AdminUsersPage() {
                 <p className="text-xs text-destructive">Passwords don't match</p>
               )}
             </div>
+            <Separator />
+            <div className="space-y-1.5">
+              <Label htmlFor="create-branch-limit">Branch Limit</Label>
+              <Input
+                id="create-branch-limit"
+                type="number"
+                min={1}
+                max={50}
+                value={createForm.branch_limit}
+                onChange={(e) => setCreateForm({ ...createForm, branch_limit: Math.max(1, parseInt(e.target.value) || 1) })}
+              />
+              <p className="text-[11px] text-muted-foreground">How many gym branches this owner can create. Default: 1.</p>
+            </div>
+
+            <div className="rounded-lg border border-sidebar-border bg-card/50 p-3 space-y-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Initial Branch (optional)</p>
+                <p className="text-[11px] text-muted-foreground/80 mt-0.5">Skip if owner will create their own. Owner can add up to {createForm.branch_limit} branch{createForm.branch_limit !== 1 ? "es" : ""} later.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="create-branch-name">Branch Name</Label>
+                <Input
+                  id="create-branch-name"
+                  placeholder="e.g. Main Branch"
+                  value={createForm.initial_branch_name}
+                  onChange={(e) => setCreateForm({ ...createForm, initial_branch_name: e.target.value })}
+                />
+              </div>
+              {createForm.initial_branch_name && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Address</Label>
+                    <Input
+                      placeholder="Street, city"
+                      value={createForm.initial_branch_address}
+                      onChange={(e) => setCreateForm({ ...createForm, initial_branch_address: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Phone</Label>
+                    <Input
+                      placeholder="+92 ..."
+                      value={createForm.initial_branch_phone}
+                      onChange={(e) => setCreateForm({ ...createForm, initial_branch_phone: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogMode(null)}>Cancel</Button>
@@ -487,6 +555,18 @@ export default function AdminUsersPage() {
                 value={inviteEmail.email}
                 onChange={(e) => setInviteEmail({ ...inviteEmail, email: e.target.value })}
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="invite-branch-limit">Branch Limit</Label>
+              <Input
+                id="invite-branch-limit"
+                type="number"
+                min={1}
+                max={50}
+                value={inviteEmail.branch_limit}
+                onChange={(e) => setInviteEmail({ ...inviteEmail, branch_limit: Math.max(1, parseInt(e.target.value) || 1) })}
+              />
+              <p className="text-[11px] text-muted-foreground">How many gym branches this owner can create.</p>
             </div>
           </div>
           <DialogFooter>
@@ -545,6 +625,30 @@ export default function AdminUsersPage() {
                 )}
               </button>
             </div>
+            <Separator />
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-branch-limit">Branch Limit</Label>
+              <Input
+                id="edit-branch-limit"
+                type="number"
+                min={1}
+                max={50}
+                value={editForm.branch_limit}
+                onChange={(e) => setEditForm({ ...editForm, branch_limit: Math.max(1, parseInt(e.target.value) || 1) })}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Max gyms this owner can create.
+                {selectedUser && <> Currently using <span className="text-foreground font-medium">{selectedUser.gyms.length} / {editForm.branch_limit}</span>.</>}
+              </p>
+            </div>
+
+            {selectedUser && (
+              <BranchManager
+                user={selectedUser}
+                limit={editForm.branch_limit}
+                onChanged={() => loadUsers()}
+              />
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogMode(null)}>Cancel</Button>
@@ -629,6 +733,126 @@ export default function AdminUsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ── Branch manager subcomponent ──────────────────────────────────────────────
+
+function BranchManager({ user, limit, onChanged }: { user: AdminUser; limit: number; onChanged: () => void }) {
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({ name: "", address: "", phone: "" });
+  const [working, setWorking] = useState(false);
+  const canAdd = user.gyms.length < limit;
+
+  async function handleAdd() {
+    if (!form.name.trim()) {
+      toast({ title: "Branch name required", variant: "destructive" });
+      return;
+    }
+    setWorking(true);
+    const res = await createGym({
+      owner_id: user.id,
+      name: form.name.trim(),
+      address: form.address.trim() || undefined,
+      phone: form.phone.trim() || undefined,
+    });
+    setWorking(false);
+    if (res.error) {
+      toast({ title: "Failed", description: res.error, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Branch added" });
+    setForm({ name: "", address: "", phone: "" });
+    setAdding(false);
+    onChanged();
+  }
+
+  async function handleDelete(gymId: string, gymName: string) {
+    if (!confirm(`Delete branch "${gymName}"? This removes all data scoped to it.`)) return;
+    const res = await deleteGym(gymId);
+    if (res.error) {
+      toast({ title: "Failed", description: res.error, variant: "destructive" });
+    } else {
+      toast({ title: "Branch deleted" });
+      onChanged();
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-sidebar-border bg-card/50 p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Branches</p>
+        <span className="text-[10px] text-muted-foreground">{user.gyms.length} / {limit}</span>
+      </div>
+
+      {user.gyms.length === 0 ? (
+        <p className="text-[11px] text-muted-foreground/80">No branches yet.</p>
+      ) : (
+        <div className="space-y-1">
+          {user.gyms.map((g) => (
+            <div key={g.id} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md bg-white/[0.02] border border-white/5">
+              <div className="flex items-center gap-2 min-w-0">
+                <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <span className="text-sm text-foreground truncate">{g.name}</span>
+                {g.total_capacity > 0 && <span className="text-[10px] text-muted-foreground">· {g.total_capacity} cap</span>}
+              </div>
+              <button
+                onClick={() => handleDelete(g.id, g.name)}
+                className="p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0"
+                title="Delete branch"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {adding ? (
+        <div className="space-y-2 pt-1">
+          <Input
+            placeholder="Branch name"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            autoFocus
+            className="h-8 text-sm"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              placeholder="Address"
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              className="h-8 text-sm"
+            />
+            <Input
+              placeholder="Phone"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              className="h-8 text-sm"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleAdd} disabled={working || !form.name.trim()} className="h-7 text-xs">
+              {working ? "Adding…" : "Add"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => { setAdding(false); setForm({ name: "", address: "", phone: "" }); }} className="h-7 text-xs">
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        canAdd ? (
+          <button
+            onClick={() => setAdding(true)}
+            className="w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-primary hover:bg-primary/10 transition-colors border border-dashed border-primary/30"
+          >
+            <Plus className="w-3 h-3" /> Add Branch
+          </button>
+        ) : (
+          <p className="text-[11px] text-muted-foreground/80">Increase branch limit above to add more.</p>
+        )
+      )}
     </div>
   );
 }

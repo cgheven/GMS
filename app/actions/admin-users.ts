@@ -35,7 +35,7 @@ export async function listAdminUsers(): Promise<{ users?: AdminUser[]; error?: s
 
     const [authRes, profilesRes] = await Promise.all([
       admin.auth.admin.listUsers({ perPage: 1000 }),
-      admin.from("pulse_profiles").select("id, full_name, is_admin, created_at"),
+      admin.from("pulse_profiles").select("id, full_name, is_admin, branch_limit, created_at"),
     ]);
 
     if (authRes.error) throw authRes.error;
@@ -61,6 +61,7 @@ export async function listAdminUsers(): Promise<{ users?: AdminUser[]; error?: s
         email: u.email ?? "",
         full_name: profile?.full_name ?? null,
         is_admin: profile?.is_admin ?? false,
+        branch_limit: profile?.branch_limit ?? 1,
         created_at: u.created_at,
         last_sign_in_at: u.last_sign_in_at ?? null,
         gyms: gymsByOwner.get(u.id) ?? [],
@@ -79,6 +80,7 @@ export async function createUserWithPassword(data: {
   email: string;
   password: string;
   full_name: string;
+  branch_limit?: number;
 }): Promise<{ userId?: string; error?: string }> {
   try {
     const caller = await requireAdmin();
@@ -98,9 +100,10 @@ export async function createUserWithPassword(data: {
     if (error) throw error;
 
     // Upsert profile — auth trigger may not fire for admin-created users
+    const branchLimit = data.branch_limit && data.branch_limit >= 1 ? data.branch_limit : 1;
     await admin.from("pulse_profiles").upsert(
-      { id: created.user.id, full_name: data.full_name || null },
-      { onConflict: "id", ignoreDuplicates: true }
+      { id: created.user.id, full_name: data.full_name || null, branch_limit: branchLimit },
+      { onConflict: "id" }
     );
 
     await writeAuditLog({
@@ -120,6 +123,7 @@ export async function createUserWithPassword(data: {
 export async function inviteUser(data: {
   email: string;
   full_name: string;
+  branch_limit?: number;
 }): Promise<{ error?: string }> {
   try {
     const caller = await requireAdmin();
@@ -135,9 +139,10 @@ export async function inviteUser(data: {
 
     // Upsert profile so the user appears in the admin panel immediately
     if (invited.user) {
+      const branchLimit = data.branch_limit && data.branch_limit >= 1 ? data.branch_limit : 1;
       await admin.from("pulse_profiles").upsert(
-        { id: invited.user.id, full_name: data.full_name || null },
-        { onConflict: "id", ignoreDuplicates: true }
+        { id: invited.user.id, full_name: data.full_name || null, branch_limit: branchLimit },
+        { onConflict: "id" }
       );
     }
 
@@ -161,6 +166,7 @@ export async function updateAdminUser(data: {
   email?: string;
   password?: string;
   is_admin?: boolean;
+  branch_limit?: number;
 }): Promise<{ error?: string }> {
   try {
     const caller = await requireAdmin();
@@ -182,9 +188,12 @@ export async function updateAdminUser(data: {
       if (error) throw error;
     }
 
-    // Update profile (full_name, is_admin)
-    const profileUpdates: { full_name?: string; is_admin?: boolean } = {};
+    // Update profile (full_name, is_admin, branch_limit)
+    const profileUpdates: { full_name?: string; is_admin?: boolean; branch_limit?: number } = {};
     if (data.full_name !== undefined) profileUpdates.full_name = data.full_name;
+    if (data.branch_limit !== undefined && data.branch_limit >= 1) {
+      profileUpdates.branch_limit = data.branch_limit;
+    }
     // Prevent revoking own admin
     if (data.is_admin !== undefined && data.userId !== caller.id) {
       profileUpdates.is_admin = data.is_admin;
@@ -202,6 +211,7 @@ export async function updateAdminUser(data: {
     if (data.email) changes.email = data.email;
     if (data.full_name !== undefined) changes.full_name = data.full_name;
     if (data.is_admin !== undefined) changes.is_admin = data.is_admin;
+    if (data.branch_limit !== undefined) changes.branch_limit = data.branch_limit;
     if (data.password) changes.password = "***";
     await writeAuditLog({
       actor_id: caller.id, actor_email: caller.email ?? "",
