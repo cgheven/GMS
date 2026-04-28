@@ -411,14 +411,14 @@ export function MembersClient({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-sidebar-border">
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Member</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Plan</th>
+              <th className="text-left px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Member</th>
+              <th className="text-left px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Plan</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Trainer</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Phone</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">{showExpired ? "Expired" : "Joined"}</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fee</th>
-              <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
+              <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fee</th>
+              <th className="text-center px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Status</th>
+              <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-sidebar-border/50">
@@ -431,24 +431,28 @@ export function MembersClient({
               return (
                 <tr key={m.id} className="hover:bg-white/[0.02] transition-colors group">
                   {/* Member */}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
+                  <td className="px-3 sm:px-4 py-3">
+                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                       <div
                         className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
                         style={{ backgroundColor: `${planColor}22`, color: planColor }}
                       >
                         {m.full_name[0].toUpperCase()}
                       </div>
-                      <div>
-                        <p className="font-medium text-foreground">{m.full_name}</p>
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground truncate">{m.full_name}</p>
                         {m.member_number && (
                           <p className="text-xs text-muted-foreground font-mono">{m.member_number}</p>
+                        )}
+                        {/* On mobile only: show plan inline as it's hidden as a column */}
+                        {planName && (
+                          <p className="sm:hidden text-[11px] mt-0.5" style={{ color: planColor }}>● {planName}</p>
                         )}
                       </div>
                     </div>
                   </td>
                   {/* Plan */}
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 hidden sm:table-cell">
                     {planName ? (
                       <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-md"
                         style={{ backgroundColor: `${planColor}20`, color: planColor }}>
@@ -478,22 +482,22 @@ export function MembersClient({
                     </span>
                   </td>
                   {/* Fee */}
-                  <td className="px-4 py-3 text-right">
-                    <p className="font-semibold text-foreground">{formatCurrency(m.monthly_fee)}/mo</p>
+                  <td className="px-3 sm:px-4 py-3 text-right">
+                    <p className="font-semibold text-foreground whitespace-nowrap">{formatCurrency(m.monthly_fee)}<span className="text-muted-foreground">/mo</span></p>
                     {m.admission_fee > 0 && (
-                      <p className="text-xs text-muted-foreground">+{formatCurrency(m.admission_fee)} admission</p>
+                      <p className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap">+{formatCurrency(m.admission_fee)} <span className="hidden sm:inline">admission</span><span className="sm:hidden">adm</span></p>
                     )}
                     {m.outstanding_balance > 0 && (
-                      <p className="text-xs text-rose-400">Due: {formatCurrency(m.outstanding_balance)}</p>
+                      <p className="text-[10px] sm:text-xs text-rose-400 whitespace-nowrap">Due: {formatCurrency(m.outstanding_balance)}</p>
                     )}
                   </td>
                   {/* Status */}
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-4 py-3 text-center hidden sm:table-cell">
                     <StatusBadge status={m.status} />
                   </td>
-                  {/* Actions */}
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {/* Actions — always visible on mobile (no hover on touch) */}
+                  <td className="px-3 sm:px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-0.5 sm:gap-1 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity">
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(m)}>
                         <Edit2 className="w-3.5 h-3.5" />
                       </Button>
@@ -528,20 +532,24 @@ export function MembersClient({
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
         {[
-          { label: "Active Members", value: stats.active, icon: UserCheck, color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
-          { label: "Waiting List",   value: stats.waiting, icon: Clock,     color: "text-primary",    bg: "bg-primary/10 border border-primary/20" },
-          { label: "Expired / Cancelled", value: stats.expired, icon: CalendarX, color: "text-rose-400", bg: "bg-rose-500/10 border border-rose-500/20" },
-        ].map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className="rounded-2xl border border-sidebar-border bg-card p-5">
-            <div className="flex items-center gap-3">
-              <div className={`flex items-center justify-center w-9 h-9 rounded-xl ${bg} shrink-0`}>
+          { label: "Active",   sub: "Members",     value: stats.active,  icon: UserCheck, color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
+          { label: "Waiting",  sub: "List",        value: stats.waiting, icon: Clock,     color: "text-primary",     bg: "bg-primary/10 border border-primary/20" },
+          { label: "Expired",  sub: "Cancelled",   value: stats.expired, icon: CalendarX, color: "text-rose-400",    bg: "bg-rose-500/10 border border-rose-500/20" },
+        ].map(({ label, sub, value, icon: Icon, color, bg }) => (
+          <div key={label} className="rounded-2xl border border-sidebar-border bg-card p-3 sm:p-5">
+            {/* Mobile: stacked / Desktop: row */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+              <div className={`flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${bg} shrink-0`}>
                 <Icon className={`w-4 h-4 ${color}`} />
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className="text-2xl font-bold text-foreground leading-none mt-0.5">{value}</p>
+              <div className="min-w-0">
+                <p className="text-[11px] sm:text-xs text-muted-foreground leading-tight">
+                  {label} <span className="hidden sm:inline">{sub}</span>
+                  <span className="sm:hidden block opacity-70">{sub}</span>
+                </p>
+                <p className="text-xl sm:text-2xl font-bold text-foreground leading-none mt-1 sm:mt-0.5">{value}</p>
               </div>
             </div>
           </div>
@@ -593,20 +601,22 @@ export function MembersClient({
 
       {/* Tabs */}
       <Tabs value={tab} onValueChange={(v) => { setTab(v); if (v === "collect") loadPayments(); }}>
-        <TabsList>
-          <TabsTrigger value="active">
-            <UserCheck className="w-3.5 h-3.5" /> Active ({active.length})
-          </TabsTrigger>
-          <TabsTrigger value="waiting">
-            <Clock className="w-3.5 h-3.5" /> Waiting ({waiting.length})
-          </TabsTrigger>
-          <TabsTrigger value="expired">
-            <CalendarX className="w-3.5 h-3.5" /> Expired / Cancelled ({expired.length})
-          </TabsTrigger>
-          <TabsTrigger value="collect">
-            <CreditCard className="w-3.5 h-3.5" /> Collect Fees
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto -mx-1 px-1 scrollbar-hide">
+          <TabsList className="w-max">
+            <TabsTrigger value="active" className="whitespace-nowrap">
+              <UserCheck className="w-3.5 h-3.5" /> Active ({active.length})
+            </TabsTrigger>
+            <TabsTrigger value="waiting" className="whitespace-nowrap">
+              <Clock className="w-3.5 h-3.5" /> Waiting ({waiting.length})
+            </TabsTrigger>
+            <TabsTrigger value="expired" className="whitespace-nowrap">
+              <CalendarX className="w-3.5 h-3.5" /> Expired ({expired.length})
+            </TabsTrigger>
+            <TabsTrigger value="collect" className="whitespace-nowrap">
+              <CreditCard className="w-3.5 h-3.5" /> Collect Fees
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {[
           { value: "active",  list: filterList(active),  empty: "No active members yet",            showExpired: false, emptyIcon: Users },

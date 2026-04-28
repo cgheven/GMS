@@ -219,20 +219,24 @@ export function PlansClient({ gymId, plans: initialPlans }: Props) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
         {[
-          { label: "Total Plans",     value: stats.total,        icon: Dumbbell, color: "text-primary",     bg: "bg-primary/10 border border-primary/20" },
-          { label: "Active Plans",    value: stats.active,       icon: Check,    color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
-          { label: "Members Enrolled", value: stats.totalMembers, icon: Users,   color: "text-blue-400",   bg: "bg-blue-500/10 border border-blue-500/20" },
-        ].map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className="rounded-2xl border border-sidebar-border bg-card p-5">
-            <div className="flex items-center gap-3">
-              <div className={`flex items-center justify-center w-9 h-9 rounded-xl ${bg} shrink-0`}>
+          { label: "Total",   sub: "Plans",     value: stats.total,        icon: Dumbbell, color: "text-primary",     bg: "bg-primary/10 border border-primary/20" },
+          { label: "Active",  sub: "Plans",     value: stats.active,       icon: Check,    color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
+          { label: "Members", sub: "Enrolled",  value: stats.totalMembers, icon: Users,    color: "text-blue-400",    bg: "bg-blue-500/10 border border-blue-500/20" },
+        ].map(({ label, sub, value, icon: Icon, color, bg }) => (
+          <div key={label} className="rounded-2xl border border-sidebar-border bg-card p-3 sm:p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+              <div className={`flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${bg} shrink-0`}>
                 <Icon className={`w-4 h-4 ${color}`} />
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className="text-2xl font-bold text-foreground leading-none mt-0.5">{value}</p>
+              <div className="min-w-0">
+                <p className="text-[11px] sm:text-xs text-muted-foreground leading-tight">
+                  {label}
+                  <span className="hidden sm:inline"> {sub}</span>
+                  <span className="sm:hidden block opacity-70">{sub}</span>
+                </p>
+                <p className="text-xl sm:text-2xl font-bold text-foreground leading-none mt-1 sm:mt-0.5">{value}</p>
               </div>
             </div>
           </div>
