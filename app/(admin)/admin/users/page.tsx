@@ -4,8 +4,9 @@ import { useEffect, useState, useTransition } from "react";
 import {
   Users, Plus, Shield, ShieldOff, Trash2,
   Edit2, KeyRound, Search, Building2, Clock,
-  CheckCircle2, RefreshCw, Send, Eye, EyeOff,
+  CheckCircle2, RefreshCw, Send, Eye, EyeOff, MessageCircle, Copy,
 } from "lucide-react";
+import { whatsappUrl, normalizeWhatsAppPhone } from "@/lib/whatsapp-reminder";
 import {
   listAdminUsers,
   createUserWithPassword,
@@ -28,7 +29,7 @@ import type { AdminUser } from "@/types";
 
 type DialogMode = "create" | "invite" | "edit" | "reset" | "delete" | null;
 
-const emptyCreate = { email: "", full_name: "", password: "", confirmPassword: "", branch_limit: 1, initial_branch_name: "", initial_branch_address: "", initial_branch_phone: "" };
+const emptyCreate = { email: "", full_name: "", phone: "", password: "", confirmPassword: "", branch_limit: 1, initial_branch_name: "", initial_branch_address: "", initial_branch_phone: "" };
 const emptyEdit = { email: "", full_name: "", is_admin: false, branch_limit: 1 };
 const emptyReset = { password: "", confirmPassword: "" };
 
@@ -46,6 +47,11 @@ export default function AdminUsersPage() {
   const [showPw, setShowPw] = useState(false);
   const [showPwConfirm, setShowPwConfirm] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  // Credentials handoff dialog after user creation
+  const [credentialsHandoff, setCredentialsHandoff] = useState<{
+    email: string; password: string; full_name: string; phone: string;
+  } | null>(null);
 
   useEffect(() => { loadUsers(); }, []);
 
@@ -97,6 +103,7 @@ export default function AdminUsersPage() {
         email: createForm.email,
         password: createForm.password,
         full_name: createForm.full_name,
+        phone: createForm.phone || undefined,
         branch_limit: createForm.branch_limit,
       });
       if (res.error) {
@@ -120,7 +127,16 @@ export default function AdminUsersPage() {
       } else {
         toast({ title: "User created successfully" });
       }
+
+      // Capture credentials before form resets so we can hand them off
+      const handoff = {
+        email: createForm.email,
+        password: createForm.password,
+        full_name: createForm.full_name,
+        phone: createForm.phone,
+      };
       setDialogMode(null);
+      setCredentialsHandoff(handoff);
       loadUsers();
     });
   }
@@ -399,13 +415,23 @@ export default function AdminUsersPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
-            <div className="space-y-1.5">
-              <Label>Full Name</Label>
-              <Input
-                placeholder="John Doe"
-                value={createForm.full_name}
-                onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })}
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Full Name</Label>
+                <Input
+                  placeholder="John Doe"
+                  value={createForm.full_name}
+                  onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Phone (WhatsApp)</Label>
+                <Input
+                  placeholder="0300 1234567"
+                  value={createForm.phone}
+                  onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
+                />
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label>Email *</Label>
@@ -730,6 +756,85 @@ export default function AdminUsersPage() {
             <Button variant="destructive" onClick={handleDelete} disabled={isPending}>
               {isPending ? "Deleting..." : "Yes, Delete"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Credentials Handoff Dialog (after user creation) ───────────────── */}
+      <Dialog open={!!credentialsHandoff} onOpenChange={(o) => !o && setCredentialsHandoff(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-emerald-500" /> User created
+            </DialogTitle>
+            <DialogDescription>
+              Send these credentials to <span className="font-medium">{credentialsHandoff?.full_name || "the new user"}</span>.
+            </DialogDescription>
+          </DialogHeader>
+          {credentialsHandoff && (() => {
+            const loginUrl = typeof window !== "undefined" ? `${window.location.origin}/login` : "/login";
+            const message = `Welcome to Pulse GMS!
+
+Your login credentials:
+Email: ${credentialsHandoff.email}
+Password: ${credentialsHandoff.password}
+
+Login: ${loginUrl}
+
+Please change your password after first login.`;
+            const url = whatsappUrl(credentialsHandoff.phone, message);
+            const phoneOk = !!normalizeWhatsAppPhone(credentialsHandoff.phone);
+
+            return (
+              <div className="space-y-3 py-2">
+                {/* Credentials block */}
+                <div className="rounded-lg border border-sidebar-border bg-card/50 p-3 space-y-2 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Email</p>
+                      <p className="font-mono text-foreground truncate">{credentialsHandoff.email}</p>
+                    </div>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0"
+                      onClick={() => { navigator.clipboard.writeText(credentialsHandoff.email); toast({ title: "Email copied" }); }}>
+                      <Copy className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 border-t border-sidebar-border/60 pt-2">
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Password</p>
+                      <p className="font-mono text-foreground truncate">{credentialsHandoff.password}</p>
+                    </div>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0"
+                      onClick={() => { navigator.clipboard.writeText(credentialsHandoff.password); toast({ title: "Password copied" }); }}>
+                      <Copy className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* WhatsApp action */}
+                {url && phoneOk ? (
+                  <a href={url} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full h-10 rounded-lg bg-emerald-500 text-white font-medium hover:bg-emerald-600 transition-colors">
+                    <MessageCircle className="w-4 h-4" /> Send via WhatsApp
+                  </a>
+                ) : (
+                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-3 text-xs text-amber-400 space-y-2">
+                    <p>{credentialsHandoff.phone ? "Phone number invalid" : "No phone number provided"} — copy the credentials above and send manually.</p>
+                    <Button size="sm" variant="outline" className="gap-1.5"
+                      onClick={() => { navigator.clipboard.writeText(message); toast({ title: "Full message copied" }); }}>
+                      <Copy className="w-3.5 h-3.5" /> Copy full message
+                    </Button>
+                  </div>
+                )}
+
+                <p className="text-[11px] text-muted-foreground/70 text-center">
+                  ⚠ Sharing credentials over messaging has security implications. Tell the user to change their password after first login.
+                </p>
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCredentialsHandoff(null)}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

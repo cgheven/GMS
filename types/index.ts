@@ -38,6 +38,7 @@ export interface Profile {
   id: string;
   email: string;
   full_name: string | null;
+  phone: string | null;
   avatar_url: string | null;
   is_admin: boolean;
   branch_limit: number;
@@ -48,6 +49,7 @@ export interface AdminUser {
   id: string;
   email: string;
   full_name: string | null;
+  phone: string | null;
   is_admin: boolean;
   branch_limit: number;
   created_at: string;

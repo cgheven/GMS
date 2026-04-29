@@ -35,7 +35,7 @@ export async function listAdminUsers(): Promise<{ users?: AdminUser[]; error?: s
 
     const [authRes, profilesRes] = await Promise.all([
       admin.auth.admin.listUsers({ perPage: 1000 }),
-      admin.from("pulse_profiles").select("id, full_name, is_admin, branch_limit, created_at"),
+      admin.from("pulse_profiles").select("id, full_name, phone, is_admin, branch_limit, created_at"),
     ]);
 
     if (authRes.error) throw authRes.error;
@@ -60,6 +60,7 @@ export async function listAdminUsers(): Promise<{ users?: AdminUser[]; error?: s
         id: u.id,
         email: u.email ?? "",
         full_name: profile?.full_name ?? null,
+        phone: profile?.phone ?? null,
         is_admin: profile?.is_admin ?? false,
         branch_limit: profile?.branch_limit ?? 1,
         created_at: u.created_at,
@@ -80,6 +81,7 @@ export async function createUserWithPassword(data: {
   email: string;
   password: string;
   full_name: string;
+  phone?: string;
   branch_limit?: number;
 }): Promise<{ userId?: string; error?: string }> {
   try {
@@ -102,7 +104,12 @@ export async function createUserWithPassword(data: {
     // Upsert profile — auth trigger may not fire for admin-created users
     const branchLimit = data.branch_limit && data.branch_limit >= 1 ? data.branch_limit : 1;
     await admin.from("pulse_profiles").upsert(
-      { id: created.user.id, full_name: data.full_name || null, branch_limit: branchLimit },
+      {
+        id: created.user.id,
+        full_name: data.full_name || null,
+        phone: data.phone?.trim() || null,
+        branch_limit: branchLimit,
+      },
       { onConflict: "id" }
     );
 
@@ -163,6 +170,7 @@ export async function inviteUser(data: {
 export async function updateAdminUser(data: {
   userId: string;
   full_name?: string;
+  phone?: string | null;
   email?: string;
   password?: string;
   is_admin?: boolean;
@@ -188,9 +196,10 @@ export async function updateAdminUser(data: {
       if (error) throw error;
     }
 
-    // Update profile (full_name, is_admin, branch_limit)
-    const profileUpdates: { full_name?: string; is_admin?: boolean; branch_limit?: number } = {};
+    // Update profile (full_name, phone, is_admin, branch_limit)
+    const profileUpdates: { full_name?: string; phone?: string | null; is_admin?: boolean; branch_limit?: number } = {};
     if (data.full_name !== undefined) profileUpdates.full_name = data.full_name;
+    if (data.phone !== undefined) profileUpdates.phone = data.phone || null;
     if (data.branch_limit !== undefined && data.branch_limit >= 1) {
       profileUpdates.branch_limit = data.branch_limit;
     }
