@@ -65,7 +65,6 @@ async function _fetchDashboard(gymId: string, gym: Gym | null) {
     salariesRes,
     unpaidBillsRes,
     collectedPaymentsRes,
-    pendingPaymentsRes,
     allPayments6moRes,
     allExpenses6moRes,
     trainersRes,
@@ -79,7 +78,6 @@ async function _fetchDashboard(gymId: string, gym: Gym | null) {
     supabase.from("pulse_salary_payments").select("total_amount").eq("gym_id", gymId).eq("for_month", currentMonthKey).eq("status", "paid"),
     supabase.from("pulse_bills").select("id,gym_id,title,category,amount,due_date,paid_date,status,notes,created_at").eq("gym_id", gymId).neq("status", "paid").order("due_date").limit(5),
     supabase.from("pulse_payments").select("total_amount").eq("gym_id", gymId).gte("payment_date", start).lte("payment_date", end).eq("status", "paid"),
-    supabase.from("pulse_payments").select("id,total_amount,status,member:pulse_members(full_name)").eq("gym_id", gymId).in("status", ["pending", "overdue"]),
     supabase.from("pulse_payments").select("for_period,total_amount,status,payment_date").eq("gym_id", gymId).gte("payment_date", ranges[0].start).lte("payment_date", ranges[5].end),
     supabase.from("pulse_expenses").select("amount,date").eq("gym_id", gymId).gte("date", ranges[0].start).lte("date", ranges[5].end),
     supabase.from("pulse_staff").select("id,full_name").eq("gym_id", gymId).eq("status", "active").eq("role", "trainer"),
@@ -108,19 +106,27 @@ async function _fetchDashboard(gymId: string, gym: Gym | null) {
   const monthlySalaries = (salariesRes.data ?? []).reduce((s, e) => s + Number(e.total_amount), 0);
   const monthlyCollected = (collectedPaymentsRes.data ?? []).reduce((s, e) => s + Number(e.total_amount), 0);
 
-  type PendingRow = { id: string; total_amount: unknown; status: string; member: { full_name: string } | null };
-  const pendingRows = ((pendingPaymentsRes.data ?? []) as unknown) as PendingRow[];
-  const monthlyOutstanding = pendingRows.reduce((s, p) => s + Number(p.total_amount), 0);
-
   const unpaidBills = unpaidBillsRes.data ?? [];
   const monthlyRevenue = activeMembers.reduce((s, m) => s + Number(m.monthly_fee), 0);
 
-  const overdueMembers: DashboardMember[] = pendingRows.map((p) => ({
-    id: p.id,
-    name: p.member?.full_name ?? "Unknown",
-    amount: Number(p.total_amount),
-    status: p.status,
-  }));
+  // Outstanding = active members' expected monthly fee minus what they've paid for the current period.
+  // Uses currentMonthPayments (filtered by for_period = currentMonthKey) so admission payments don't count.
+  const currentMonthPayments = currentMonthPaymentsRes.data ?? [];
+  const paidByMemberThisMonth = new Map<string, number>();
+  for (const p of currentMonthPayments) {
+    if (p.status === "paid" && p.member_id) {
+      paidByMemberThisMonth.set(p.member_id, (paidByMemberThisMonth.get(p.member_id) ?? 0) + Number(p.total_amount));
+    }
+  }
+  const overdueMembers: DashboardMember[] = activeMembers
+    .map((m) => {
+      const expected = Number(m.monthly_fee);
+      const paid = paidByMemberThisMonth.get(m.id) ?? 0;
+      const owed = Math.max(0, expected - paid);
+      return { id: m.id, name: m.full_name as string, amount: owed, status: "overdue" };
+    })
+    .filter((x) => x.amount > 0);
+  const monthlyOutstanding = overdueMembers.reduce((s, x) => s + x.amount, 0);
 
   const allPayments6mo = allPayments6moRes.data ?? [];
   const allExpenses6mo = allExpenses6moRes.data ?? [];
@@ -152,7 +158,6 @@ async function _fetchDashboard(gymId: string, gym: Gym | null) {
 
   const trainers = trainersRes.data ?? [];
   const assignedMembers = assignedMembersRes.data ?? [];
-  const currentMonthPayments = currentMonthPaymentsRes.data ?? [];
 
   const trainerStats: TrainerStat[] = trainers.map((t) => {
     const myMembers = assignedMembers.filter((m) => m.assigned_trainer_id === t.id);
@@ -255,11 +260,7 @@ export async function getDashboardData() {
   const ctx = await getAuthContext();
   if (!ctx?.gymId) return null;
   const { gymId, gym } = ctx;
-  const data = await unstable_cache(
-    () => _fetchDashboard(gymId, gym),
-    ["dashboard", gymId],
-    { revalidate: 30, tags: [`dashboard-${gymId}`] }
-  )();
+  const data = await _fetchDashboard(gymId, gym);
   return { gymId, ...data };
 }
 
@@ -288,11 +289,7 @@ export async function getMembers() {
   const ctx = await getAuthContext();
   if (!ctx?.gymId) return { gymId: null, active: [], waiting: [], expired: [], plans: [], staff: [] };
   const gymId = ctx.gymId;
-  const data = await unstable_cache(
-    () => _fetchMembers(gymId),
-    ["members", gymId],
-    { revalidate: 30, tags: [`members-${gymId}`] }
-  )();
+  const data = await _fetchMembers(gymId);
   return { gymId, ...data };
 }
 
@@ -346,7 +343,7 @@ export async function getPaymentsData() {
   const data = await unstable_cache(
     () => _fetchPayments(gymId),
     ["payments", gymId],
-    { revalidate: 30, tags: [`payments-${gymId}`] }
+    { revalidate: 5, tags: [`payments-${gymId}`] }
   )();
   return { gymId, ...data };
 }

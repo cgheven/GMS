@@ -335,21 +335,24 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
 
   // Per-trainer + gym-only collection stats
   const collectionStats = useMemo(() => {
-    const groups = new Map<string, { label: string; total: number; paid: number; collected: number; remaining: number }>();
+    const groups = new Map<string, { label: string; total: number; paid: number; collected: number; remaining: number; due: number }>();
 
     for (const m of members) {
       const key = m.assigned_trainer_id ?? "none";
       const label = m.trainer?.full_name ?? "Gym Only";
-      if (!groups.has(key)) groups.set(key, { label, total: 0, paid: 0, collected: 0, remaining: 0 });
+      if (!groups.has(key)) groups.set(key, { label, total: 0, paid: 0, collected: 0, remaining: 0, due: 0 });
       const g = groups.get(key)!;
       g.total += 1;
       const p = currentMonthPayments.get(m.id);
+      const fee = Number(m.monthly_fee);
+      const paidAmt = p?.status === "paid" ? Number(p.total_amount) : 0;
       if (p?.status === "paid") {
         g.paid += 1;
-        g.collected += Number(p.total_amount);
+        g.collected += paidAmt;
       } else {
         g.remaining += 1;
       }
+      g.due += Math.max(0, fee - paidAmt);
     }
 
     const list = Array.from(groups.entries())
@@ -363,8 +366,9 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
     const totalCollected = list.reduce((s, g) => s + g.collected, 0);
     const totalPaid = list.reduce((s, g) => s + g.paid, 0);
     const totalRemaining = list.reduce((s, g) => s + g.remaining, 0);
+    const totalDue = list.reduce((s, g) => s + g.due, 0);
 
-    return { groups: list, totalCollected, totalPaid, totalRemaining };
+    return { groups: list, totalCollected, totalPaid, totalRemaining, totalDue };
   }, [members, currentMonthPayments]);
 
   return (
@@ -410,7 +414,14 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
                   : "border-sidebar-border bg-card hover:border-primary/20 hover:bg-primary/5"
               }`}>
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Total</p>
-              <p className="text-xl font-bold text-foreground">{formatCurrency(collectionStats.totalCollected)}</p>
+              <p className={`text-xl font-bold ${collectionStats.totalDue > 0 ? "text-rose-400" : "text-foreground"}`}>
+                {formatCurrency(collectionStats.totalDue)}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                <span className="text-rose-400/80">due</span>
+                {" · "}
+                <span className="text-emerald-400/80">{formatCurrency(collectionStats.totalCollected)} collected</span>
+              </p>
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-emerald-400">{collectionStats.totalPaid} paid</span>
                 {collectionStats.totalRemaining > 0 && <span className="text-rose-400">{collectionStats.totalRemaining} left</span>}
@@ -433,7 +444,14 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider truncate">
                   {g.id === "none" ? "Gym Only" : g.label}
                 </p>
-                <p className="text-xl font-bold text-foreground">{formatCurrency(g.collected)}</p>
+                <p className={`text-xl font-bold ${g.due > 0 ? "text-rose-400" : "text-foreground"}`}>
+                  {formatCurrency(g.due)}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  <span className="text-rose-400/80">due</span>
+                  {" · "}
+                  <span className="text-emerald-400/80">{formatCurrency(g.collected)}</span>
+                </p>
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-emerald-400">{g.paid}/{g.total} paid</span>
                   {g.remaining > 0 && <span className="text-rose-400">{g.remaining} left</span>}

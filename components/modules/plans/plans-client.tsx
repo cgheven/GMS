@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import {
   Plus, Dumbbell, Users, Search, Edit2, Trash2,
-  Check, Star, Clock, Infinity,
+  Check, Star, Clock, Infinity, Copy,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
@@ -289,6 +289,20 @@ export function PlansClient({ gymId, plans: initialPlans }: Props) {
                   {DURATION_LABELS[plan.duration_type]}
                   {plan.duration_days && <span className="text-muted-foreground">({plan.duration_days}d)</span>}
                 </div>
+                {/* Plan ID — short prefix + copy button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(plan.id);
+                    toast({ title: "Plan ID copied", description: plan.id });
+                  }}
+                  title="Click to copy full Plan ID"
+                  className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors group/id self-start"
+                >
+                  <span className="opacity-60">ID:</span>
+                  <span>{plan.id.slice(0, 8)}…{plan.id.slice(-4)}</span>
+                  <Copy className="w-2.5 h-2.5 opacity-50 group-hover/id:opacity-100" />
+                </button>
               </CardHeader>
 
               <CardContent className="space-y-3">

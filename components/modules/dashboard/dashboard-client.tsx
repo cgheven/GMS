@@ -55,8 +55,9 @@ export function DashboardClient({ data, leadsSummary }: Props) {
     ? Math.min(100, Math.round((stats.monthly_collected / stats.revenue_target) * 100))
     : 0;
 
-  // Unified action items — sorted by urgency
-  const actionItems = [
+  // Unified action items — sorted by urgency, capped to keep UI compact
+  const ACTION_LIMIT = 8;
+  const allActionItems = [
     ...expiringMembers.map((m) => ({
       key: `exp-${m.id}`,
       icon: AlertTriangle,
@@ -88,6 +89,8 @@ export function DashboardClient({ data, leadsSummary }: Props) {
       urgency: 200,
     })),
   ].sort((a, b) => a.urgency - b.urgency);
+  const actionItems = allActionItems.slice(0, ACTION_LIMIT);
+  const hiddenCount = allActionItems.length - actionItems.length;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -328,7 +331,7 @@ export function DashboardClient({ data, leadsSummary }: Props) {
             <Zap className="w-4 h-4 text-primary" />
             <h2 className="text-sm font-semibold text-foreground">Needs Attention</h2>
             <span className="ml-auto text-xs font-semibold text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
-              {actionItems.length}
+              {allActionItems.length}
             </span>
           </div>
           <div className="space-y-1.5">
@@ -346,6 +349,12 @@ export function DashboardClient({ data, leadsSummary }: Props) {
               </Link>
             ))}
           </div>
+          {hiddenCount > 0 && (
+            <Link href="/payments"
+              className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors pt-1">
+              +{hiddenCount} more {hiddenCount === 1 ? "item" : "items"} — view all →
+            </Link>
+          )}
         </div>
       )}
 

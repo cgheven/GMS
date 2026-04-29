@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
+import { revalidateMembers, revalidateDashboard } from "@/app/actions/revalidate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -210,6 +211,10 @@ export function MembersClient({
     setActive(all.filter((m) => m.status === "active" && !m.is_waiting));
     setWaiting(all.filter((m) => m.is_waiting));
     setExpired(all.filter((m) => m.status === "expired" || m.status === "cancelled"));
+    // Invalidate server-side cache so next nav back to /members shows fresh data
+    // (and dashboard counters reflect the change).
+    void revalidateMembers();
+    void revalidateDashboard();
   }
 
   function openAdd() {
@@ -497,7 +502,7 @@ export function MembersClient({
                   </td>
                   {/* Actions — always visible on mobile (no hover on touch) */}
                   <td className="px-3 sm:px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-0.5 sm:gap-1 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity">
+                    <div className="flex items-center justify-end gap-0.5 sm:gap-1">
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(m)}>
                         <Edit2 className="w-3.5 h-3.5" />
                       </Button>
