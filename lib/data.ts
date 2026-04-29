@@ -323,7 +323,7 @@ async function _fetchPayments(gymId: string) {
       .order("created_at", { ascending: false })
       .limit(200),
     supabase.from("pulse_members")
-      .select("id,full_name,member_number,monthly_fee,plan_id,assigned_trainer_id,status,plan_expiry_date,outstanding_balance,plan:pulse_membership_plans(name),trainer:pulse_staff(full_name)")
+      .select("id,full_name,member_number,phone,monthly_fee,plan_id,assigned_trainer_id,status,plan_expiry_date,outstanding_balance,plan:pulse_membership_plans(name),trainer:pulse_staff(full_name)")
       .eq("gym_id", gymId)
       .eq("status", "active")
       .order("full_name"),
@@ -334,7 +334,7 @@ async function _fetchPayments(gymId: string) {
   ]);
   return {
     payments: (payments ?? []) as Payment[],
-    members: (members ?? []) as unknown as (Pick<Member, "id" | "full_name" | "member_number" | "monthly_fee" | "plan_id" | "assigned_trainer_id" | "status" | "plan_expiry_date" | "outstanding_balance"> & { plan?: { name: string } | null; trainer?: { full_name: string } | null })[],
+    members: (members ?? []) as unknown as (Pick<Member, "id" | "full_name" | "member_number" | "phone" | "monthly_fee" | "plan_id" | "assigned_trainer_id" | "status" | "plan_expiry_date" | "outstanding_balance"> & { plan?: { name: string } | null; trainer?: { full_name: string } | null })[],
     plans: (plans ?? []) as Pick<MembershipPlan, "id" | "name" | "price" | "duration_type">[],
   };
 }
@@ -829,5 +829,43 @@ export async function getLeadsSummary() {
     dueToday: dueToday.length,
     upcoming,
     conversionRate: total > 0 ? Math.round((won / total) * 100) : 0,
+  };
+}
+
+// ── Compliance / printable report data ─────────────────────────────────────
+
+export async function getComplianceReportData() {
+  const ctx = await getAuthContext();
+  if (!ctx?.gymId) return null;
+  const { gymId, gym } = ctx;
+  const admin = createAdminClient();
+
+  const [{ data: members }, { data: payments }, { data: trainers }] = await Promise.all([
+    admin.from("pulse_members")
+      .select("id, full_name, member_number, phone, email, cnic, monthly_fee, plan_id, assigned_trainer_id, status, join_date, plan_expiry_date, plan:pulse_membership_plans(name), trainer:pulse_staff(full_name)")
+      .eq("gym_id", gymId)
+      .order("full_name"),
+    admin.from("pulse_payments")
+      .select("member_id, total_amount, status, payment_date, for_period")
+      .eq("gym_id", gymId)
+      .eq("status", "paid"),
+    admin.from("pulse_staff")
+      .select("id, full_name")
+      .eq("gym_id", gymId)
+      .eq("role", "trainer"),
+  ]);
+
+  return {
+    gym,
+    members: (members ?? []) as unknown as Array<{
+      id: string; full_name: string; member_number: string | null; phone: string | null;
+      email: string | null; cnic: string | null; monthly_fee: number; plan_id: string | null;
+      assigned_trainer_id: string | null; status: string; join_date: string;
+      plan_expiry_date: string | null;
+      plan?: { name: string } | null;
+      trainer?: { full_name: string } | null;
+    }>,
+    payments: (payments ?? []) as Array<{ member_id: string; total_amount: number; status: string; payment_date: string | null; for_period: string | null }>,
+    trainers: (trainers ?? []) as Array<{ id: string; full_name: string }>,
   };
 }

@@ -24,7 +24,7 @@ const navGroups = [
       { href: "/members",   label: "Members",      icon: Users },
       { href: "/check-ins", label: "Check-ins",    icon: LogIn },
       { href: "/plans",     label: "Plans",        icon: Zap },
-      { href: "/payments",  label: "Transactions", icon: CreditCard },
+      { href: "/payments",  label: "Payments",     icon: CreditCard },
     ],
   },
   {
@@ -45,8 +45,9 @@ const navGroups = [
   {
     label: "Analytics",
     items: [
-      { href: "/reports",     label: "Reports",     icon: BarChart3 },
-      { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
+      { href: "/reports",            label: "Reports",     icon: BarChart3 },
+      { href: "/reports/compliance", label: "Compliance",  icon: FileText },
+      { href: "/leaderboard",        label: "Leaderboard", icon: Trophy },
     ],
   },
   {

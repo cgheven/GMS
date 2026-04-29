@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo, useTransition } from "react";
 import {
-  CreditCard, AlertTriangle, Plus, XCircle, Search,
+  CreditCard, AlertTriangle, Plus, XCircle, Search, MessageCircle,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -13,10 +13,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate, formatDateInput } from "@/lib/utils";
+import { useGymContext } from "@/contexts/gym-context";
+import { buildReminderMessage, whatsappUrl } from "@/lib/whatsapp-reminder";
 import type { Payment, PaymentMethod, PaymentStatus, Member, MembershipPlan } from "@/types";
 
 type MemberRow = Pick<Member,
-  "id" | "full_name" | "member_number" | "monthly_fee" | "plan_id" |
+  "id" | "full_name" | "member_number" | "phone" | "monthly_fee" | "plan_id" |
   "assigned_trainer_id" | "status" | "plan_expiry_date" | "outstanding_balance"
 > & { plan?: { name: string } | null; trainer?: { full_name: string } | null };
 
@@ -172,6 +174,7 @@ function MemberPicker({ members, value, onChange }: {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export function PaymentsClient({ gymId, payments: initialPayments, members }: Props) {
+  const { gym } = useGymContext();
   const [payments, setPayments] = useState<Payment[]>(initialPayments);
   const [view, setView] = useState<"members" | "history">("members");
 
@@ -261,6 +264,28 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
     setAddDialog(true);
   }
 
+  function sendReminder(m: MemberRow) {
+    if (!m.phone) {
+      toast({ title: "No phone number on file for this member", variant: "destructive" });
+      return;
+    }
+    const due = m.outstanding_balance && m.outstanding_balance > 0 ? Number(m.outstanding_balance) : Number(m.monthly_fee);
+    const message = buildReminderMessage({
+      template: gym?.reminder_template,
+      memberName: m.full_name,
+      amount: due,
+      month: MONTH_LABEL,
+      gymName: gym?.name ?? "Your Gym",
+      accounts: gym?.payment_methods ?? [],
+    });
+    const url = whatsappUrl(m.phone, message);
+    if (!url) {
+      toast({ title: "Phone format invalid", variant: "destructive" });
+      return;
+    }
+    window.open(url, "_blank");
+  }
+
   async function updateStatus(p: Payment, status: PaymentStatus) {
     setPayments((prev) => prev.map((pay) => pay.id === p.id ? { ...pay, status } : pay));
     const supabase = createClient();
@@ -347,8 +372,8 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-serif font-normal tracking-tight">Transactions</h1>
-          <p className="text-muted-foreground text-sm mt-1">Full payment history and records</p>
+          <h1 className="text-3xl font-serif font-normal tracking-tight">Payments</h1>
+          <p className="text-muted-foreground text-sm mt-1">Collect fees and review payment history</p>
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={hardRefresh} disabled={refreshing} variant="outline" size="sm">
@@ -474,17 +499,38 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
                             <span className="font-medium text-foreground">{formatCurrency(m.monthly_fee)}</span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            {payment
-                              ? <StatusBadge status={payment.status} />
-                              : <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-white/5 text-muted-foreground border-white/10">Not recorded</span>
-                            }
+                            {payment ? (
+                              <StatusBadge status={payment.status} />
+                            ) : (() => {
+                              // Days into the current billing month — proxy for overdue
+                              const daysIn = new Date().getDate();
+                              const overdue = daysIn >= 3;
+                              return (
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
+                                  overdue
+                                    ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                    : "bg-white/5 text-muted-foreground border-white/10"
+                                }`}>
+                                  {overdue ? `${daysIn}d overdue` : "Not paid"}
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="px-4 py-3 text-right">
                             {!paid && (
-                              <button type="button" onClick={() => recordPayment(m)}
-                                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors">
-                                Record
-                              </button>
+                              <div className="inline-flex items-center gap-1.5">
+                                {m.phone && (
+                                  <button type="button" onClick={() => sendReminder(m)}
+                                    title="Send WhatsApp reminder"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors">
+                                    <MessageCircle className="w-3 h-3" /> Remind
+                                  </button>
+                                )}
+                                <button type="button" onClick={() => recordPayment(m)}
+                                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors">
+                                  Record
+                                </button>
+                              </div>
                             )}
                           </td>
                         </tr>

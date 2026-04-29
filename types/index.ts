@@ -55,6 +55,14 @@ export interface AdminUser {
   gyms: { id: string; name: string; total_capacity: number }[];
 }
 
+export interface PaymentMethodAccount {
+  id: string;            // client-side uuid for stable list keys
+  label: string;         // e.g. "HBL Bank", "JazzCash", "EasyPaisa"
+  account_title?: string;
+  account_number?: string;
+  iban?: string;
+}
+
 export interface Gym {
   id: string;
   owner_id: string;
@@ -73,6 +81,17 @@ export interface Gym {
   logo_url: string | null;
   listing_enabled: boolean;
   monthly_revenue_target: number;
+  ntn: string | null;
+  report_settings: {
+    fields?: string[];
+    notes?: string;
+    headerTitle?: string;
+    taxRate?: number;          // e.g. 13, 16, 17 — provincial sales tax %
+    taxInclusive?: boolean;    // true = gross price already includes tax; false = added on top
+    taxLabel?: string;         // e.g. "Sales Tax", "GST", "PST"
+  } | null;
+  reminder_template: string | null;
+  payment_methods: PaymentMethodAccount[];
   created_at: string;
   updated_at: string;
 }

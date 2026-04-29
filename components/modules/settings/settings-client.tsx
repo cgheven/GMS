@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
+import { PaymentRecoverySection } from "./payment-recovery-section";
 import type { GymType } from "@/types";
 
 const GYM_TYPES: { value: GymType; label: string }[] = [
@@ -371,6 +372,11 @@ export function SettingsClient() {
           </form>
         </CardContent>
       </Card>
+
+      <Separator />
+
+      {/* Payment Recovery */}
+      <PaymentRecoverySection gym={gym} />
 
       <Separator />
 
