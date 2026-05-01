@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, CreditCard, FileText, Settings, X,
   Shield, Building2, Globe, LogIn, Trophy, Target,
   BarChart3, UserCog, Dumbbell, CalendarDays,
-  Wrench, Receipt, ClipboardList, Zap,
+  Receipt, ClipboardList, Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsAdmin } from "@/hooks/use-is-admin";
@@ -40,7 +40,6 @@ const navGroups = [
       { href: "/staff",         label: "Staff",          icon: UserCog },
       { href: "/expenses",      label: "Expenses",      icon: Receipt },
       { href: "/bills",         label: "Bills",          icon: FileText },
-      { href: "/equipment",     label: "Equipment",      icon: Wrench },
     ],
   },
   {

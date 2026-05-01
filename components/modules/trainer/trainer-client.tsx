@@ -225,21 +225,26 @@ export function TrainerClient({ staff, gymId, members, selfMembers, payments: in
     return { total: members.length, paid, unpaid: members.length - paid, collected };
   }, [members, paidMemberIds, monthPayments]);
 
-  // Commission per member = max(0, fee − floor) × %  (floor=0 ⇒ gross % of fee)
+  // Commission = max(0, amount − floor) × %  (floor=0 ⇒ gross % of fee)
+  // Snapshot rule: earnings come from payments locked to THIS trainer at insert
+  // time (payment.trainer_id), not from the member's CURRENT assignment. So if
+  // a member transferred away mid-month, the prior month's payment still pays
+  // commission to the original trainer. Pending commission still uses currently
+  // assigned members' monthly_fee, since that's the only forecast we have.
   const earnings = useMemo(() => {
     const pct = staff.commission_percentage / 100;
     const floor = staff.commission_floor ?? 0;
     const cutFor = (fee: number) => Math.max(0, fee - floor) * pct;
-    const earnedCommission = members
-      .filter((m) => paidMemberIds.has(m.id))
-      .reduce((s, m) => s + cutFor(m.monthly_fee), 0);
+    const earnedCommission = monthPayments
+      .filter((p) => p.status === "paid" && p.trainer_id === staff.id)
+      .reduce((s, p) => s + cutFor(Number(p.total_amount)), 0);
     const pendingCommission = members
       .filter((m) => !paidMemberIds.has(m.id))
       .reduce((s, m) => s + cutFor(m.monthly_fee), 0);
     const totalPotential = earnedCommission + pendingCommission;
     const totalEarned = staff.monthly_salary + earnedCommission;
     return { earnedCommission, pendingCommission, totalPotential, totalEarned, pct: staff.commission_percentage, floor, cutFor };
-  }, [members, paidMemberIds, staff]);
+  }, [members, paidMemberIds, monthPayments, staff]);
 
   const memberRows = useMemo(() => {
     const q = search.toLowerCase();

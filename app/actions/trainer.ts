@@ -2,6 +2,7 @@
 import { revalidateTag } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAuthContext, getTrainerContext } from "@/lib/data";
+import { writeAuditLog } from "@/lib/audit";
 
 export async function createTrainerLogin(staffId: string, email: string, password: string) {
   const ctx = await getAuthContext();
@@ -478,4 +479,92 @@ export async function removeTrainerLogin(staffId: string) {
   await admin.from("pulse_staff").update({ user_id: null }).eq("id", staffId);
 
   return { success: true };
+}
+
+// ── Bulk transfer all active clients from one trainer to another ─────────────
+// Use when a trainer resigns/leaves and the gym owner needs to move every
+// active client to a replacement trainer in one action. All member-level data
+// (goals, body metrics, payment history, notes) stays attached to the member —
+// only assigned_trainer_id changes. Optionally also flips goal.trainer_id so
+// the new trainer gets credit/leaderboard ownership going forward.
+export async function transferTrainerClients(
+  fromTrainerId: string,
+  toTrainerId: string,
+  transferGoals: boolean,
+): Promise<{ transferredCount?: number; goalsTransferred?: number; error?: string }> {
+  const ctx = await getAuthContext();
+  if (!ctx?.user || !ctx.gymId) return { error: "Unauthorized" };
+  if (!fromTrainerId || !toTrainerId) return { error: "Both trainers are required" };
+  if (fromTrainerId === toTrainerId) return { error: "Source and destination must be different" };
+
+  const admin = createAdminClient();
+  const gymId = ctx.gymId;
+
+  // Verify both trainers belong to the caller's gym.
+  const { data: trainers, error: trErr } = await admin
+    .from("pulse_staff")
+    .select("id, full_name, gym_id, status, role")
+    .in("id", [fromTrainerId, toTrainerId])
+    .eq("gym_id", gymId);
+
+  if (trErr) return { error: trErr.message };
+  if (!trainers || trainers.length !== 2) {
+    return { error: "One or both trainers not found in this gym" };
+  }
+
+  const dest = trainers.find((t) => t.id === toTrainerId);
+  const src = trainers.find((t) => t.id === fromTrainerId);
+  if (!dest || !src) return { error: "Trainers not found" };
+  if (dest.status !== "active") return { error: "Destination trainer must be active" };
+
+  // Transfer active members.
+  const { data: updatedMembers, error: memErr } = await admin
+    .from("pulse_members")
+    .update({ assigned_trainer_id: toTrainerId })
+    .eq("gym_id", gymId)
+    .eq("assigned_trainer_id", fromTrainerId)
+    .eq("status", "active")
+    .select("id");
+
+  if (memErr) return { error: memErr.message };
+  const transferredCount = updatedMembers?.length ?? 0;
+
+  // Transfer active goals if requested. Scoped to the same gym + active goals
+  // owned by the source trainer. Past achieved/abandoned goals stay credited
+  // historically to the original trainer.
+  let goalsTransferred = 0;
+  if (transferGoals) {
+    const { data: updatedGoals, error: goalErr } = await admin
+      .from("pulse_member_goals")
+      .update({ trainer_id: toTrainerId })
+      .eq("gym_id", gymId)
+      .eq("trainer_id", fromTrainerId)
+      .eq("status", "active")
+      .select("id");
+
+    if (goalErr) return { error: goalErr.message };
+    goalsTransferred = updatedGoals?.length ?? 0;
+  }
+
+  await writeAuditLog({
+    actor_id: ctx.user.id,
+    actor_email: ctx.user.email ?? "",
+    action: "trainer.transfer_clients",
+    entity: "staff",
+    entity_id: fromTrainerId,
+    meta: {
+      from_trainer_id: fromTrainerId,
+      from_trainer_name: src.full_name,
+      to_trainer_id: toTrainerId,
+      to_trainer_name: dest.full_name,
+      transferred_count: transferredCount,
+      goals_transferred: goalsTransferred,
+    },
+  });
+
+  revalidateTag(`members-${gymId}`);
+  revalidateTag(`staff-${gymId}`);
+  revalidateTag(`dashboard-${gymId}`);
+
+  return { transferredCount, goalsTransferred };
 }

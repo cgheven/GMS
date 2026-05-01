@@ -12,9 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate, formatDateInput, capitalize } from "@/lib/utils";
-import type { Bill, BillCategory, BillStatus } from "@/types";
+import type { Bill, BillCategory, BillCondition, BillStatus } from "@/types";
 
-const categories: BillCategory[] = ["electricity", "water", "internet", "gas", "maintenance", "rent", "other"];
+const categories: BillCategory[] = ["electricity", "water", "internet", "gas", "maintenance", "rent", "equipment", "other"];
 
 const categoryIcons: Record<BillCategory, string> = {
   electricity: "⚡",
@@ -23,6 +23,7 @@ const categoryIcons: Record<BillCategory, string> = {
   gas:         "🔥",
   maintenance: "🔧",
   rent:        "🏠",
+  equipment:   "🏋️",
   other:       "📋",
 };
 
@@ -39,6 +40,7 @@ const PRESETS: { icon: string; label: string; category: BillCategory }[] = [
   { icon: "🌐", label: "Internet",      category: "internet" },
   { icon: "🏠", label: "Monthly Rent",  category: "rent" },
   { icon: "🔧", label: "Maintenance",   category: "maintenance" },
+  { icon: "🏋️", label: "Equipment",     category: "equipment" },
   { icon: "📋", label: "Other Bill",    category: "other" },
 ];
 
@@ -46,6 +48,7 @@ const emptyForm = {
   title: "", category: "electricity" as BillCategory,
   amount: "", due_date: formatDateInput(new Date()),
   paid_date: "", status: "unpaid" as BillStatus, notes: "",
+  condition: "" as BillCondition | "",
 };
 
 interface Props {
@@ -96,6 +99,8 @@ export function BillsClient({ gymId, bills: initialBills }: Props) {
       paid_date: form.paid_date || null,
       status: form.status,
       notes: form.notes || null,
+      // Condition only meaningful for equipment purchases — clear for all other categories.
+      condition: form.category === "equipment" ? (form.condition || null) : null,
     };
     const { error } = editing
       ? await supabase.from("pulse_bills").update(payload).eq("id", editing.id)
@@ -236,7 +241,18 @@ export function BillsClient({ gymId, bills: initialBills }: Props) {
                           <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/8 flex items-center justify-center text-base shrink-0">
                             {categoryIcons[bill.category]}
                           </div>
-                          <p className="font-medium text-foreground">{bill.title}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-medium text-foreground">{bill.title}</p>
+                            {bill.condition && (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border uppercase tracking-wide ${
+                                bill.condition === "new"
+                                  ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
+                                  : "bg-amber-500/10 border-amber-500/25 text-amber-400"
+                              }`}>
+                                {bill.condition}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       {/* Status */}
@@ -276,7 +292,16 @@ export function BillsClient({ gymId, bills: initialBills }: Props) {
                           )}
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
                             setEditing(bill);
-                            setForm({ title: bill.title, category: bill.category, amount: bill.amount.toString(), due_date: bill.due_date, paid_date: bill.paid_date ?? "", status: bill.status, notes: bill.notes ?? "" });
+                            setForm({
+                              title: bill.title,
+                              category: bill.category,
+                              amount: bill.amount.toString(),
+                              due_date: bill.due_date,
+                              paid_date: bill.paid_date ?? "",
+                              status: bill.status,
+                              notes: bill.notes ?? "",
+                              condition: bill.condition ?? "",
+                            });
                             setDialogOpen(true);
                           }}>
                             <Edit2 className="w-3.5 h-3.5" />
@@ -326,6 +351,18 @@ export function BillsClient({ gymId, bills: initialBills }: Props) {
                 <Input type="number" placeholder="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
               </div>
             </div>
+            {form.category === "equipment" && (
+              <div className="space-y-1.5">
+                <Label>Condition</Label>
+                <Select value={form.condition || "new"} onValueChange={(v) => setForm({ ...form, condition: v as BillCondition })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="new">New</SelectItem>
+                    <SelectItem value="used">Used</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Due Date</Label>

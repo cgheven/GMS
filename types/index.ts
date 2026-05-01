@@ -16,7 +16,8 @@ export type PlanDurationType = "daily" | "monthly" | "quarterly" | "biannual" | 
 export type PaymentStatus = "paid" | "pending" | "overdue" | "refunded" | "waived";
 export type PaymentMethod = "cash" | "jazzcash" | "easypaisa" | "bank_transfer" | "card" | "other";
 export type BillStatus = "paid" | "unpaid" | "overdue";
-export type BillCategory = "electricity" | "water" | "internet" | "gas" | "maintenance" | "rent" | "other";
+export type BillCategory = "electricity" | "water" | "internet" | "gas" | "maintenance" | "rent" | "equipment" | "other";
+export type BillCondition = "new" | "used";
 export type ExpenseCategory = "equipment" | "maintenance" | "cleaning" | "marketing" | "supplements" | "utilities" | "rent" | "security" | "other";
 export type StaffRole = "trainer" | "manager" | "frontdesk" | "cleaner" | "guard" | "cook" | "other";
 export type StaffStatus = "active" | "inactive";
@@ -24,8 +25,6 @@ export type SalaryStatus = "pending" | "paid";
 export type IssueCategory = "equipment" | "cleanliness" | "staff" | "facility" | "billing" | "other";
 export type IssuePriority = "low" | "medium" | "high";
 export type IssueStatus = "open" | "in_progress" | "resolved";
-export type EquipmentCategory = "cardio" | "strength" | "free_weights" | "functional" | "accessories" | "other";
-export type EquipmentCondition = "excellent" | "good" | "fair" | "needs_repair" | "retired";
 export type ClassScheduleType = "one_time" | "recurring";
 export type ClassBookingStatus = "booked" | "attended" | "cancelled" | "no_show";
 export type PTSessionStatus = "scheduled" | "completed" | "cancelled" | "no_show";
@@ -161,7 +160,6 @@ export interface Member {
   monthly_fee: number;
   outstanding_balance: number;
   notes: string | null;
-  is_waiting: boolean;
   created_at: string;
   updated_at: string;
   plan?: Pick<MembershipPlan, "name" | "duration_type" | "price" | "color"> | null;
@@ -183,6 +181,10 @@ export interface Payment {
   status: PaymentStatus;
   receipt_number: string | null;
   notes: string | null;
+  // Trainer who owned the member when this payment was logged. Snapshotted by
+  // a DB trigger on insert; immune to future trainer transfers. Used to lock
+  // commission credit to the trainer who serviced the member that month.
+  trainer_id: string | null;
   created_at: string;
   updated_at: string;
   member?: { full_name: string; plan_id: string | null } | null;
@@ -310,21 +312,6 @@ export interface BodyMetrics {
   created_at: string;
 }
 
-export interface Equipment {
-  id: string;
-  gym_id: string;
-  name: string;
-  category: EquipmentCategory;
-  quantity: number;
-  purchase_date: string | null;
-  purchase_price: number | null;
-  condition: EquipmentCondition;
-  last_maintenance_date: string | null;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface Expense {
   id: string;
   gym_id: string;
@@ -346,6 +333,7 @@ export interface Bill {
   paid_date: string | null;
   status: BillStatus;
   notes: string | null;
+  condition: BillCondition | null;
   created_at: string;
 }
 

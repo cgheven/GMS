@@ -50,7 +50,6 @@ const CURRENT_MONTH = (() => {
 interface Props {
   gymId: string | null;
   active: Member[];
-  waiting: Member[];
   expired: Member[];
   plans: MembershipPlan[];
   staff: Pick<Staff, "id" | "full_name" | "role">[];
@@ -79,7 +78,6 @@ const emptyForm = {
   medical_notes: "",
   notes: "",
   status: "active" as MemberStatus,
-  is_waiting: false,
 };
 
 const STATUS_CONFIG: Record<MemberStatus, { label: string; className: string; icon: React.ElementType }> = {
@@ -101,13 +99,11 @@ const DURATION_LABELS: Record<string, string> = {
 export function MembersClient({
   gymId,
   active: initialActive,
-  waiting: initialWaiting,
   expired: initialExpired,
   plans: initialPlans,
   staff: initialStaff,
 }: Props) {
   const [active, setActive] = useState(initialActive);
-  const [waiting, setWaiting] = useState(initialWaiting);
   const [expired, setExpired] = useState(initialExpired);
   const [plans] = useState(initialPlans);
   const [staff] = useState(initialStaff);
@@ -207,8 +203,7 @@ export function MembersClient({
       .eq("gym_id", gymId)
       .order("created_at", { ascending: false });
     const all = (members ?? []) as Member[];
-    setActive(all.filter((m) => m.status === "active" && !m.is_waiting));
-    setWaiting(all.filter((m) => m.is_waiting));
+    setActive(all.filter((m) => m.status === "active"));
     setExpired(all.filter((m) => m.status === "expired" || m.status === "cancelled"));
     // Invalidate server-side cache so next nav back to /members shows fresh data
     // (and dashboard counters reflect the change).
@@ -259,9 +254,9 @@ export function MembersClient({
 
   const planMap = useMemo(() => Object.fromEntries(plans.map((p) => [p.id, p])), [plans]);
 
-  // Counts per trainer chip (across active + waiting + expired pools).
+  // Counts per trainer chip (across active + expired pools).
   const trainerCounts = useMemo(() => {
-    const all = [...active, ...waiting, ...expired];
+    const all = [...active, ...expired];
     const counts: Record<string, number> = { all: all.length, self: 0 };
     for (const t of staff) counts[t.id] = 0;
     for (const m of all) {
@@ -269,12 +264,11 @@ export function MembersClient({
       else if (counts[m.assigned_trainer_id] !== undefined) counts[m.assigned_trainer_id] += 1;
     }
     return counts;
-  }, [active, waiting, expired, staff]);
+  }, [active, expired, staff]);
 
   // Auto-fill monthly fee when plan is selected
   const stats = {
     active: active.length,
-    waiting: waiting.length,
     expired: expired.length,
   };
 
@@ -416,10 +410,9 @@ export function MembersClient({
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-4">
         {[
           { label: "Active",   sub: "Members",     value: stats.active,  icon: UserCheck, color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
-          { label: "Waiting",  sub: "List",        value: stats.waiting, icon: Clock,     color: "text-primary",     bg: "bg-primary/10 border border-primary/20" },
           { label: "Expired",  sub: "Cancelled",   value: stats.expired, icon: CalendarX, color: "text-rose-400",    bg: "bg-rose-500/10 border border-rose-500/20" },
         ].map(({ label, sub, value, icon: Icon, color, bg }) => (
           <div key={label} className="rounded-2xl border border-sidebar-border bg-card p-3 sm:p-5">
@@ -490,9 +483,6 @@ export function MembersClient({
             <TabsTrigger value="active" className="whitespace-nowrap">
               <UserCheck className="w-3.5 h-3.5" /> Active ({active.length})
             </TabsTrigger>
-            <TabsTrigger value="waiting" className="whitespace-nowrap">
-              <Clock className="w-3.5 h-3.5" /> Waiting ({waiting.length})
-            </TabsTrigger>
             <TabsTrigger value="expired" className="whitespace-nowrap">
               <CalendarX className="w-3.5 h-3.5" /> Expired ({expired.length})
             </TabsTrigger>
@@ -504,7 +494,6 @@ export function MembersClient({
 
         {[
           { value: "active",  list: filterList(active),  empty: "No active members yet",            showExpired: false, emptyIcon: Users },
-          { value: "waiting", list: filterList(waiting), empty: "Waiting list is empty",             showExpired: false, emptyIcon: Clock },
           { value: "expired", list: filterList(expired), empty: "No expired or cancelled members",  showExpired: true,  emptyIcon: CalendarX },
         ].map(({ value, list, empty, showExpired, emptyIcon: Icon }) => (
           <TabsContent key={value} value={value}>
@@ -724,10 +713,12 @@ export function MembersClient({
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         editing={editing}
+        existingMembers={[...active, ...expired]}
         plans={plans}
         staff={staff}
         gymId={gymId}
         onSaved={reload}
+        onOpenExisting={(m) => { setEditing(m); /* keeps dialog open, switches to edit */ }}
       />
     </div>
   );
@@ -792,15 +783,41 @@ interface MemberFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editing: Member | null;
+  existingMembers: Member[];
   plans: MembershipPlan[];
   staff: Pick<Staff, "id" | "full_name" | "role">[];
   gymId: string | null;
   onSaved: () => void | Promise<void>;
+  onOpenExisting: (m: Member) => void;
 }
 
-function MemberFormDialog({ open, onOpenChange, editing, plans, staff, gymId, onSaved }: MemberFormDialogProps) {
+// Strip non-digits and keep the last 10 digits.
+// Handles: "03001234567" / "+923001234567" / "923001234567" / "0300-1234567" → "3001234567"
+function normalizePhone(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const digits = raw.replace(/\D/g, "");
+  return digits.length >= 10 ? digits.slice(-10) : digits;
+}
+
+function MemberFormDialog({
+  open, onOpenChange, editing, existingMembers, plans, staff, gymId, onSaved, onOpenExisting,
+}: MemberFormDialogProps) {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [allowDuplicate, setAllowDuplicate] = useState(false);
+
+  // Detect a member with the same phone (ignoring the one being edited).
+  // Only triggers once 10+ digits have been entered to avoid early false positives.
+  const phoneMatch = useMemo(() => {
+    const norm = normalizePhone(form.phone);
+    if (norm.length < 10) return null;
+    return existingMembers.find(
+      (m) => m.id !== editing?.id && normalizePhone(m.phone) === norm,
+    ) ?? null;
+  }, [form.phone, existingMembers, editing?.id]);
+
+  // Reset override whenever phone changes / dialog opens
+  useEffect(() => { setAllowDuplicate(false); }, [form.phone, open]);
 
   const planMap = useMemo(() => Object.fromEntries(plans.map((p) => [p.id, p])), [plans]);
 
@@ -831,7 +848,6 @@ function MemberFormDialog({ open, onOpenChange, editing, plans, staff, gymId, on
         medical_notes: editing.medical_notes ?? "",
         notes: editing.notes ?? "",
         status: editing.status,
-        is_waiting: editing.is_waiting,
       });
     } else {
       setForm(emptyForm);
@@ -864,6 +880,15 @@ function MemberFormDialog({ open, onOpenChange, editing, plans, staff, gymId, on
       return;
     }
 
+    if (phoneMatch && !allowDuplicate) {
+      toast({
+        title: "Possible duplicate member",
+        description: `This phone is already registered to ${phoneMatch.full_name}. Open existing or tick "Add anyway" to override.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSaving(true);
     const supabase = createClient();
 
@@ -893,8 +918,7 @@ function MemberFormDialog({ open, onOpenChange, editing, plans, staff, gymId, on
       emergency_phone: form.emergency_phone || null,
       medical_notes: form.medical_notes || null,
       notes: form.notes || null,
-      status: form.is_waiting ? "active" : form.status,
-      is_waiting: form.is_waiting,
+      status: form.status,
     };
 
     if (editing) {
@@ -933,13 +957,7 @@ function MemberFormDialog({ open, onOpenChange, editing, plans, staff, gymId, on
       }
     }
 
-    toast({
-      title: editing
-        ? "Member updated"
-        : form.is_waiting
-        ? "Added to waiting list"
-        : "Member added",
-    });
+    toast({ title: editing ? "Member updated" : "Member added" });
     setSaving(false);
     onOpenChange(false);
     await onSaved();
@@ -953,33 +971,6 @@ function MemberFormDialog({ open, onOpenChange, editing, plans, staff, gymId, on
         </DialogHeader>
 
         <div className="grid gap-5 py-2">
-          {!editing && (
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setForm((f) => ({ ...f, is_waiting: false, status: "active" }))}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                  !form.is_waiting
-                    ? "bg-primary/10 border-primary/30 text-primary"
-                    : "border-sidebar-border text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Active Member
-              </button>
-              <button
-                type="button"
-                onClick={() => setForm((f) => ({ ...f, is_waiting: true, plan_id: "" }))}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                  form.is_waiting
-                    ? "bg-primary/10 border-primary/30 text-primary"
-                    : "border-sidebar-border text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Waiting List
-              </button>
-            </div>
-          )}
-
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Personal Info</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -993,7 +984,7 @@ function MemberFormDialog({ open, onOpenChange, editing, plans, staff, gymId, on
                   required
                 />
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 sm:col-span-2">
                 <Label>Phone <span className="text-muted-foreground text-xs">(03xx-xxxxxxx)</span></Label>
                 <ValidatedInput
                   placeholder="03001234567"
@@ -1002,6 +993,45 @@ function MemberFormDialog({ open, onOpenChange, editing, plans, staff, gymId, on
                   validator={validatePakPhone}
                   inputMode="tel"
                 />
+                {phoneMatch && (
+                  <div className="mt-2 p-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.06] space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <div className="flex items-start gap-2.5">
+                      <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-amber-200">
+                          {phoneMatch.full_name} already exists with this phone
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {phoneMatch.plan_id ? "Active member · " : ""}
+                          {phoneMatch.status === "expired" ? "Expired · " : ""}
+                          Joined {formatDate(phoneMatch.join_date)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2 pl-6">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-8 gap-1.5"
+                        onClick={() => onOpenExisting(phoneMatch)}
+                      >
+                        <Edit2 className="w-3 h-3" /> Open existing
+                      </Button>
+                      <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-sidebar-border bg-card hover:bg-white/5 cursor-pointer transition-colors text-xs">
+                        <input
+                          type="checkbox"
+                          checked={allowDuplicate}
+                          onChange={(e) => setAllowDuplicate(e.target.checked)}
+                          className="w-3.5 h-3.5 rounded accent-rose-500"
+                        />
+                        <span className={allowDuplicate ? "text-rose-300 font-medium" : "text-muted-foreground"}>
+                          Add anyway
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Email</Label>
@@ -1052,12 +1082,11 @@ function MemberFormDialog({ open, onOpenChange, editing, plans, staff, gymId, on
             </div>
           </div>
 
-          {!form.is_waiting && (
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Membership</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label>Membership Plan</Label>
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Membership</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Membership Plan</Label>
                   <Select value={form.plan_id} onValueChange={handlePlanChange}>
                     <SelectTrigger><SelectValue placeholder="Select plan" /></SelectTrigger>
                     <SelectContent>
@@ -1161,7 +1190,6 @@ function MemberFormDialog({ open, onOpenChange, editing, plans, staff, gymId, on
                 </div>
               </div>
             </div>
-          )}
 
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Emergency &amp; Health</p>
@@ -1195,7 +1223,7 @@ function MemberFormDialog({ open, onOpenChange, editing, plans, staff, gymId, on
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleSave} disabled={saving || !form.full_name}>
-            {saving ? "Saving…" : editing ? "Update Member" : form.is_waiting ? "Add to Waiting List" : "Add Member"}
+            {saving ? "Saving…" : editing ? "Update Member" : "Add Member"}
           </Button>
         </DialogFooter>
       </DialogContent>

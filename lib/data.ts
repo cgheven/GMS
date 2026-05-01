@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getMonthRange, formatDateInput } from "@/lib/utils";
 import type {
   Profile, Gym, Member, MembershipPlan, Payment, Issue, Announcement,
-  Expense, Bill, Staff, SalaryPayment, CheckIn, GymClass, Equipment,
+  Expense, Bill, Staff, SalaryPayment, CheckIn, GymClass,
   DashboardStats, DashboardMember, RevenueMonth, AgingBucket, TrainerStat,
   MemberGoal, GoalProgressEntry, BodyMetric, MetricSkip, Lead, LeadActivity,
 } from "@/types";
@@ -76,7 +76,7 @@ async function _fetchDashboard(gymId: string, gym: Gym | null) {
     supabase.from("pulse_check_ins").select("id").eq("gym_id", gymId).gte("checked_in_at", `${todayStr}T00:00:00`).lte("checked_in_at", `${todayStr}T23:59:59`),
     supabase.from("pulse_expenses").select("amount").eq("gym_id", gymId).gte("date", start).lte("date", end),
     supabase.from("pulse_salary_payments").select("total_amount").eq("gym_id", gymId).eq("for_month", currentMonthKey).eq("status", "paid"),
-    supabase.from("pulse_bills").select("id,gym_id,title,category,amount,due_date,paid_date,status,notes,created_at").eq("gym_id", gymId).neq("status", "paid").order("due_date").limit(5),
+    supabase.from("pulse_bills").select("id,gym_id,title,category,amount,due_date,paid_date,status,notes,condition,created_at").eq("gym_id", gymId).neq("status", "paid").order("due_date").limit(5),
     supabase.from("pulse_payments").select("total_amount").eq("gym_id", gymId).gte("payment_date", start).lte("payment_date", end).eq("status", "paid"),
     supabase.from("pulse_payments").select("for_period,total_amount,status,payment_date").eq("gym_id", gymId).gte("payment_date", ranges[0].start).lte("payment_date", ranges[5].end),
     supabase.from("pulse_expenses").select("amount,date").eq("gym_id", gymId).gte("date", ranges[0].start).lte("date", ranges[5].end),
@@ -278,7 +278,6 @@ async function _fetchMembers(gymId: string) {
   const all = (members ?? []) as Member[];
   return {
     active: all.filter((m) => m.status === "active"),
-    waiting: all.filter((m) => m.is_waiting),
     expired: all.filter((m) => m.status === "expired" || m.status === "cancelled"),
     plans: (plans ?? []) as MembershipPlan[],
     staff: (staff ?? []) as Pick<Staff, "id" | "full_name" | "role">[],
@@ -287,7 +286,7 @@ async function _fetchMembers(gymId: string) {
 
 export async function getMembers() {
   const ctx = await getAuthContext();
-  if (!ctx?.gymId) return { gymId: null, active: [], waiting: [], expired: [], plans: [], staff: [] };
+  if (!ctx?.gymId) return { gymId: null, active: [], expired: [], plans: [], staff: [] };
   const gymId = ctx.gymId;
   const data = await _fetchMembers(gymId);
   return { gymId, ...data };
@@ -577,14 +576,6 @@ export async function getStaffData() {
     { revalidate: 60, tags: [`staff-${gymId}`] }
   )();
   return { gymId, ...data };
-}
-
-export async function getEquipment() {
-  const ctx = await getAuthContext();
-  if (!ctx?.gymId) return { gymId: null, equipment: [] };
-  const { supabase, gymId } = ctx;
-  const { data } = await supabase.from("pulse_equipment").select("*").eq("gym_id", gymId).order("name");
-  return { gymId, equipment: (data as Equipment[]) ?? [] };
 }
 
 export async function getExpenses(monthFilter: string) {

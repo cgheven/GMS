@@ -1,11 +1,11 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Plus, Search, Edit2, Trash2, UserCog, Wallet,
   CheckCircle2, Clock, Users, TrendingDown, Star,
-  KeyRound, UserX,
+  KeyRound, UserX, ArrowRightLeft,
 } from "lucide-react";
-import { createTrainerLogin, removeTrainerLogin } from "@/app/actions/trainer";
+import { createTrainerLogin, removeTrainerLogin, transferTrainerClients } from "@/app/actions/trainer";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -126,6 +126,7 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
   const [loginForm, setLoginForm] = useState({ email: "", password: "", phone: "" });
   const [loginSaving, setLoginSaving] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<Staff | null>(null);
+  const [transferTarget, setTransferTarget] = useState<Staff | null>(null);
 
   async function handleCreateLogin() {
     if (!loginDialog || !loginForm.email || !loginForm.password) return;
@@ -453,6 +454,17 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
                       </div>
                       {/* Actions */}
                       <div className="flex gap-1 shrink-0">
+                        {isTrainer && visibleStaff.some((t) => t.id !== member.id && t.role === "trainer" && t.status === "active") && (
+                          <Button
+                            variant="ghost" size="sm"
+                            className="h-8 text-xs gap-1 text-amber-400 hover:text-amber-400 hover:bg-amber-500/10"
+                            onClick={() => setTransferTarget(member)}
+                            title="Transfer all clients to another trainer"
+                          >
+                            <ArrowRightLeft className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Transfer</span>
+                          </Button>
+                        )}
                         {isTrainer && (
                           member.user_id ? (
                             <Button
@@ -742,6 +754,15 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
         onCancel={() => setRemoveTarget(null)}
       />
 
+      {/* ── Transfer Clients Dialog ──────────────────────── */}
+      <TransferClientsDialog
+        source={transferTarget}
+        candidates={visibleStaff.filter((t) => t.role === "trainer" && t.status === "active" && t.id !== transferTarget?.id)}
+        gymId={gymId}
+        onClose={() => setTransferTarget(null)}
+        onTransferred={() => { setTransferTarget(null); reloadStaff(); }}
+      />
+
       {/* ── Mark Paid Dialog ─────────────────────────────── */}
       <Dialog open={!!payDialog} onOpenChange={(o) => !o && setPayDialog(null)}>
         <DialogContent className="sm:max-w-sm">
@@ -796,5 +817,155 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// ─── Transfer Clients Dialog ───────────────────────────────────────────────
+// Bulk-reassign all of a trainer's active clients (and optionally their active
+// goals) to another active trainer. Use case: a trainer resigns and the owner
+// needs the replacement to inherit the full roster with all history intact.
+
+interface TransferClientsDialogProps {
+  source: Staff | null;
+  candidates: Staff[];
+  gymId: string | null;
+  onClose: () => void;
+  onTransferred: () => void;
+}
+
+function TransferClientsDialog({ source, candidates, gymId, onClose, onTransferred }: TransferClientsDialogProps) {
+  const [destinationId, setDestinationId] = useState<string>("");
+  const [transferGoals, setTransferGoals] = useState(true);
+  const [activeCount, setActiveCount] = useState<number | null>(null);
+  const [activeGoals, setActiveGoals] = useState<number | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Load fresh active client + goal counts whenever the dialog opens for a new trainer.
+  useEffect(() => {
+    if (!source || !gymId) return;
+    setDestinationId("");
+    setTransferGoals(true);
+    setActiveCount(null);
+    setActiveGoals(null);
+
+    const supabase = createClient();
+    let cancelled = false;
+
+    (async () => {
+      const [{ count: memberCount }, { count: goalCount }] = await Promise.all([
+        supabase.from("pulse_members")
+          .select("id", { count: "exact", head: true })
+          .eq("gym_id", gymId)
+          .eq("assigned_trainer_id", source.id)
+          .eq("status", "active"),
+        supabase.from("pulse_member_goals")
+          .select("id", { count: "exact", head: true })
+          .eq("gym_id", gymId)
+          .eq("trainer_id", source.id)
+          .eq("status", "active"),
+      ]);
+      if (cancelled) return;
+      setActiveCount(memberCount ?? 0);
+      setActiveGoals(goalCount ?? 0);
+    })();
+
+    return () => { cancelled = true; };
+  }, [source, gymId]);
+
+  async function handleTransfer() {
+    if (!source || !destinationId) return;
+    setSubmitting(true);
+    const result = await transferTrainerClients(source.id, destinationId, transferGoals);
+    setSubmitting(false);
+
+    if (result.error) {
+      toast({ title: "Transfer failed", description: result.error, variant: "destructive" });
+      return;
+    }
+
+    const destName = candidates.find((c) => c.id === destinationId)?.full_name ?? "destination trainer";
+    const moved = result.transferredCount ?? 0;
+    const goalsMoved = result.goalsTransferred ?? 0;
+    toast({
+      title: moved === 0 ? "No clients to transfer" : `${moved} client${moved === 1 ? "" : "s"} moved to ${destName}`,
+      description: transferGoals && goalsMoved > 0 ? `${goalsMoved} active goal${goalsMoved === 1 ? "" : "s"} also transferred.` : undefined,
+    });
+    onTransferred();
+  }
+
+  const open = !!source;
+  const ready = activeCount !== null && activeGoals !== null;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && !submitting && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Transfer {source?.full_name}&apos;s clients</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.06] p-3 flex items-center gap-3">
+            <ArrowRightLeft className="w-4 h-4 text-amber-400 shrink-0" />
+            <div className="text-sm">
+              {!ready ? (
+                <span className="text-muted-foreground">Loading roster…</span>
+              ) : activeCount === 0 ? (
+                <span className="text-muted-foreground">
+                  {source?.full_name} has no active clients to transfer.
+                </span>
+              ) : (
+                <span>
+                  <span className="font-semibold text-amber-200">{activeCount}</span> active client{activeCount === 1 ? "" : "s"} will move to the trainer you pick. All history (goals, body metrics, payments) stays with each client.
+                </span>
+              )}
+            </div>
+          </div>
+
+          {candidates.length === 0 ? (
+            <p className="text-sm text-rose-400 px-1">
+              No other active trainer available. Add or activate another trainer first.
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              <Label>Move clients to *</Label>
+              <Select value={destinationId} onValueChange={setDestinationId} disabled={submitting || activeCount === 0}>
+                <SelectTrigger><SelectValue placeholder="Select destination trainer" /></SelectTrigger>
+                <SelectContent>
+                  {candidates.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.full_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {ready && activeGoals !== null && activeGoals > 0 && (
+            <label className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg border border-sidebar-border bg-card cursor-pointer hover:bg-white/5 transition-colors">
+              <input
+                type="checkbox"
+                checked={transferGoals}
+                onChange={(e) => setTransferGoals(e.target.checked)}
+                disabled={submitting}
+                className="mt-0.5 w-4 h-4 rounded accent-primary"
+              />
+              <div className="text-sm leading-tight">
+                <span className="font-medium text-foreground">Also transfer {activeGoals} active goal{activeGoals === 1 ? "" : "s"}</span>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Recommended. New trainer gets credit for goals achieved going forward. Past wins stay with {source?.full_name}.
+                </p>
+              </div>
+            </label>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button
+            onClick={handleTransfer}
+            disabled={submitting || !destinationId || activeCount === 0 || !ready || candidates.length === 0}
+          >
+            {submitting ? "Transferring…" : "Transfer"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
