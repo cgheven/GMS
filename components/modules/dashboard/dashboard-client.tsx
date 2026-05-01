@@ -259,7 +259,7 @@ export function DashboardClient({ data, leadsSummary }: Props) {
               <h2 className="text-sm font-semibold text-foreground">Collection Performance</h2>
               <span className="text-xs text-muted-foreground">— {new Date().toLocaleDateString("en-US", { month: "long" })}</span>
             </div>
-            <Link href="/staff" className="text-xs text-muted-foreground hover:text-foreground transition-colors">Manage →</Link>
+            <Link href="/trainers" className="text-xs text-muted-foreground hover:text-foreground transition-colors">Manage →</Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {trainerStats.map((t) => {

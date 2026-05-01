@@ -1,9 +1,9 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Plus, Users, Search, Edit2, Trash2,
   UserCheck, Clock, CalendarX,
-  Snowflake, AlertCircle,
+  Snowflake, AlertCircle, CheckCircle,
   ChevronLeft, ChevronRight, CheckCircle2, Wallet, CreditCard,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -16,7 +16,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { formatCurrency, formatDate, formatDateInput } from "@/lib/utils";
+import { formatCurrency, formatDate, formatDateInput, cn } from "@/lib/utils";
+import { validateFullName, validateCNIC, validatePakPhone, validateDOB, validateMoney, runValidators, type ValidationResult } from "@/lib/validation";
 import type { Member, MembershipPlan, MemberStatus, MemberGender, Staff, Payment, PaymentMethod, PaymentStatus } from "@/types";
 
 // ── Payment helpers ────────────────────────────────────────────────────────────
@@ -115,8 +116,6 @@ export function MembersClient({
   const [trainerFilter, setTrainerFilter] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null);
-  const [form, setForm] = useState(emptyForm);
-  const [saving, setSaving] = useState(false);
   const [deleteMember, setDeleteMember] = useState<Member | null>(null);
 
   // ── Collect tab state (lazy-loaded) ─────────────────────────────────────────
@@ -219,122 +218,12 @@ export function MembersClient({
 
   function openAdd() {
     setEditing(null);
-    setForm(emptyForm);
     setDialogOpen(true);
   }
 
   function openEdit(m: Member) {
     setEditing(m);
-    setForm({
-      full_name: m.full_name,
-      phone: m.phone ?? "",
-      email: m.email ?? "",
-      cnic: m.cnic ?? "",
-      gender: m.gender ?? "male",
-      date_of_birth: m.date_of_birth ?? "",
-      address: m.address ?? "",
-      member_number: m.member_number ?? "",
-      plan_id: m.plan_id ?? "",
-      assigned_trainer_id: m.assigned_trainer_id ?? "",
-      join_date: m.join_date,
-      plan_start_date: m.plan_start_date ?? "",
-      plan_expiry_date: m.plan_expiry_date ?? "",
-      admission_fee: m.admission_fee > 0 ? m.admission_fee.toString() : "",
-      admission_fee_paid: false,
-      monthly_fee: m.monthly_fee.toString(),
-      outstanding_balance: m.outstanding_balance.toString(),
-      emergency_contact: m.emergency_contact ?? "",
-      emergency_phone: m.emergency_phone ?? "",
-      medical_notes: m.medical_notes ?? "",
-      notes: m.notes ?? "",
-      status: m.status,
-      is_waiting: m.is_waiting,
-    });
     setDialogOpen(true);
-  }
-
-  async function handleSave() {
-    if (!gymId || !form.full_name) return;
-    setSaving(true);
-    const supabase = createClient();
-
-    const admissionFee = parseFloat(form.admission_fee) || 0;
-    const admissionPaid = !editing && admissionFee > 0 && form.admission_fee_paid;
-    const admissionUnpaid = !editing && admissionFee > 0 && !form.admission_fee_paid;
-
-    const payload = {
-      gym_id: gymId,
-      full_name: form.full_name,
-      phone: form.phone || null,
-      email: form.email || null,
-      cnic: form.cnic || null,
-      gender: form.gender || null,
-      date_of_birth: form.date_of_birth || null,
-      address: form.address || null,
-      ...(editing ? { member_number: form.member_number || null } : {}),
-      plan_id: form.plan_id || null,
-      assigned_trainer_id: form.assigned_trainer_id || null,
-      join_date: form.join_date || formatDateInput(new Date()),
-      plan_start_date: form.plan_start_date || null,
-      plan_expiry_date: form.plan_expiry_date || null,
-      admission_fee: admissionFee,
-      monthly_fee: parseFloat(form.monthly_fee) || 0,
-      outstanding_balance: (parseFloat(form.outstanding_balance) || 0) + (admissionUnpaid ? admissionFee : 0),
-      emergency_contact: form.emergency_contact || null,
-      emergency_phone: form.emergency_phone || null,
-      medical_notes: form.medical_notes || null,
-      notes: form.notes || null,
-      status: form.is_waiting ? "active" : form.status,
-      is_waiting: form.is_waiting,
-    };
-
-    if (editing) {
-      const { error } = await supabase.from("pulse_members").update(payload).eq("id", editing.id);
-      if (error) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
-        setSaving(false);
-        return;
-      }
-    } else {
-      const { data: newMember, error } = await supabase
-        .from("pulse_members")
-        .insert(payload)
-        .select("id")
-        .single();
-      if (error || !newMember) {
-        toast({ title: "Error", description: error?.message ?? "Unknown error", variant: "destructive" });
-        setSaving(false);
-        return;
-      }
-      // Auto-create paid admission fee payment record
-      if (admissionPaid) {
-        await supabase.from("pulse_payments").insert({
-          gym_id: gymId,
-          member_id: newMember.id,
-          plan_id: form.plan_id || null,
-          amount: admissionFee,
-          discount: 0,
-          late_fee: 0,
-          total_amount: admissionFee,
-          payment_method: "cash",
-          payment_date: form.join_date || formatDateInput(new Date()),
-          for_period: "admission",
-          status: "paid",
-          notes: "Admission fee",
-        });
-      }
-    }
-
-    toast({
-      title: editing
-        ? "Member updated"
-        : form.is_waiting
-        ? "Added to waiting list"
-        : "Member added",
-    });
-    setDialogOpen(false);
-    await reload();
-    setSaving(false);
   }
 
   async function handleDelete(m: Member) {
@@ -383,16 +272,6 @@ export function MembersClient({
   }, [active, waiting, expired, staff]);
 
   // Auto-fill monthly fee when plan is selected
-  function handlePlanChange(planId: string) {
-    const plan = planMap[planId];
-    setForm((f) => ({
-      ...f,
-      plan_id: planId,
-      monthly_fee: plan ? plan.price.toString() : f.monthly_fee,
-      admission_fee: plan?.admission_fee > 0 ? plan.admission_fee.toString() : f.admission_fee,
-    }));
-  }
-
   const stats = {
     active: active.length,
     waiting: waiting.length,
@@ -840,311 +719,486 @@ export function MembersClient({
         onCancel={() => setDeleteMember(null)}
       />
 
-      {/* Add / Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Edit Member" : "Add Member"}</DialogTitle>
-          </DialogHeader>
+      {/* Add / Edit Dialog — isolated component so typing doesn't re-render the table */}
+      <MemberFormDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        editing={editing}
+        plans={plans}
+        staff={staff}
+        gymId={gymId}
+        onSaved={reload}
+      />
+    </div>
+  );
+}
 
-          <div className="grid gap-5 py-2">
-            {/* Active vs Waiting toggle (new member only) */}
-            {!editing && (
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setForm({ ...form, is_waiting: false, status: "active" })}
-                  className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                    !form.is_waiting
-                      ? "bg-primary/10 border-primary/30 text-primary"
-                      : "border-sidebar-border text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Active Member
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setForm({ ...form, is_waiting: true, plan_id: "" })}
-                  className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                    form.is_waiting
-                      ? "bg-primary/10 border-primary/30 text-primary"
-                      : "border-sidebar-border text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Waiting List
-                </button>
-              </div>
-            )}
+// ─── Validated input ────────────────────────────────────────────────────────
+// Drop-in <Input> with field-level validation feedback.
+// - Stays silent until the user blurs (touched) — no yelling while mid-typing.
+// - After blur: live re-validates on each keystroke so errors clear as the user fixes them.
+// - Shows red border + inline error message + checkmark when valid (after touch).
 
-            {/* Personal Info */}
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Personal Info</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Full Name *</Label>
-                  <Input
-                    placeholder="Ahmed Khan"
-                    value={form.full_name}
-                    onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Phone</Label>
-                  <Input
-                    placeholder="+92 300 0000000"
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Email</Label>
-                  <Input
-                    type="email"
-                    placeholder="member@email.com"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>CNIC <span className="text-muted-foreground text-xs">(XXXXX-XXXXXXX-X)</span></Label>
-                  <Input
-                    placeholder="00000-0000000-0"
-                    value={form.cnic}
-                    onChange={(e) => setForm({ ...form, cnic: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Gender</Label>
-                  <Select value={form.gender} onValueChange={(v) => setForm({ ...form, gender: v as MemberGender })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="male">Male</SelectItem>
-                      <SelectItem value="female">Female</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Date of Birth</Label>
-                  <Input
-                    type="date"
-                    value={form.date_of_birth}
-                    onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })}
-                  />
-                </div>
-                {editing && form.member_number && (
-                  <div className="space-y-1.5">
-                    <Label>Member ID</Label>
-                    <div className="h-10 px-3 flex items-center rounded-lg border border-sidebar-border bg-muted/30 font-mono text-sm text-muted-foreground">
-                      {form.member_number}
-                    </div>
-                  </div>
-                )}
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Address</Label>
-                  <Input
-                    placeholder="Street, area, city"
-                    value={form.address}
-                    onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  />
-                </div>
-              </div>
+interface ValidatedInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange"> {
+  value: string;
+  onChange: (v: string) => void;
+  validator?: (v: string) => ValidationResult;
+  required?: boolean;
+}
+
+function ValidatedInput({ value, onChange, validator, required, className, ...rest }: ValidatedInputProps) {
+  const [touched, setTouched] = useState(false);
+  const result = validator ? validator(value) : null;
+  const isInvalid = touched && result !== null && !result.ok;
+  const errorMessage = isInvalid && result && !result.ok ? result.message : null;
+  const isValid = touched && result?.ok && value.trim().length > 0;
+
+  return (
+    <>
+      <div className="relative">
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={() => setTouched(true)}
+          aria-invalid={isInvalid}
+          required={required}
+          className={cn(
+            isInvalid && "border-rose-500/60 focus-visible:ring-rose-500/30 pr-9",
+            isValid && "border-emerald-500/40 pr-9",
+            className,
+          )}
+          {...rest}
+        />
+        {isInvalid && (
+          <AlertCircle className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-rose-400 pointer-events-none" />
+        )}
+        {isValid && (
+          <CheckCircle className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-400 pointer-events-none" />
+        )}
+      </div>
+      {errorMessage && (
+        <p className="text-xs text-rose-400 flex items-center gap-1 mt-1 animate-in fade-in slide-in-from-top-1 duration-150">
+          <AlertCircle className="w-3 h-3 shrink-0" /> {errorMessage}
+        </p>
+      )}
+    </>
+  );
+}
+
+// ─── Isolated form dialog ────────────────────────────────────────────────────
+// Owns its own state so typing doesn't re-render the parent's tables.
+
+interface MemberFormDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  editing: Member | null;
+  plans: MembershipPlan[];
+  staff: Pick<Staff, "id" | "full_name" | "role">[];
+  gymId: string | null;
+  onSaved: () => void | Promise<void>;
+}
+
+function MemberFormDialog({ open, onOpenChange, editing, plans, staff, gymId, onSaved }: MemberFormDialogProps) {
+  const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
+
+  const planMap = useMemo(() => Object.fromEntries(plans.map((p) => [p.id, p])), [plans]);
+
+  // Reset form whenever the dialog opens (or editing target changes).
+  useEffect(() => {
+    if (!open) return;
+    if (editing) {
+      setForm({
+        full_name: editing.full_name,
+        phone: editing.phone ?? "",
+        email: editing.email ?? "",
+        cnic: editing.cnic ?? "",
+        gender: editing.gender ?? "male",
+        date_of_birth: editing.date_of_birth ?? "",
+        address: editing.address ?? "",
+        member_number: editing.member_number ?? "",
+        plan_id: editing.plan_id ?? "",
+        assigned_trainer_id: editing.assigned_trainer_id ?? "",
+        join_date: editing.join_date,
+        plan_start_date: editing.plan_start_date ?? "",
+        plan_expiry_date: editing.plan_expiry_date ?? "",
+        admission_fee: editing.admission_fee > 0 ? editing.admission_fee.toString() : "",
+        admission_fee_paid: false,
+        monthly_fee: editing.monthly_fee.toString(),
+        outstanding_balance: editing.outstanding_balance.toString(),
+        emergency_contact: editing.emergency_contact ?? "",
+        emergency_phone: editing.emergency_phone ?? "",
+        medical_notes: editing.medical_notes ?? "",
+        notes: editing.notes ?? "",
+        status: editing.status,
+        is_waiting: editing.is_waiting,
+      });
+    } else {
+      setForm(emptyForm);
+    }
+  }, [open, editing]);
+
+  function handlePlanChange(planId: string) {
+    const plan = planMap[planId];
+    setForm((f) => ({
+      ...f,
+      plan_id: planId,
+      monthly_fee: plan ? plan.price.toString() : f.monthly_fee,
+      admission_fee: plan?.admission_fee > 0 ? plan.admission_fee.toString() : f.admission_fee,
+    }));
+  }
+
+  async function handleSave() {
+    if (!gymId) return;
+
+    const check = runValidators(
+      validateFullName(form.full_name),
+      validateCNIC(form.cnic),
+      validatePakPhone(form.phone),
+      validatePakPhone(form.emergency_phone),
+      validateDOB(form.date_of_birth),
+      validateMoney(form.monthly_fee, "Monthly fee"),
+    );
+    if (!check.ok) {
+      toast({ title: "Check the form", description: check.message, variant: "destructive" });
+      return;
+    }
+
+    setSaving(true);
+    const supabase = createClient();
+
+    const admissionFee = parseFloat(form.admission_fee) || 0;
+    const admissionPaid = !editing && admissionFee > 0 && form.admission_fee_paid;
+    const admissionUnpaid = !editing && admissionFee > 0 && !form.admission_fee_paid;
+
+    const payload = {
+      gym_id: gymId,
+      full_name: form.full_name,
+      phone: form.phone || null,
+      email: form.email || null,
+      cnic: form.cnic || null,
+      gender: form.gender || null,
+      date_of_birth: form.date_of_birth || null,
+      address: form.address || null,
+      ...(editing ? { member_number: form.member_number || null } : {}),
+      plan_id: form.plan_id || null,
+      assigned_trainer_id: form.assigned_trainer_id || null,
+      join_date: form.join_date || formatDateInput(new Date()),
+      plan_start_date: form.plan_start_date || null,
+      plan_expiry_date: form.plan_expiry_date || null,
+      admission_fee: admissionFee,
+      monthly_fee: parseFloat(form.monthly_fee) || 0,
+      outstanding_balance: (parseFloat(form.outstanding_balance) || 0) + (admissionUnpaid ? admissionFee : 0),
+      emergency_contact: form.emergency_contact || null,
+      emergency_phone: form.emergency_phone || null,
+      medical_notes: form.medical_notes || null,
+      notes: form.notes || null,
+      status: form.is_waiting ? "active" : form.status,
+      is_waiting: form.is_waiting,
+    };
+
+    if (editing) {
+      const { error } = await supabase.from("pulse_members").update(payload).eq("id", editing.id);
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+        setSaving(false);
+        return;
+      }
+    } else {
+      const { data: newMember, error } = await supabase
+        .from("pulse_members")
+        .insert(payload)
+        .select("id")
+        .single();
+      if (error || !newMember) {
+        toast({ title: "Error", description: error?.message ?? "Unknown error", variant: "destructive" });
+        setSaving(false);
+        return;
+      }
+      if (admissionPaid) {
+        await supabase.from("pulse_payments").insert({
+          gym_id: gymId,
+          member_id: newMember.id,
+          plan_id: form.plan_id || null,
+          amount: admissionFee,
+          discount: 0,
+          late_fee: 0,
+          total_amount: admissionFee,
+          payment_method: "cash",
+          payment_date: form.join_date || formatDateInput(new Date()),
+          for_period: "admission",
+          status: "paid",
+          notes: "Admission fee",
+        });
+      }
+    }
+
+    toast({
+      title: editing
+        ? "Member updated"
+        : form.is_waiting
+        ? "Added to waiting list"
+        : "Member added",
+    });
+    setSaving(false);
+    onOpenChange(false);
+    await onSaved();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{editing ? "Edit Member" : "Add Member"}</DialogTitle>
+        </DialogHeader>
+
+        <div className="grid gap-5 py-2">
+          {!editing && (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, is_waiting: false, status: "active" }))}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                  !form.is_waiting
+                    ? "bg-primary/10 border-primary/30 text-primary"
+                    : "border-sidebar-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Active Member
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, is_waiting: true, plan_id: "" }))}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                  form.is_waiting
+                    ? "bg-primary/10 border-primary/30 text-primary"
+                    : "border-sidebar-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Waiting List
+              </button>
             </div>
+          )}
 
-            {/* Membership */}
-            {!form.is_waiting && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Membership</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label>Membership Plan</Label>
-                    <Select value={form.plan_id} onValueChange={handlePlanChange}>
-                      <SelectTrigger><SelectValue placeholder="Select plan" /></SelectTrigger>
-                      <SelectContent>
-                        {plans.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            <span className="flex items-center gap-2">
-                              <span
-                                className="inline-block w-2 h-2 rounded-full shrink-0"
-                                style={{ backgroundColor: p.color }}
-                              />
-                              {p.name} · {DURATION_LABELS[p.duration_type] ?? p.duration_type} · {formatCurrency(p.price)}
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Assigned Trainer</Label>
-                    <Select
-                      value={form.assigned_trainer_id || "none"}
-                      onValueChange={(v) => setForm({ ...form, assigned_trainer_id: v === "none" ? "" : v })}
-                    >
-                      <SelectTrigger><SelectValue placeholder="No trainer" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No trainer</SelectItem>
-                        {staff.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>{s.full_name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Join Date *</Label>
-                    <Input
-                      type="date"
-                      value={form.join_date}
-                      onChange={(e) => setForm({ ...form, join_date: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Plan Start Date</Label>
-                    <Input
-                      type="date"
-                      value={form.plan_start_date}
-                      onChange={(e) => setForm({ ...form, plan_start_date: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Plan Expiry Date</Label>
-                    <Input
-                      type="date"
-                      value={form.plan_expiry_date}
-                      onChange={(e) => setForm({ ...form, plan_expiry_date: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Status</Label>
-                    <Select
-                      value={form.status}
-                      onValueChange={(v) => setForm({ ...form, status: v as MemberStatus })}
-                    >
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="frozen">Frozen</SelectItem>
-                        <SelectItem value="expired">Expired</SelectItem>
-                        <SelectItem value="cancelled">Cancelled</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Monthly Fee (PKR)</Label>
-                    <Input
-                      type="number"
-                      placeholder="0"
-                      value={form.monthly_fee}
-                      onChange={(e) => setForm({ ...form, monthly_fee: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Admission Fee (PKR)</Label>
-                    <Input
-                      type="number"
-                      placeholder="0"
-                      value={form.admission_fee}
-                      onChange={(e) => setForm({ ...form, admission_fee: e.target.value })}
-                    />
-                  </div>
-                  {!editing && parseFloat(form.admission_fee) > 0 && (
-                    <div className="sm:col-span-2 space-y-1.5">
-                      <Label>Admission Fee Status</Label>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setForm({ ...form, admission_fee_paid: true })}
-                          className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                            form.admission_fee_paid
-                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                              : "border-sidebar-border text-muted-foreground hover:text-foreground"
-                          }`}
-                        >
-                          Paid Now
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setForm({ ...form, admission_fee_paid: false })}
-                          className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                            !form.admission_fee_paid
-                              ? "bg-rose-500/10 border-rose-500/30 text-rose-400"
-                              : "border-sidebar-border text-muted-foreground hover:text-foreground"
-                          }`}
-                        >
-                          Pending
-                        </button>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {form.admission_fee_paid
-                          ? "A paid payment record will be created automatically."
-                          : "Amount will be added to outstanding balance."}
-                      </p>
-                    </div>
-                  )}
-                  <div className="space-y-1.5">
-                    <Label>Outstanding Balance (PKR)</Label>
-                    <Input
-                      type="number"
-                      placeholder="0"
-                      value={form.outstanding_balance}
-                      onChange={(e) => setForm({ ...form, outstanding_balance: e.target.value })}
-                    />
-                  </div>
-                </div>
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Personal Info</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Full Name *</Label>
+                <ValidatedInput
+                  placeholder="Ahmed Khan"
+                  value={form.full_name}
+                  onChange={(v) => setForm((f) => ({ ...f, full_name: v }))}
+                  validator={validateFullName}
+                  required
+                />
               </div>
-            )}
-
-            {/* Emergency & Medical */}
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Emergency &amp; Health</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Phone <span className="text-muted-foreground text-xs">(03xx-xxxxxxx)</span></Label>
+                <ValidatedInput
+                  placeholder="03001234567"
+                  value={form.phone}
+                  onChange={(v) => setForm((f) => ({ ...f, phone: v }))}
+                  validator={validatePakPhone}
+                  inputMode="tel"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Email</Label>
+                <Input type="email" placeholder="member@email.com" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>CNIC <span className="text-muted-foreground text-xs">(XXXXX-XXXXXXX-X)</span></Label>
+                <ValidatedInput
+                  placeholder="00000-0000000-0"
+                  value={form.cnic}
+                  onChange={(v) => setForm((f) => ({ ...f, cnic: v }))}
+                  validator={validateCNIC}
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Gender</Label>
+                <Select value={form.gender} onValueChange={(v) => setForm((f) => ({ ...f, gender: v as MemberGender }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Date of Birth</Label>
+                <ValidatedInput
+                  type="date"
+                  value={form.date_of_birth}
+                  onChange={(v) => setForm((f) => ({ ...f, date_of_birth: v }))}
+                  validator={validateDOB}
+                />
+              </div>
+              {editing && form.member_number && (
                 <div className="space-y-1.5">
-                  <Label>Emergency Contact</Label>
-                  <Input
-                    placeholder="Contact name"
-                    value={form.emergency_contact}
-                    onChange={(e) => setForm({ ...form, emergency_contact: e.target.value })}
-                  />
+                  <Label>Member ID</Label>
+                  <div className="h-10 px-3 flex items-center rounded-lg border border-sidebar-border bg-muted/30 font-mono text-sm text-muted-foreground">
+                    {form.member_number}
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Emergency Phone</Label>
-                  <Input
-                    placeholder="+92 300 0000000"
-                    value={form.emergency_phone}
-                    onChange={(e) => setForm({ ...form, emergency_phone: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Medical Notes</Label>
-                  <Input
-                    placeholder="Any medical conditions, allergies, injuries…"
-                    value={form.medical_notes}
-                    onChange={(e) => setForm({ ...form, medical_notes: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Notes</Label>
-                  <Input
-                    placeholder="Additional notes"
-                    value={form.notes}
-                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  />
-                </div>
+              )}
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Address</Label>
+                <Input placeholder="Street, area, city" value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} />
               </div>
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button
-              onClick={handleSave}
-              disabled={saving || !form.full_name}
-            >
-              {saving ? "Saving…" : editing ? "Update Member" : form.is_waiting ? "Add to Waiting List" : "Add Member"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+          {!form.is_waiting && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Membership</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Membership Plan</Label>
+                  <Select value={form.plan_id} onValueChange={handlePlanChange}>
+                    <SelectTrigger><SelectValue placeholder="Select plan" /></SelectTrigger>
+                    <SelectContent>
+                      {plans.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          <span className="flex items-center gap-2">
+                            <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
+                            {p.name} · {DURATION_LABELS[p.duration_type] ?? p.duration_type} · {formatCurrency(p.price)}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Assigned Trainer</Label>
+                  <Select value={form.assigned_trainer_id || "none"} onValueChange={(v) => setForm((f) => ({ ...f, assigned_trainer_id: v === "none" ? "" : v }))}>
+                    <SelectTrigger><SelectValue placeholder="No trainer" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No trainer</SelectItem>
+                      {staff.map((s) => (<SelectItem key={s.id} value={s.id}>{s.full_name}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Join Date *</Label>
+                  <Input type="date" value={form.join_date} onChange={(e) => setForm((f) => ({ ...f, join_date: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Plan Start Date</Label>
+                  <Input type="date" value={form.plan_start_date} onChange={(e) => setForm((f) => ({ ...f, plan_start_date: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Plan Expiry Date</Label>
+                  <Input type="date" value={form.plan_expiry_date} onChange={(e) => setForm((f) => ({ ...f, plan_expiry_date: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Status</Label>
+                  <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v as MemberStatus }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="frozen">Frozen</SelectItem>
+                      <SelectItem value="expired">Expired</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Monthly Fee (PKR) *</Label>
+                  <ValidatedInput
+                    type="number"
+                    placeholder="0"
+                    value={form.monthly_fee}
+                    onChange={(v) => setForm((f) => ({ ...f, monthly_fee: v }))}
+                    validator={(v) => validateMoney(v, "Monthly fee")}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Admission Fee (PKR)</Label>
+                  <Input type="number" placeholder="0" value={form.admission_fee} onChange={(e) => setForm((f) => ({ ...f, admission_fee: e.target.value }))} />
+                </div>
+                {!editing && parseFloat(form.admission_fee) > 0 && (
+                  <div className="sm:col-span-2 space-y-1.5">
+                    <Label>Admission Fee Status</Label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, admission_fee_paid: true }))}
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                          form.admission_fee_paid
+                            ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                            : "border-sidebar-border text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        Paid Now
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, admission_fee_paid: false }))}
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                          !form.admission_fee_paid
+                            ? "bg-rose-500/10 border-rose-500/30 text-rose-400"
+                            : "border-sidebar-border text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        Pending
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {form.admission_fee_paid
+                        ? "A paid payment record will be created automatically."
+                        : "Amount will be added to outstanding balance."}
+                    </p>
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <Label>Outstanding Balance (PKR)</Label>
+                  <Input type="number" placeholder="0" value={form.outstanding_balance} onChange={(e) => setForm((f) => ({ ...f, outstanding_balance: e.target.value }))} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Emergency &amp; Health</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Emergency Contact</Label>
+                <Input placeholder="Contact name" value={form.emergency_contact} onChange={(e) => setForm((f) => ({ ...f, emergency_contact: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Emergency Phone</Label>
+                <ValidatedInput
+                  placeholder="03001234567"
+                  value={form.emergency_phone}
+                  onChange={(v) => setForm((f) => ({ ...f, emergency_phone: v }))}
+                  validator={validatePakPhone}
+                  inputMode="tel"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Medical Notes</Label>
+                <Input placeholder="Any medical conditions, allergies, injuries…" value={form.medical_notes} onChange={(e) => setForm((f) => ({ ...f, medical_notes: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Notes</Label>
+                <Input placeholder="Additional notes" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving || !form.full_name}>
+            {saving ? "Saving…" : editing ? "Update Member" : form.is_waiting ? "Add to Waiting List" : "Add Member"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

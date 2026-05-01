@@ -15,6 +15,7 @@ import { toast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate, formatDateInput } from "@/lib/utils";
 import { useGymContext } from "@/contexts/gym-context";
 import { buildReminderMessage, whatsappUrl } from "@/lib/whatsapp-reminder";
+import { validateMoney } from "@/lib/validation";
 import type { Payment, PaymentMethod, PaymentStatus, Member, MembershipPlan } from "@/types";
 
 type MemberRow = Pick<Member,
@@ -297,8 +298,23 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
   }
 
   async function handleAddPayment() {
-    if (!gymId || !addForm.member_id || !addForm.total_amount) {
-      toast({ title: "Member and amount are required", variant: "destructive" });
+    if (!gymId || !addForm.member_id) {
+      toast({ title: "Select a member", variant: "destructive" });
+      return;
+    }
+    const amountCheck = validateMoney(addForm.total_amount, "Amount");
+    if (!amountCheck.ok) {
+      toast({ title: "Check the form", description: amountCheck.message, variant: "destructive" });
+      return;
+    }
+    const discountCheck = validateMoney(addForm.discount || "0", "Discount");
+    if (!discountCheck.ok) {
+      toast({ title: "Check the form", description: discountCheck.message, variant: "destructive" });
+      return;
+    }
+    const lateCheck = validateMoney(addForm.late_fee || "0", "Late fee");
+    if (!lateCheck.ok) {
+      toast({ title: "Check the form", description: lateCheck.message, variant: "destructive" });
       return;
     }
     setSaving(true);

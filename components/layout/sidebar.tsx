@@ -30,13 +30,14 @@ const navGroups = [
   {
     label: "Training",
     items: [
-      { href: "/classes", label: "Classes",  icon: CalendarDays },
-      { href: "/staff",   label: "Trainers", icon: Dumbbell },
+      { href: "/classes",  label: "Classes",  icon: CalendarDays },
+      { href: "/trainers", label: "Trainers", icon: Dumbbell },
     ],
   },
   {
     label: "Operations",
     items: [
+      { href: "/staff",         label: "Staff",          icon: UserCog },
       { href: "/expenses",      label: "Expenses",      icon: Receipt },
       { href: "/bills",         label: "Bills",          icon: FileText },
       { href: "/equipment",     label: "Equipment",      icon: Wrench },

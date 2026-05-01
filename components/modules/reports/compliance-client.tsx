@@ -2,11 +2,13 @@
 import { useMemo, useState } from "react";
 import {
   FileText, Search, Printer, Save, Calendar as CalendarIcon, Check, Download,
+  ChevronDown, FileSpreadsheet, FileImage,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate, formatDateInput } from "@/lib/utils";
 import { saveComplianceSettings, logComplianceReport } from "@/app/actions/compliance";
@@ -221,6 +223,196 @@ export function ComplianceClient({ gym, members, payments, trainers }: Props) {
     window.print();
   }
 
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  async function downloadPDF() {
+    if (reportRows.length === 0) {
+      toast({ title: "Select at least one member", variant: "destructive" });
+      return;
+    }
+    setGeneratingPdf(true);
+    try {
+      const [{ default: jsPDF }, autoTableModule] = await Promise.all([
+        import("jspdf"),
+        import("jspdf-autotable"),
+      ]);
+      const autoTable = autoTableModule.default;
+
+      const showTax = taxRate > 0;
+      const rate = taxRate / 100;
+      const taxAmount = showTax
+        ? (taxInclusive ? totalRevenue - totalRevenue / (1 + rate) : totalRevenue * rate)
+        : 0;
+      const subtotal   = showTax ? (taxInclusive ? totalRevenue - taxAmount : totalRevenue) : totalRevenue;
+      const grandTotal = showTax ? (taxInclusive ? totalRevenue : totalRevenue + taxAmount) : totalRevenue;
+
+      const fmtCnic = (raw: string | null | undefined): string => {
+        if (!raw) return "";
+        const digits = raw.replace(/\D/g, "");
+        if (digits.length === 13) return `${digits.slice(0,5)}-${digits.slice(5,12)}-${digits.slice(12)}`;
+        return raw;
+      };
+      const fmtMoney = (n: number) => `Rs ${n.toLocaleString("en-PK", { maximumFractionDigits: 2 })}`;
+
+      const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const margin = 40;
+      let y = margin;
+
+      // ── Header
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(18);
+      pdf.text((gym?.name ?? "Gym").toUpperCase(), margin, y);
+      y += 18;
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(9);
+      pdf.setTextColor(80);
+      const addrLine = [gym?.address, gym?.city].filter(Boolean).join(", ");
+      if (addrLine) { pdf.text(addrLine, margin, y); y += 12; }
+      if (gym?.phone) { pdf.text(`Phone: ${gym.phone}`, margin, y); y += 12; }
+      if (ntn)        { pdf.text(`NTN: ${ntn}`, margin, y); y += 12; }
+
+      pdf.setDrawColor(0);
+      pdf.setLineWidth(1.5);
+      pdf.line(margin, y + 4, pageW - margin, y + 4);
+      y += 16;
+
+      // Title + period
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(13);
+      pdf.setTextColor(0);
+      pdf.text(headerTitle, margin, y);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(10);
+      // Helvetica (WinAnsi) doesn't include U+2192 — swap → for ASCII dash
+      const periodText = formatPeriod(startDate, endDate).replace(/\s*→\s*/g, " - ");
+      const periodW = pdf.getTextWidth(periodText);
+      pdf.text(periodText, pageW - margin - periodW, y);
+      y += 14;
+
+      if (notes) {
+        pdf.setFont("helvetica", "italic");
+        pdf.setFontSize(9);
+        pdf.setTextColor(80);
+        const noteLines = pdf.splitTextToSize(notes, pageW - margin * 2);
+        pdf.text(noteLines, margin, y);
+        y += noteLines.length * 11 + 4;
+      }
+
+      // ── Member table
+      const head: string[] = ["#"];
+      if (selectedFields.has("name"))        head.push("Name");
+      if (selectedFields.has("cnic"))        head.push("CNIC");
+      if (selectedFields.has("phone"))       head.push("Phone");
+      if (selectedFields.has("plan"))        head.push("Plan");
+      if (selectedFields.has("monthly_fee")) head.push("Monthly Fee");
+      if (selectedFields.has("total_paid"))  head.push("Total Paid");
+      if (selectedFields.has("join_date"))   head.push("Join Date");
+
+      const body = reportRows.map((r, i) => {
+        const cols: (string | number)[] = [i + 1];
+        if (selectedFields.has("name"))        cols.push(r.full_name);
+        if (selectedFields.has("cnic"))        cols.push(fmtCnic(r.cnic));
+        if (selectedFields.has("phone"))       cols.push(r.phone ?? "");
+        if (selectedFields.has("plan"))        cols.push(r.plan?.name ?? "");
+        if (selectedFields.has("monthly_fee")) cols.push(fmtMoney(r.monthly_fee));
+        if (selectedFields.has("total_paid"))  cols.push(fmtMoney(r.total_paid));
+        if (selectedFields.has("join_date"))   cols.push(r.join_date ? formatDate(r.join_date) : "");
+        return cols;
+      });
+
+      autoTable(pdf, {
+        head: [head],
+        body,
+        startY: y,
+        margin: { left: margin, right: margin, bottom: 40 },
+        styles: { fontSize: 9, cellPadding: 4, overflow: "linebreak" },
+        headStyles: { fillColor: [20, 20, 20], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [248, 248, 248] },
+        showHead: "everyPage",
+        rowPageBreak: "avoid",
+      });
+
+      // ── Summary — compute height up-front to avoid mid-block break
+      const finalY = (pdf as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 16;
+      const pageH = pdf.internal.pageSize.getHeight();
+      const summaryRows = showTax ? 4 : 2;
+      const summaryHeight = 14 /* line+gap */ + 14 /* heading */ + summaryRows * 14 + 14 /* gap + divider */;
+      let sy = finalY;
+      if (sy + summaryHeight > pageH - 40 /* footer reserve */) {
+        pdf.addPage();
+        sy = margin;
+      }
+
+      pdf.setDrawColor(0);
+      pdf.setLineWidth(0.5);
+      pdf.line(margin, sy, pageW - margin, sy);
+      sy += 14;
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(10);
+      pdf.setTextColor(0);
+      pdf.text("SUMMARY", margin, sy);
+      sy += 14;
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(10);
+      const labelX = pageW - margin - 200;
+      const valueX = pageW - margin;
+      const rowH = 14;
+      const summaryRow = (label: string, value: string, bold = false) => {
+        pdf.setFont("helvetica", bold ? "bold" : "normal");
+        pdf.text(label, labelX, sy);
+        pdf.text(value, valueX - pdf.getTextWidth(value), sy);
+        sy += rowH;
+      };
+
+      summaryRow("Total Members", String(reportRows.length));
+      sy += 8; // breathing room after member count
+      if (showTax) {
+        summaryRow(taxInclusive ? "Subtotal (excl. tax)" : "Subtotal", fmtMoney(subtotal));
+        summaryRow(`${taxLabel || "Tax"} (${taxRate}%)`, fmtMoney(taxAmount));
+        // thin divider before grand total
+        pdf.setDrawColor(180);
+        pdf.setLineWidth(0.4);
+        pdf.line(labelX, sy - 4, valueX, sy - 4);
+        sy += 6;
+        summaryRow("Grand Total", fmtMoney(grandTotal), true);
+      } else {
+        pdf.setDrawColor(180);
+        pdf.setLineWidth(0.4);
+        pdf.line(labelX, sy - 4, valueX, sy - 4);
+        sy += 6;
+        summaryRow("Total Revenue", fmtMoney(totalRevenue), true);
+      }
+
+      // Stamp "Page X of Y" footer after all pages exist (final count is now known)
+      const totalPages = pdf.getNumberOfPages();
+      for (let p = 1; p <= totalPages; p++) {
+        pdf.setPage(p);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8);
+        pdf.setTextColor(120);
+        pdf.text(`Page ${p} of ${totalPages}`, pageW / 2, pageH - 20, { align: "center" });
+      }
+
+      const fileName = `${(gym?.name ?? "report").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`;
+      pdf.save(fileName);
+
+      await logComplianceReport({
+        memberCount: reportRows.length,
+        totalRevenue,
+        startDate,
+        endDate,
+        fields: Array.from(selectedFields),
+      });
+      toast({ title: "PDF downloaded" });
+    } catch (err) {
+      toast({ title: "PDF generation failed", description: err instanceof Error ? err.message : "Try Print → Save as PDF instead", variant: "destructive" });
+    } finally {
+      setGeneratingPdf(false);
+    }
+  }
+
   async function downloadCSV() {
     if (reportRows.length === 0) {
       toast({ title: "Select at least one member", variant: "destructive" });
@@ -357,9 +549,36 @@ export function ComplianceClient({ gym, members, payments, trainers }: Props) {
               <Button onClick={saveDefaults} variant="outline" size="sm" className="gap-1.5" disabled={savingSettings}>
                 <Save className="w-3.5 h-3.5" /> {savingSettings ? "Saving…" : "Save defaults"}
               </Button>
-              <Button onClick={downloadCSV} variant="outline" size="sm" className="gap-1.5">
-                <Download className="w-3.5 h-3.5" /> Download CSV
-              </Button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-1.5" disabled={generatingPdf}>
+                    <Download className="w-3.5 h-3.5" />
+                    {generatingPdf ? "Generating…" : "Download"}
+                    <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-44 p-1">
+                  <button
+                    type="button"
+                    onClick={downloadCSV}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm hover:bg-white/5 transition-colors text-left"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                    <span className="flex-1">CSV</span>
+                    <span className="text-[10px] text-muted-foreground">Excel</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadPDF}
+                    disabled={generatingPdf}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm hover:bg-white/5 transition-colors text-left disabled:opacity-50"
+                  >
+                    <FileImage className="w-4 h-4 text-rose-400" />
+                    <span className="flex-1">PDF</span>
+                    <span className="text-[10px] text-muted-foreground">A4</span>
+                  </button>
+                </PopoverContent>
+              </Popover>
               <Button onClick={generateReport} size="sm" className="gap-1.5">
                 <Printer className="w-3.5 h-3.5" /> Print
               </Button>
@@ -547,8 +766,8 @@ export function ComplianceClient({ gym, members, payments, trainers }: Props) {
         </div>
       </div>
 
-      {/* Print preview — capped height on screen with scroll, full width on print */}
-      <div className="rounded-2xl border border-sidebar-border overflow-hidden shadow-2xl bg-white mt-4 max-h-[800px] overflow-y-auto">
+      {/* Print preview — capped height on screen with both-axis scroll, full width on print */}
+      <div className="rounded-2xl border border-sidebar-border shadow-2xl bg-white mt-4 max-h-[800px] overflow-auto">
         <PrintReport
           gym={gym}
           ntn={ntn}
@@ -596,7 +815,7 @@ function PrintReport({ gym, ntn, headerTitle, notes, startDate, endDate, rows, t
   const grandTotal = showTax ? (taxInclusive ? totalRevenue : totalRevenue + taxAmount) : totalRevenue;
 
   return (
-    <div id="print-area" className="bg-white text-black p-8 sm:p-10">
+    <div id="print-area" className="bg-white text-black p-8 sm:p-10 min-w-[820px] print:min-w-0">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="border-b-2 border-black pb-4 mb-6">

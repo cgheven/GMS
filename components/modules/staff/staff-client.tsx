@@ -19,6 +19,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate, formatDateInput } from "@/lib/utils";
+import { validateFullName, validateCNIC, validatePakPhone, validateMoney, runValidators } from "@/lib/validation";
 import type { Staff, StaffRole, StaffStatus, SalaryPayment, PaymentMethod } from "@/types";
 
 const ROLES: { value: StaffRole; label: string; icon: string }[] = [
@@ -97,9 +98,20 @@ interface Props {
   gymId: string | null;
   staff: Staff[];
   salaryPayments: SalaryPayment[];
+  mode?: "trainers" | "staff" | "all";
 }
 
-export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initialPayments }: Props) {
+export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initialPayments, mode = "all" }: Props) {
+  const isTrainersMode = mode === "trainers";
+  const isStaffMode = mode === "staff";
+  const pageTitle = isTrainersMode ? "Trainers" : isStaffMode ? "Staff" : "Staff & Trainers";
+  const pageSubtitle = isTrainersMode
+    ? "Manage trainers, commissions, and logins"
+    : isStaffMode
+    ? "Manage non-trainer staff and salary payments"
+    : "Manage gym staff and salary payments";
+  const totalLabel = isTrainersMode ? "Total Trainers" : "Total Staff";
+  const addButtonLabel = isTrainersMode ? "Add Trainer" : "Add Staff";
   // ── Staff state ───────────────────────────────────────────
   const [staff, setStaff] = useState(initialStaff);
   const [search, setSearch] = useState("");
@@ -171,7 +183,12 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
   }
 
   // ── Staff CRUD ────────────────────────────────────────────
-  function openAdd() { setEditing(null); setForm(emptyForm); setDialogOpen(true); }
+  const defaultRole: StaffRole = isTrainersMode ? "trainer" : isStaffMode ? "manager" : "other";
+  function openAdd() {
+    setEditing(null);
+    setForm({ ...emptyForm, role: defaultRole });
+    setDialogOpen(true);
+  }
   function quickStaff(item: { label: string; role: StaffRole }) {
     setEditing(null);
     setForm({ ...emptyForm, full_name: item.label, role: item.role });
@@ -197,7 +214,19 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
   }
 
   async function handleSave() {
-    if (!gymId || !form.full_name || !form.monthly_salary) return;
+    if (!gymId) return;
+
+    const check = runValidators(
+      validateFullName(form.full_name),
+      validateCNIC(form.cnic),
+      validatePakPhone(form.phone),
+      validateMoney(form.monthly_salary, "Base salary"),
+    );
+    if (!check.ok) {
+      toast({ title: "Check the form", description: check.message, variant: "destructive" });
+      return;
+    }
+
     setSaving(true);
     const supabase = createClient();
     const payload = {
@@ -274,38 +303,61 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
   }
 
   // ── Derived ───────────────────────────────────────────────
+  // Restrict the visible list to the page's mode (trainers-only / staff-only / all)
+  const visibleStaff = useMemo(() => {
+    if (isTrainersMode) return staff.filter((s) => s.role === "trainer");
+    if (isStaffMode)    return staff.filter((s) => s.role !== "trainer");
+    return staff;
+  }, [staff, isTrainersMode, isStaffMode]);
+
   const filteredStaff = useMemo(() => {
     const q = search.toLowerCase();
-    return staff.filter((s) => s.full_name.toLowerCase().includes(q) || s.role.includes(q));
-  }, [search, staff]);
+    return visibleStaff.filter((s) => s.full_name.toLowerCase().includes(q) || s.role.includes(q));
+  }, [search, visibleStaff]);
 
-  const monthPayments = useMemo(() => salaryPayments.filter((p) => p.for_month === selectedMonth), [salaryPayments, selectedMonth]);
+  const visibleStaffIds = useMemo(() => new Set(visibleStaff.map((s) => s.id)), [visibleStaff]);
+  const monthPayments = useMemo(
+    () => salaryPayments.filter((p) => p.for_month === selectedMonth && (mode === "all" || (p.staff_id && visibleStaffIds.has(p.staff_id)))),
+    [salaryPayments, selectedMonth, mode, visibleStaffIds]
+  );
+
+  const visibleQuickStaff = useMemo(() => {
+    if (isTrainersMode) return QUICK_STAFF.filter((q) => q.role === "trainer");
+    if (isStaffMode)    return QUICK_STAFF.filter((q) => q.role !== "trainer");
+    return QUICK_STAFF;
+  }, [isTrainersMode, isStaffMode]);
+
+  const visibleRoles = useMemo(() => {
+    if (isTrainersMode) return ROLES.filter((r) => r.value === "trainer");
+    if (isStaffMode)    return ROLES.filter((r) => r.value !== "trainer");
+    return ROLES;
+  }, [isTrainersMode, isStaffMode]);
 
   const stats = useMemo(() => {
-    const active = staff.filter((s) => s.status === "active");
+    const active = visibleStaff.filter((s) => s.status === "active");
     const payroll = active.reduce((s, e) => s + Number(e.monthly_salary), 0);
     const paid = monthPayments.filter((p) => p.status === "paid").reduce((s, p) => s + Number(p.total_amount), 0);
     const pending = monthPayments.filter((p) => p.status === "pending").reduce((s, p) => s + Number(p.total_amount), 0);
-    return { total: staff.length, active: active.length, payroll, paid, pending };
-  }, [staff, monthPayments]);
+    return { total: visibleStaff.length, active: active.length, payroll, paid, pending };
+  }, [visibleStaff, monthPayments]);
 
   // ── Render ────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-serif font-normal tracking-tight">Staff & Trainers</h1>
-          <p className="text-muted-foreground text-sm mt-1">Manage gym staff and salary payments</p>
+          <h1 className="text-3xl font-serif font-normal tracking-tight">{pageTitle}</h1>
+          <p className="text-muted-foreground text-sm mt-1">{pageSubtitle}</p>
         </div>
         <Button onClick={openAdd} className="gap-2 w-full sm:w-auto">
-          <Plus className="w-4 h-4" /> Add Staff
+          <Plus className="w-4 h-4" /> {addButtonLabel}
         </Button>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "Total Staff",     value: stats.total,                  icon: Users,        color: "text-blue-400",   bg: "bg-blue-500/10 border border-blue-500/20" },
+          { label: totalLabel,        value: stats.total,                  icon: Users,        color: "text-blue-400",   bg: "bg-blue-500/10 border border-blue-500/20" },
           { label: "Monthly Payroll", value: formatCurrency(stats.payroll), icon: TrendingDown, color: "text-primary",    bg: "bg-primary/10 border border-primary/20" },
           { label: "Paid This Month", value: formatCurrency(stats.paid),    icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
           { label: "Pending",         value: formatCurrency(stats.pending), icon: Clock,        color: "text-rose-400",   bg: "bg-rose-500/10 border border-rose-500/20" },
@@ -335,7 +387,7 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
               <span className="text-xs text-muted-foreground/50">— tap to pre-fill the form</span>
             </div>
             <div className="flex flex-wrap gap-2">
-              {QUICK_STAFF.map((item) => (
+              {visibleQuickStaff.map((item) => (
                 <button
                   key={item.label}
                   onClick={() => quickStaff(item)}
@@ -517,7 +569,11 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
       {/* ── Add / Edit Staff Dialog ───────────────────────── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg">
-          <DialogHeader><DialogTitle>{editing ? "Edit Staff" : "Add Staff / Trainer"}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>
+              {editing ? `Edit ${isTrainersMode ? "Trainer" : "Staff"}` : addButtonLabel}
+            </DialogTitle>
+          </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5 col-span-2">
@@ -529,7 +585,7 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
                 <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as StaffRole })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {ROLES.map((r) => <SelectItem key={r.value} value={r.value}>{r.icon} {r.label}</SelectItem>)}
+                    {visibleRoles.map((r) => <SelectItem key={r.value} value={r.value}>{r.icon} {r.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
