@@ -39,7 +39,6 @@ export function validateDOB(raw: string | null | undefined): ValidationResult {
 export function validateFullName(raw: string | null | undefined): ValidationResult {
   if (!raw || !raw.trim()) return { ok: false, message: "Full name is required" };
   const parts = raw.trim().split(/\s+/);
-  if (parts.length < 2) return { ok: false, message: "Enter first and last name" };
   if (parts.some((p) => p.length < 2)) return { ok: false, message: "Each name part must be at least 2 letters" };
   return { ok: true };
 }

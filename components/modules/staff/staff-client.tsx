@@ -5,7 +5,7 @@ import {
   CheckCircle2, Clock, Users, TrendingDown, Star,
   KeyRound, UserX, ArrowRightLeft,
 } from "lucide-react";
-import { createTrainerLogin, removeTrainerLogin, transferTrainerClients } from "@/app/actions/trainer";
+import { createTrainerLogin, removeTrainerLogin, transferTrainerClients, deleteStaffMember } from "@/app/actions/trainer";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -96,12 +96,26 @@ function genReceipt(name: string, month: string) {
 
 interface Props {
   gymId: string | null;
+  gymName?: string | null;
   staff: Staff[];
   salaryPayments: SalaryPayment[];
   mode?: "trainers" | "staff" | "all";
 }
 
-export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initialPayments, mode = "all" }: Props) {
+function buildUsername(fullName: string, gymName: string | null | undefined, existingEmails: string[]): string {
+  const first = fullName.trim().split(/\s+/)[0].toLowerCase().replace(/[^a-z0-9]/g, "");
+  const initials = gymName
+    ? gymName.trim().split(/\s+/).map((w) => w[0]).join("").toLowerCase().replace(/[^a-z0-9]/g, "")
+    : "";
+  const base = initials ? `${first}.${initials}` : first;
+  const taken = new Set(existingEmails.map((e) => e.replace("@musabkhan.me", "")));
+  if (!taken.has(base)) return base;
+  let n = 2;
+  while (taken.has(`${first}${n}.${initials || first}`)) n++;
+  return `${first}${n}.${initials || ""}`.replace(/\.$/, "");
+}
+
+export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayments: initialPayments, mode = "all" }: Props) {
   const isTrainersMode = mode === "trainers";
   const isStaffMode = mode === "staff";
   const pageTitle = isTrainersMode ? "Trainers" : isStaffMode ? "Staff" : "Staff & Trainers";
@@ -123,24 +137,30 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
 
   // ── Trainer login state ───────────────────────────────────
   const [loginDialog, setLoginDialog] = useState<Staff | null>(null);
-  const [loginForm, setLoginForm] = useState({ email: "", password: "", phone: "" });
+  const [loginForm, setLoginForm] = useState({ username: "", password: "", phone: "" });
   const [loginSaving, setLoginSaving] = useState(false);
+  const [loginCreated, setLoginCreated] = useState<{ email: string; password: string; phone: string } | null>(null);
   const [removeTarget, setRemoveTarget] = useState<Staff | null>(null);
   const [transferTarget, setTransferTarget] = useState<Staff | null>(null);
 
   async function handleCreateLogin() {
-    if (!loginDialog || !loginForm.email || !loginForm.password) return;
+    if (!loginDialog || !loginForm.username || !loginForm.password) return;
     setLoginSaving(true);
-    const result = await createTrainerLogin(loginDialog.id, loginForm.email, loginForm.password);
+    const email = `${loginForm.username.trim().toLowerCase()}@musabkhan.me`;
+    const result = await createTrainerLogin(loginDialog.id, email, loginForm.password);
     if (result.error) {
       toast({ title: "Error", description: result.error, variant: "destructive" });
     } else {
-      toast({ title: "Login created", description: `${loginDialog.full_name} can now log in with ${loginForm.email}` });
-      setLoginDialog(null);
-      setLoginForm({ email: "", password: "", phone: "" });
+      setLoginCreated({ email, password: loginForm.password, phone: loginForm.phone });
       reloadStaff();
     }
     setLoginSaving(false);
+  }
+
+  function closeLoginDialog() {
+    setLoginDialog(null);
+    setLoginCreated(null);
+    setLoginForm({ username: "", password: "", phone: "" });
   }
 
   async function handleRemoveLogin(s: Staff) {
@@ -254,10 +274,25 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
   }
 
   async function handleDelete(id: string) {
-    const supabase = createClient();
-    const { error } = await supabase.from("pulse_staff").delete().eq("id", id);
-    if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-    else { toast({ title: "Deleted" }); reloadStaff(); }
+    const result = await deleteStaffMember(id);
+    if (result.blocked === "has_members") {
+      toast({
+        title: "Cannot delete — trainer has active members",
+        description: `${result.activeCount} active member(s) still assigned. Use "Transfer" to reassign them first.`,
+        variant: "destructive",
+      });
+    } else if (result.blocked === "has_salary_history") {
+      toast({
+        title: "Cannot delete — salary history exists",
+        description: "This staff member has salary records. Set them to Inactive instead to preserve financial history.",
+        variant: "destructive",
+      });
+    } else if (result.error) {
+      toast({ title: "Error", description: result.error, variant: "destructive" });
+    } else {
+      toast({ title: "Deleted" });
+      reloadStaff();
+    }
   }
 
   // ── Salary actions ────────────────────────────────────────
@@ -266,19 +301,48 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
     if (!active.length || !gymId) { toast({ title: "No active staff" }); return; }
     setGenerating(true);
     const supabase = createClient();
-    const rows = active.map((s) => ({
-      gym_id: gymId,
-      staff_id: s.id,
-      for_month: selectedMonth,
-      base_salary: s.monthly_salary,
-      commission_amount: 0,
-      pt_earnings: 0,
-      total_amount: s.monthly_salary,
-      status: "pending",
-    }));
-    const { error } = await supabase.from("pulse_salary_payments").upsert(rows, { onConflict: "staff_id,for_month", ignoreDuplicates: true });
+
+    // Fetch already-generated records and active members in parallel
+    const [{ data: existing }, { data: activeMembers }] = await Promise.all([
+      supabase.from("pulse_salary_payments").select("staff_id").eq("gym_id", gymId).eq("for_month", selectedMonth),
+      supabase.from("pulse_members").select("assigned_trainer_id,monthly_fee").eq("gym_id", gymId).eq("status", "active"),
+    ]);
+
+    const existingIds = new Set((existing ?? []).map((r) => r.staff_id));
+    const members = activeMembers ?? [];
+
+    const rows = active
+      .filter((s) => !existingIds.has(s.id))
+      .map((s) => {
+        let commissionAmount = 0;
+        if (s.role === "trainer" && s.commission_percentage > 0) {
+          const myFees = members
+            .filter((m) => m.assigned_trainer_id === s.id)
+            .reduce((sum, m) => sum + Number(m.monthly_fee), 0);
+          commissionAmount = Math.round(myFees * s.commission_percentage / 100);
+          if (s.commission_floor > 0) commissionAmount = Math.max(commissionAmount, s.commission_floor);
+        }
+        return {
+          gym_id: gymId,
+          staff_id: s.id,
+          for_month: selectedMonth,
+          base_salary: s.monthly_salary,
+          commission_amount: commissionAmount,
+          pt_earnings: 0,
+          total_amount: s.monthly_salary + commissionAmount,
+          status: "pending",
+        };
+      });
+
+    if (!rows.length) {
+      toast({ title: "Already generated", description: "All active staff already have salary records for this month." });
+      setGenerating(false);
+      return;
+    }
+
+    const { error } = await supabase.from("pulse_salary_payments").insert(rows);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-    else { toast({ title: `Generated ${rows.length} salary records` }); await reloadSalaries(selectedMonth); }
+    else { toast({ title: `Generated ${rows.length} salary record(s)` }); await reloadSalaries(selectedMonth); }
     setGenerating(false);
   }
 
@@ -480,7 +544,14 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
                             <Button
                               variant="ghost" size="sm"
                               className="h-8 text-xs gap-1 text-primary hover:text-primary hover:bg-primary/10"
-                              onClick={() => { setLoginDialog(member); setLoginForm({ email: member.email ?? "", password: "", phone: member.phone ?? "" }); }}
+                              onClick={() => {
+  const existingEmails = staff.map((s) => s.email ?? "").filter(Boolean);
+  const username = member.email
+    ? member.email.replace("@musabkhan.me", "")
+    : buildUsername(member.full_name, gymName, existingEmails);
+  setLoginDialog(member);
+  setLoginForm({ username, password: "", phone: member.phone ?? "" });
+}}
                               title="Create login"
                             >
                               <KeyRound className="w-3.5 h-3.5" />
@@ -573,8 +644,8 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
       <ConfirmDialog
         open={!!deleteId}
         title="Delete staff member?"
-        description="This staff member and all their salary records will be permanently deleted."
-        onConfirm={() => { handleDelete(deleteId!); setDeleteId(null); }}
+        description="Login access will be revoked. Blocked if active members are assigned or salary history exists."
+        onConfirm={() => { const id = deleteId; if (id) { handleDelete(id); setDeleteId(null); } }}
         onCancel={() => setDeleteId(null)}
       />
 
@@ -663,62 +734,34 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
       </Dialog>
 
       {/* ── Create Trainer Login Dialog ──────────────────── */}
-      <Dialog open={!!loginDialog} onOpenChange={(o) => !o && setLoginDialog(null)}>
+      <Dialog open={!!loginDialog} onOpenChange={(o) => !o && closeLoginDialog()}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Create Login — {loginDialog?.full_name}</DialogTitle>
+            <DialogTitle>{loginCreated ? "Login Created" : `Create Login — ${loginDialog?.full_name}`}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="rounded-lg bg-primary/5 border border-primary/15 px-3 py-2.5 text-xs text-muted-foreground">
-              This trainer will be able to log in and mark payments for their assigned members only.
-            </div>
-            <div className="space-y-1.5">
-              <Label>Email *</Label>
-              <Input
-                type="email"
-                placeholder="trainer@example.com"
-                value={loginForm.email}
-                onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label>Password *</Label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$!";
-                    const pwd = Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-                    setLoginForm((f) => ({ ...f, password: pwd }));
-                  }}
-                  className="text-xs text-primary hover:underline"
-                >
-                  Auto-generate
-                </button>
+
+          {loginCreated ? (
+            /* ── Step 2: Success + Share ── */
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg bg-green-500/10 border border-green-500/20 px-3 py-2.5 text-xs text-green-400">
+                Login created successfully for <span className="font-medium">{loginDialog?.full_name}</span>. Share credentials via WhatsApp.
               </div>
-              <Input
-                type="text"
-                placeholder="Min 6 characters"
-                value={loginForm.password}
-                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>WhatsApp Number</Label>
-              <Input
-                type="tel"
-                placeholder="03001234567"
-                value={loginForm.phone}
-                onChange={(e) => setLoginForm({ ...loginForm, phone: e.target.value })}
-              />
-            </div>
-            {loginForm.email && loginForm.password && (
+              <div className="rounded-lg border border-input bg-muted/30 px-3 py-2.5 space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Email</span>
+                  <span className="font-mono font-medium">{loginCreated.email}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Password</span>
+                  <span className="font-mono font-medium">{loginCreated.password}</span>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => {
-                  const digits = loginForm.phone.replace(/\D/g, "");
+                  const digits = loginCreated.phone.replace(/\D/g, "");
                   const intl = digits.startsWith("0") ? "92" + digits.slice(1) : digits;
-                  const msg = `Hi ${loginDialog?.full_name}! 👋\n\nYour login credentials for *Pulse GMS*:\n\n🔗 Login: ${window.location.origin}/login\n📧 Email: ${loginForm.email}\n🔑 Password: ${loginForm.password}\n\nPlease save these credentials safely.`;
+                  const msg = `Hi ${loginDialog?.full_name}! 👋\n\nYour login credentials for *Pulse GMS*:\n\n🔗 Login: ${window.location.origin}/login\n📧 Email: ${loginCreated.email}\n🔑 Password: ${loginCreated.password}\n\nPlease save these credentials safely.`;
                   const url = intl
                     ? `https://wa.me/${intl}?text=${encodeURIComponent(msg)}`
                     : `https://wa.me/?text=${encodeURIComponent(msg)}`;
@@ -729,19 +772,73 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
                 <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
                 Send via WhatsApp
               </button>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setLoginDialog(null)}>Cancel</Button>
-            <Button
-              onClick={handleCreateLogin}
-              disabled={loginSaving || !loginForm.email || !loginForm.password}
-              className="gap-1.5"
-            >
-              <KeyRound className="w-3.5 h-3.5" />
-              {loginSaving ? "Creating…" : "Create Login"}
-            </Button>
-          </DialogFooter>
+              <DialogFooter>
+                <Button className="w-full" onClick={closeLoginDialog}>Done</Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            /* ── Step 1: Form ── */
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg bg-primary/5 border border-primary/15 px-3 py-2.5 text-xs text-muted-foreground">
+                This trainer will be able to log in and mark payments for their assigned members only.
+              </div>
+              <div className="space-y-1.5">
+                <Label>Username *</Label>
+                <div className="flex items-center rounded-md border border-input overflow-hidden focus-within:ring-1 focus-within:ring-ring">
+                  <Input
+                    type="text"
+                    placeholder="ahmed.trainer"
+                    value={loginForm.username}
+                    onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value.replace(/\s/g, "").toLowerCase() })}
+                    className="border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                  />
+                  <span className="px-3 text-sm font-medium text-primary bg-primary/10 border-l border-primary/20 whitespace-nowrap">@musabkhan.me</span>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label>Password *</Label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$!";
+                      const pwd = Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+                      setLoginForm((f) => ({ ...f, password: pwd }));
+                    }}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Auto-generate
+                  </button>
+                </div>
+                <Input
+                  type="text"
+                  placeholder="Min 6 characters"
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>WhatsApp Number</Label>
+                <Input
+                  type="tel"
+                  placeholder="03001234567"
+                  value={loginForm.phone}
+                  onChange={(e) => setLoginForm({ ...loginForm, phone: e.target.value })}
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={closeLoginDialog}>Cancel</Button>
+                <Button
+                  onClick={handleCreateLogin}
+                  disabled={loginSaving || !loginForm.username || !loginForm.password}
+                  className="gap-1.5"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  {loginSaving ? "Creating…" : "Create Login"}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -750,7 +847,7 @@ export function StaffClient({ gymId, staff: initialStaff, salaryPayments: initia
         open={!!removeTarget}
         title={`Remove login for ${removeTarget?.full_name}?`}
         description="They will no longer be able to log in. Their staff record and salary data are kept."
-        onConfirm={() => { handleRemoveLogin(removeTarget!); }}
+        onConfirm={() => { const t = removeTarget; if (t) handleRemoveLogin(t); }}
         onCancel={() => setRemoveTarget(null)}
       />
 

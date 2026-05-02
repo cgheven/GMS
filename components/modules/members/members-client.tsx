@@ -18,7 +18,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate, formatDateInput, cn } from "@/lib/utils";
 import { validateFullName, validateCNIC, validatePakPhone, validateDOB, validateMoney, runValidators, type ValidationResult } from "@/lib/validation";
-import type { Member, MembershipPlan, MemberStatus, MemberGender, Staff, Payment, PaymentMethod, PaymentStatus } from "@/types";
+import type { Member, MembershipPlan, MemberStatus, MemberGender, Staff, Payment, PaymentMethod, PaymentStatus, Referrer } from "@/types";
 
 // ── Payment helpers ────────────────────────────────────────────────────────────
 const methodLabels: Record<PaymentMethod, string> = {
@@ -53,6 +53,7 @@ interface Props {
   expired: Member[];
   plans: MembershipPlan[];
   staff: Pick<Staff, "id" | "full_name" | "role">[];
+  referrers: Pick<Referrer, "id" | "full_name" | "commission_type" | "commission_value">[];
 }
 
 const emptyForm = {
@@ -66,6 +67,7 @@ const emptyForm = {
   member_number: "",
   plan_id: "",
   assigned_trainer_id: "",
+  referrer_id: "",
   join_date: formatDateInput(new Date()),
   plan_start_date: formatDateInput(new Date()),
   plan_expiry_date: "",
@@ -102,11 +104,13 @@ export function MembersClient({
   expired: initialExpired,
   plans: initialPlans,
   staff: initialStaff,
+  referrers: initialReferrers,
 }: Props) {
   const [active, setActive] = useState(initialActive);
   const [expired, setExpired] = useState(initialExpired);
   const [plans] = useState(initialPlans);
   const [staff] = useState(initialStaff);
+  const [referrers] = useState(initialReferrers);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("active");
   const [trainerFilter, setTrainerFilter] = useState<string>("all");
@@ -716,6 +720,7 @@ export function MembersClient({
         existingMembers={[...active, ...expired]}
         plans={plans}
         staff={staff}
+        referrers={referrers}
         gymId={gymId}
         onSaved={reload}
         onOpenExisting={(m) => { setEditing(m); /* keeps dialog open, switches to edit */ }}
@@ -786,6 +791,7 @@ interface MemberFormDialogProps {
   existingMembers: Member[];
   plans: MembershipPlan[];
   staff: Pick<Staff, "id" | "full_name" | "role">[];
+  referrers: Pick<Referrer, "id" | "full_name" | "commission_type" | "commission_value">[];
   gymId: string | null;
   onSaved: () => void | Promise<void>;
   onOpenExisting: (m: Member) => void;
@@ -800,7 +806,7 @@ function normalizePhone(raw: string | null | undefined): string {
 }
 
 function MemberFormDialog({
-  open, onOpenChange, editing, existingMembers, plans, staff, gymId, onSaved, onOpenExisting,
+  open, onOpenChange, editing, existingMembers, plans, staff, referrers, gymId, onSaved, onOpenExisting,
 }: MemberFormDialogProps) {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -836,6 +842,7 @@ function MemberFormDialog({
         member_number: editing.member_number ?? "",
         plan_id: editing.plan_id ?? "",
         assigned_trainer_id: editing.assigned_trainer_id ?? "",
+        referrer_id: (editing as Member & { referrer_id?: string | null }).referrer_id ?? "",
         join_date: editing.join_date,
         plan_start_date: editing.plan_start_date ?? "",
         plan_expiry_date: editing.plan_expiry_date ?? "",
@@ -908,6 +915,7 @@ function MemberFormDialog({
       ...(editing ? { member_number: form.member_number || null } : {}),
       plan_id: form.plan_id || null,
       assigned_trainer_id: form.assigned_trainer_id || null,
+      referrer_id: form.referrer_id || null,
       join_date: form.join_date || formatDateInput(new Date()),
       plan_start_date: form.plan_start_date || null,
       plan_expiry_date: form.plan_expiry_date || null,
@@ -954,6 +962,23 @@ function MemberFormDialog({
           status: "paid",
           notes: "Admission fee",
         });
+      }
+      if (form.referrer_id) {
+        const referrer = referrers.find((r) => r.id === form.referrer_id);
+        if (referrer) {
+          const monthly = parseFloat(form.monthly_fee) || 0;
+          const commission =
+            referrer.commission_type === "flat"
+              ? referrer.commission_value
+              : Math.round((monthly * referrer.commission_value) / 100);
+          await supabase.from("pulse_referrals").insert({
+            gym_id: gymId,
+            referrer_id: referrer.id,
+            member_id: newMember.id,
+            commission_amount: commission,
+            status: "pending",
+          });
+        }
       }
     }
 
@@ -1111,6 +1136,22 @@ function MemberFormDialog({
                     </SelectContent>
                   </Select>
                 </div>
+                {!editing && referrers.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label>Referred by <span className="text-muted-foreground text-xs">(optional)</span></Label>
+                    <Select value={form.referrer_id || "none"} onValueChange={(v) => setForm((f) => ({ ...f, referrer_id: v === "none" ? "" : v }))}>
+                      <SelectTrigger><SelectValue placeholder="No referrer" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No referrer</SelectItem>
+                        {referrers.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.full_name} · {r.commission_type === "flat" ? `PKR ${r.commission_value}` : `${r.commission_value}%`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <Label>Join Date *</Label>
                   <Input type="date" value={form.join_date} onChange={(e) => setForm((f) => ({ ...f, join_date: e.target.value }))} />

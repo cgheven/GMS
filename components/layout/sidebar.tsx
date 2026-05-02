@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, CreditCard, FileText, Settings, X,
   Shield, Building2, Globe, LogIn, Trophy, Target,
   BarChart3, UserCog, Dumbbell, CalendarDays,
-  Receipt, ClipboardList, Zap,
+  Receipt, ClipboardList, Zap, HandCoins,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsAdmin } from "@/hooks/use-is-admin";
@@ -30,8 +30,9 @@ const navGroups = [
   {
     label: "Training",
     items: [
-      { href: "/classes",  label: "Classes",  icon: CalendarDays },
-      { href: "/trainers", label: "Trainers", icon: Dumbbell },
+      { href: "/classes",   label: "Classes",   icon: CalendarDays },
+      { href: "/trainers",  label: "Trainers",  icon: Dumbbell },
+      { href: "/referrers", label: "Partners",  icon: HandCoins },
     ],
   },
   {

@@ -4,7 +4,7 @@ import Link from "next/link";
 import {
   Dumbbell, Wallet,
   AlertTriangle, Clock, CheckCircle2,
-  TrendingUp, TrendingDown, FileWarning, Zap, Trophy, Target,
+  TrendingUp, TrendingDown, FileWarning, Zap, Trophy, Target, HandCoins,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import type { DashboardStats, DashboardMember, Bill, TrainerStat, GoalsOverview } from "@/types";
@@ -103,8 +103,8 @@ export function DashboardClient({ data, leadsSummary }: Props) {
         </p>
       </div>
 
-      {/* ── Section 1: 3 Hero Numbers ───────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* ── Section 1: Hero Numbers ──────────────────────────── */}
+      <div className={`grid grid-cols-1 gap-4 ${stats.pending_commissions_count > 0 ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
 
         {/* Collected */}
         <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.05] p-5 space-y-3">
@@ -167,14 +167,35 @@ export function DashboardClient({ data, leadsSummary }: Props) {
           <p className={`text-3xl font-bold leading-none ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>
             {isProfit ? "+" : ""}{formatCurrency(stats.net_profit)}
           </p>
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
             <span>Rev <span className="text-foreground font-medium">{formatCurrency(stats.monthly_collected)}</span></span>
             <span>·</span>
             <span>Exp <span className="text-rose-400 font-medium">{formatCurrency(stats.monthly_expenses)}</span></span>
             <span>·</span>
             <span>Sal <span className="text-purple-400 font-medium">{formatCurrency(stats.monthly_salaries)}</span></span>
+            {stats.paid_commissions_this_month > 0 && (
+              <>
+                <span>·</span>
+                <span>Com <span className="text-amber-400 font-medium">{formatCurrency(stats.paid_commissions_this_month)}</span></span>
+              </>
+            )}
           </div>
         </div>
+        {/* Pending Commissions — only shown when there's something owed */}
+        {stats.pending_commissions_count > 0 && (
+          <Link href="/referrers" className="rounded-2xl border border-amber-500/25 bg-amber-500/[0.05] p-5 space-y-3 hover:bg-amber-500/[0.09] transition-colors">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Partner Payouts</p>
+              <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                <HandCoins className="w-4 h-4 text-amber-400" />
+              </div>
+            </div>
+            <p className="text-3xl font-bold text-amber-400 leading-none">{formatCurrency(stats.pending_commissions_amount)}</p>
+            <p className="text-xs text-muted-foreground">
+              <span className="text-amber-400 font-semibold">{stats.pending_commissions_count}</span> pending payout{stats.pending_commissions_count !== 1 ? "s" : ""}
+            </p>
+          </Link>
+        )}
       </div>
 
       {/* ── Leads strip ──────────────────────────────────────── */}

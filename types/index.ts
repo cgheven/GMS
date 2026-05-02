@@ -20,6 +20,8 @@ export type BillCategory = "electricity" | "water" | "internet" | "gas" | "maint
 export type BillCondition = "new" | "used";
 export type ExpenseCategory = "equipment" | "maintenance" | "cleaning" | "marketing" | "supplements" | "utilities" | "rent" | "security" | "other";
 export type StaffRole = "trainer" | "manager" | "frontdesk" | "cleaner" | "guard" | "cook" | "other";
+export type ReferrerCommissionType = "flat" | "percentage";
+export type ReferralStatus = "pending" | "paid";
 export type StaffStatus = "active" | "inactive";
 export type SalaryStatus = "pending" | "paid";
 export type IssueCategory = "equipment" | "cleanliness" | "staff" | "facility" | "billing" | "other";
@@ -133,11 +135,41 @@ export interface MembershipPlan {
   updated_at: string;
 }
 
+export interface Referrer {
+  id: string;
+  gym_id: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+  notes: string | null;
+  commission_type: ReferrerCommissionType;
+  commission_value: number;
+  user_id: string | null;
+  status: "active" | "inactive";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Referral {
+  id: string;
+  gym_id: string;
+  referrer_id: string;
+  member_id: string;
+  commission_amount: number;
+  status: ReferralStatus;
+  paid_at: string | null;
+  notes: string | null;
+  created_at: string;
+  referrer?: Pick<Referrer, "full_name"> | null;
+  member?: Pick<Member, "full_name" | "phone" | "join_date"> | null;
+}
+
 export interface Member {
   id: string;
   gym_id: string;
   plan_id: string | null;
   assigned_trainer_id: string | null;
+  referrer_id: string | null;
   member_number: string | null;
   full_name: string;
   phone: string | null;
@@ -420,6 +452,9 @@ export interface DashboardStats {
   unpaid_bills_amount: number;
   expiring_this_week: number;
   revenue_target: number;
+  pending_commissions_amount: number;
+  pending_commissions_count: number;
+  paid_commissions_this_month: number;
 }
 
 export interface DashboardMember {

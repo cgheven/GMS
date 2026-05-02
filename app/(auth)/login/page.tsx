@@ -30,7 +30,7 @@ export default function LoginPage() {
       .select("is_admin, role")
       .eq("id", data.user.id)
       .single();
-    const dest = profile?.is_admin ? "/admin/gyms" : profile?.role === "trainer" ? "/trainer" : "/dashboard";
+    const dest = profile?.is_admin ? "/admin/gyms" : profile?.role === "trainer" ? "/trainer" : profile?.role === "referrer" ? "/referrer" : "/dashboard";
     router.push(dest);
     router.refresh();
   }

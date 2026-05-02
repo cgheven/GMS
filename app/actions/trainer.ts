@@ -8,6 +8,8 @@ export async function createTrainerLogin(staffId: string, email: string, passwor
   const ctx = await getAuthContext();
   if (!ctx?.gymId) return { error: "Unauthorized" };
 
+  if (!email.endsWith("@musabkhan.me")) return { error: "Email must use @musabkhan.me domain" };
+
   const admin = createAdminClient();
 
   const { data: staff, error: staffErr } = await admin
@@ -20,21 +22,47 @@ export async function createTrainerLogin(staffId: string, email: string, passwor
   if (staffErr || !staff) return { error: "Staff not found" };
   if (staff.user_id) return { error: "Login already exists for this trainer" };
 
-  const { data: newUser, error: authErr } = await admin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: { full_name: staff.full_name, role: "trainer" },
-  });
+  // Check if this email is already registered at another gym — link instead of create
+  const { data: existingStaff } = await admin
+    .from("pulse_staff")
+    .select("user_id")
+    .eq("email", email)
+    .not("user_id", "is", null)
+    .maybeSingle();
 
-  if (authErr) return { error: authErr.message };
+  let userId: string;
 
-  const userId = newUser.user.id;
+  if (existingStaff?.user_id) {
+    // Trainer already has an account — just link to this gym's staff record
+    userId = existingStaff.user_id;
+  } else {
+    const { data: newUser, error: authErr } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: staff.full_name, role: "trainer" },
+    });
+    if (authErr) return { error: authErr.message };
+    userId = newUser.user.id;
+  }
 
-  // Trigger already created the profile with role='trainer' — just link staff
-  await admin.from("pulse_staff").update({ user_id: userId }).eq("id", staffId);
+  await admin.from("pulse_staff").update({ user_id: userId, email }).eq("id", staffId);
 
   return { success: true };
+}
+
+export async function checkMemberByPhone(phone: string) {
+  const ctx = await getTrainerContext();
+  if (!ctx) return { member: null };
+  const admin = createAdminClient();
+  const normalized = phone.replace(/\s/g, "");
+  const { data } = await admin
+    .from("pulse_members")
+    .select("id, full_name, phone, email, cnic, plan_id, monthly_fee, admission_fee, join_date, plan_expiry_date, notes, assigned_trainer_id, status")
+    .eq("gym_id", ctx.gymId)
+    .eq("phone", normalized)
+    .maybeSingle();
+  return { member: data ?? null };
 }
 
 type MemberPayload = {
@@ -567,4 +595,84 @@ export async function transferTrainerClients(
   revalidateTag(`dashboard-${gymId}`);
 
   return { transferredCount, goalsTransferred };
+}
+
+// ── Delete staff member (trainer-aware) ──────────────────────────────────────
+// Checks edge cases before deleting:
+//   1. Active assigned members  → blocked, must transfer first
+//   2. Salary payment history   → blocked, must deactivate instead
+//   3. Auth login exists        → deleted automatically
+//   4. Goals / body metrics     → trainer_id / measured_by nulled automatically
+export async function deleteStaffMember(staffId: string): Promise<{
+  success?: boolean;
+  blocked?: "has_members" | "has_salary_history";
+  activeCount?: number;
+  error?: string;
+}> {
+  const ctx = await getAuthContext();
+  if (!ctx?.user || !ctx.gymId) return { error: "Unauthorized" };
+  const gymId = ctx.gymId;
+  const admin = createAdminClient();
+
+  const { data: staff } = await admin
+    .from("pulse_staff")
+    .select("id, full_name, user_id, role")
+    .eq("id", staffId)
+    .eq("gym_id", gymId)
+    .single();
+
+  if (!staff) return { error: "Staff not found" };
+
+  // 1. Block if trainer has active assigned members
+  const { count: activeCount } = await admin
+    .from("pulse_members")
+    .select("id", { count: "exact", head: true })
+    .eq("gym_id", gymId)
+    .eq("assigned_trainer_id", staffId)
+    .eq("status", "active");
+
+  if (activeCount && activeCount > 0) {
+    return { blocked: "has_members", activeCount };
+  }
+
+  // 2. Block if staff has salary payment history (preserve financial records)
+  const { count: salaryCount } = await admin
+    .from("pulse_salary_payments")
+    .select("id", { count: "exact", head: true })
+    .eq("staff_id", staffId);
+
+  if (salaryCount && salaryCount > 0) {
+    return { blocked: "has_salary_history" };
+  }
+
+  // 3. Delete auth login if exists
+  if (staff.user_id) {
+    await admin.auth.admin.deleteUser(staff.user_id);
+  }
+
+  // 4. Null out trainer references on goals + metrics (inactive/historical members)
+  await Promise.all([
+    admin.from("pulse_member_goals").update({ trainer_id: null }).eq("trainer_id", staffId),
+    admin.from("pulse_body_metrics").update({ measured_by: null }).eq("measured_by", staffId),
+    admin.from("pulse_members").update({ assigned_trainer_id: null }).eq("assigned_trainer_id", staffId),
+  ]);
+
+  // 5. Delete staff record
+  const { error } = await admin.from("pulse_staff").delete().eq("id", staffId);
+  if (error) return { error: error.message };
+
+  await writeAuditLog({
+    actor_id: ctx.user.id,
+    actor_email: ctx.user.email ?? "",
+    action: "staff.delete",
+    entity: "staff",
+    entity_id: staffId,
+    meta: { full_name: staff.full_name, had_login: !!staff.user_id },
+  });
+
+  revalidateTag(`staff-${gymId}`);
+  revalidateTag(`members-${gymId}`);
+  revalidateTag(`dashboard-${gymId}`);
+
+  return { success: true };
 }

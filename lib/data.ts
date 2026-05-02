@@ -9,6 +9,7 @@ import type {
   Expense, Bill, Staff, SalaryPayment, CheckIn, GymClass,
   DashboardStats, DashboardMember, RevenueMonth, AgingBucket, TrainerStat,
   MemberGoal, GoalProgressEntry, BodyMetric, MetricSkip, Lead, LeadActivity,
+  Referrer,
 } from "@/types";
 
 export const getAuthContext = cache(async () => {
@@ -71,6 +72,8 @@ async function _fetchDashboard(gymId: string, gym: Gym | null) {
     assignedMembersRes,
     currentMonthPaymentsRes,
     goalsRes,
+    pendingReferralsRes,
+    paidReferralsRes,
   ] = await Promise.all([
     supabase.from("pulse_members").select("id, full_name, status, monthly_fee, plan_expiry_date").eq("gym_id", gymId),
     supabase.from("pulse_check_ins").select("id").eq("gym_id", gymId).gte("checked_in_at", `${todayStr}T00:00:00`).lte("checked_in_at", `${todayStr}T23:59:59`),
@@ -87,6 +90,8 @@ async function _fetchDashboard(gymId: string, gym: Gym | null) {
       .select("id,member_id,trainer_id,title,category,unit,start_value,target_value,current_value,direction,status,start_date,target_date,updated_at,member:pulse_members(full_name,assigned_trainer_id),trainer:pulse_staff(full_name)")
       .eq("gym_id", gymId)
       .order("updated_at", { ascending: false }),
+    supabase.from("pulse_referrals").select("commission_amount").eq("gym_id", gymId).eq("status", "pending"),
+    supabase.from("pulse_referrals").select("commission_amount").eq("gym_id", gymId).eq("status", "paid").gte("paid_at", start).lte("paid_at", end),
   ]);
 
   const members = membersRes.data ?? [];
@@ -152,9 +157,13 @@ async function _fetchDashboard(gymId: string, gym: Gym | null) {
     unpaid_bills: unpaidBills.length,
     unpaid_bills_amount: unpaidBills.reduce((s, b) => s + Number(b.amount), 0),
     expiring_this_week: expiringThisWeek.length,
-    // keep for compat
     revenue_target: gym?.monthly_revenue_target ?? 0,
+    pending_commissions_amount: (pendingReferralsRes.data ?? []).reduce((s, r) => s + Number(r.commission_amount), 0),
+    pending_commissions_count: pendingReferralsRes.data?.length ?? 0,
+    paid_commissions_this_month: (paidReferralsRes.data ?? []).reduce((s, r) => s + Number(r.commission_amount), 0),
   };
+  // Recalculate net profit to include paid partner commissions this month
+  stats.net_profit = stats.monthly_collected - stats.monthly_expenses - stats.monthly_salaries - stats.paid_commissions_this_month;
 
   const trainers = trainersRes.data ?? [];
   const assignedMembers = assignedMembersRes.data ?? [];
@@ -266,13 +275,14 @@ export async function getDashboardData() {
 
 async function _fetchMembers(gymId: string) {
   const supabase = createAdminClient();
-  const [{ data: members }, { data: plans }, { data: staff }] = await Promise.all([
+  const [{ data: members }, { data: plans }, { data: staff }, { data: referrers }] = await Promise.all([
     supabase.from("pulse_members")
       .select("*, plan:pulse_membership_plans(name,duration_type,price,color), trainer:pulse_staff(full_name)")
       .eq("gym_id", gymId)
       .order("created_at", { ascending: false }),
     supabase.from("pulse_membership_plans").select("*").eq("gym_id", gymId).eq("is_active", true).order("name"),
     supabase.from("pulse_staff").select("id,full_name,role").eq("gym_id", gymId).eq("status", "active").eq("role", "trainer"),
+    supabase.from("pulse_referrers").select("id,full_name,commission_type,commission_value").eq("gym_id", gymId).eq("status", "active").order("full_name"),
   ]);
 
   const all = (members ?? []) as Member[];
@@ -281,12 +291,13 @@ async function _fetchMembers(gymId: string) {
     expired: all.filter((m) => m.status === "expired" || m.status === "cancelled"),
     plans: (plans ?? []) as MembershipPlan[],
     staff: (staff ?? []) as Pick<Staff, "id" | "full_name" | "role">[],
+    referrers: (referrers ?? []) as Pick<Referrer, "id" | "full_name" | "commission_type" | "commission_value">[],
   };
 }
 
 export async function getMembers() {
   const ctx = await getAuthContext();
-  if (!ctx?.gymId) return { gymId: null, active: [], expired: [], plans: [], staff: [] };
+  if (!ctx?.gymId) return { gymId: null, active: [], expired: [], plans: [], staff: [], referrers: [] };
   const gymId = ctx.gymId;
   const data = await _fetchMembers(gymId);
   return { gymId, ...data };
@@ -552,30 +563,74 @@ export async function getClasses() {
 
 async function _fetchStaffData(gymId: string) {
   const supabase = createAdminClient();
-  const [{ data: staff }, { data: salaryPayments }] = await Promise.all([
+  const [{ data: staff }, { data: salaryPayments }, { data: gym }] = await Promise.all([
     supabase.from("pulse_staff").select("*").eq("gym_id", gymId).order("full_name"),
     supabase.from("pulse_salary_payments")
       .select("*, staff:pulse_staff(full_name,role)")
       .eq("gym_id", gymId)
       .order("for_month", { ascending: false })
       .limit(200),
+    supabase.from("pulse_gyms").select("name").eq("id", gymId).single(),
   ]);
   return {
     staff: (staff ?? []) as Staff[],
     salaryPayments: (salaryPayments ?? []) as SalaryPayment[],
+    gymName: gym?.name ?? null,
   };
 }
 
 export async function getStaffData() {
   const ctx = await getAuthContext();
-  if (!ctx?.gymId) return { gymId: null, staff: [], salaryPayments: [] };
-  const gymId = ctx.gymId;
-  const data = await unstable_cache(
-    () => _fetchStaffData(gymId),
-    ["staff", gymId],
-    { revalidate: 60, tags: [`staff-${gymId}`] }
-  )();
-  return { gymId, ...data };
+  if (!ctx?.gymId) return { gymId: null, staff: [], salaryPayments: [], gymName: null };
+  const data = await _fetchStaffData(ctx.gymId);
+  return { gymId: ctx.gymId, ...data };
+}
+
+// ── Referrers ─────────────────────────────────────────────────────────────────
+
+export async function getReferrersData() {
+  const ctx = await getAuthContext();
+  if (!ctx?.gymId) return { gymId: null, gymName: null, referrers: [], referrals: [] };
+  const admin = createAdminClient();
+  const [{ data: referrers }, { data: referrals }] = await Promise.all([
+    admin.from("pulse_referrers").select("*").eq("gym_id", ctx.gymId).order("full_name"),
+    admin.from("pulse_referrals")
+      .select("*, member:pulse_members(full_name, phone, join_date)")
+      .eq("gym_id", ctx.gymId)
+      .order("created_at", { ascending: false }),
+  ]);
+  return { gymId: ctx.gymId, gymName: ctx.gym?.name ?? null, referrers: referrers ?? [], referrals: referrals ?? [] };
+}
+
+export const getReferrerContext = cache(async () => {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: profile } = await supabase
+    .from("pulse_profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (profile?.role !== "referrer") return null;
+  const { data: referrer } = await supabase
+    .from("pulse_referrers")
+    .select("*, gym:pulse_gyms(name)")
+    .eq("user_id", user.id)
+    .single();
+  if (!referrer) return null;
+  return { supabase, user, referrer };
+});
+
+export async function getReferrerPageData() {
+  const ctx = await getReferrerContext();
+  if (!ctx) return null;
+  const admin = createAdminClient();
+  const { data: referrals } = await admin
+    .from("pulse_referrals")
+    .select("*, member:pulse_members(full_name, phone, join_date)")
+    .eq("referrer_id", ctx.referrer.id)
+    .order("created_at", { ascending: false });
+  return { referrer: ctx.referrer, referrals: referrals ?? [] };
 }
 
 export async function getExpenses(monthFilter: string) {

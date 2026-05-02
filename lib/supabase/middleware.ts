@@ -25,13 +25,12 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // getSession() reads the JWT from the cookie — no network call.
-  // Routing decisions (redirect to /login or /dashboard) don't need server validation.
-  // Server components use getUser() (which validates + refreshes) for actual data access.
+  // getUser() validates the token with Supabase's auth server and refreshes it if needed.
+  // This correctly handles deleted users — if the auth account was removed the token is
+  // rejected, Supabase SSR clears the stale cookies, and routing treats them as logged out.
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const user = session?.user ?? null;
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
   const isAuthRoute = pathname.startsWith("/login");

@@ -6,7 +6,7 @@ import {
   ChevronLeft, ChevronRight, Search, TrendingUp, UserPlus, Pencil, LogIn, Target,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { createMemberAsTrainer, updateMemberAsTrainer, checkInMemberAsTrainer } from "@/app/actions/trainer";
+import { createMemberAsTrainer, updateMemberAsTrainer, checkInMemberAsTrainer, checkMemberByPhone } from "@/app/actions/trainer";
 import { MemberDetailDialog } from "./member-detail-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -126,6 +126,25 @@ export function TrainerClient({ staff, gymId, members, selfMembers, payments: in
   const [memberForm, setMemberForm] = useState(emptyMemberForm);
   const [savingMember, setSavingMember] = useState(false);
   const [editingMember, setEditingMember] = useState<MemberRow | null>(null);
+  const [duplicateMember, setDuplicateMember] = useState<{ id: string; full_name: string; status: string; assigned_trainer_id: string | null } | null>(null);
+
+  async function handlePhoneBlur() {
+    if (editingMember || !memberForm.phone || memberForm.phone.length < 8) return;
+    const { member } = await checkMemberByPhone(memberForm.phone);
+    if (!member) { setDuplicateMember(null); return; }
+    setDuplicateMember({ id: member.id, full_name: member.full_name, status: member.status, assigned_trainer_id: member.assigned_trainer_id });
+    setMemberForm((f) => ({
+      ...f,
+      full_name: member.full_name,
+      email: member.email ?? "",
+      cnic: member.cnic ?? "",
+      plan_id: member.plan_id ?? "",
+      monthly_fee: String(member.monthly_fee ?? ""),
+      admission_fee: String(member.admission_fee ?? "0"),
+      join_date: member.join_date ?? f.join_date,
+      notes: member.notes ?? "",
+    }));
+  }
 
   function openEditMember(m: MemberRow) {
     setEditingMember(m);
@@ -194,6 +213,7 @@ export function TrainerClient({ staff, gymId, members, selfMembers, payments: in
     setAddMemberOpen(false);
     setMemberForm(emptyMemberForm);
     setEditingMember(null);
+    setDuplicateMember(null);
     router.refresh();
   }
 
@@ -781,7 +801,7 @@ export function TrainerClient({ staff, gymId, members, selfMembers, payments: in
       </Dialog>
 
       {/* Add/Edit Member dialog (permission-gated) */}
-      <Dialog open={addMemberOpen} onOpenChange={(o) => { if (!o) { setAddMemberOpen(false); setEditingMember(null); } }}>
+      <Dialog open={addMemberOpen} onOpenChange={(o) => { if (!o) { setAddMemberOpen(false); setEditingMember(null); setDuplicateMember(null); } }}>
         <DialogContent className="sm:max-w-xl p-7">
           <DialogHeader className="pb-1">
             <DialogTitle>{editingMember ? "Edit Member" : "Onboard New Member"}</DialogTitle>
@@ -790,6 +810,19 @@ export function TrainerClient({ staff, gymId, members, selfMembers, payments: in
             </p>
           </DialogHeader>
           <div className="space-y-4 py-1 max-h-[65vh] overflow-y-auto px-1">
+            {duplicateMember && (
+              <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2.5 text-xs text-yellow-400 space-y-0.5">
+                <p className="font-semibold">Member already exists with this number</p>
+                <p className="text-yellow-400/80">
+                  <span className="font-medium text-yellow-300">{duplicateMember.full_name}</span>
+                  {" · "}
+                  {duplicateMember.assigned_trainer_id ? "Assigned to another trainer" : "No trainer assigned"}
+                  {" · "}
+                  <span className="capitalize">{duplicateMember.status}</span>
+                </p>
+                <p className="text-yellow-400/60">Form pre-filled with their existing data.</p>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Full Name *</Label>
@@ -797,7 +830,12 @@ export function TrainerClient({ staff, gymId, members, selfMembers, payments: in
               </div>
               <div className="space-y-1.5">
                 <Label>Phone *</Label>
-                <Input placeholder="+92 300 0000000" value={memberForm.phone} onChange={(e) => setMemberForm({ ...memberForm, phone: e.target.value })} />
+                <Input
+                  placeholder="+92 300 0000000"
+                  value={memberForm.phone}
+                  onChange={(e) => { setDuplicateMember(null); setMemberForm({ ...memberForm, phone: e.target.value }); }}
+                  onBlur={handlePhoneBlur}
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -877,7 +915,7 @@ export function TrainerClient({ staff, gymId, members, selfMembers, payments: in
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setAddMemberOpen(false); setEditingMember(null); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setAddMemberOpen(false); setEditingMember(null); setDuplicateMember(null); }}>Cancel</Button>
             <Button onClick={handleAddMember} disabled={savingMember || !memberForm.full_name || !memberForm.phone || !memberForm.plan_id}>
               {savingMember ? "Saving…" : editingMember ? "Update" : "Add Member"}
             </Button>
