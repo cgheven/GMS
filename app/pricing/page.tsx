@@ -1,0 +1,386 @@
+"use client";
+import { useState } from "react";
+import Link from "next/link";
+import {
+  Check, Zap, Users, Bell, BarChart3, TrendingUp,
+  CalendarDays, MessageSquare, FileText, ArrowRight,
+} from "lucide-react";
+
+const BASE_PRICES = { starter: 10000, growth: 15000, pro: 25000 };
+const ANNUAL_DISCOUNT = 0.20;
+
+const tiers = [
+  {
+    key: "starter" as const,
+    name: "Starter",
+    tagline: "For gyms ready to ditch the spreadsheet.",
+    highlight: false,
+    cta: "Start Free Trial",
+    href: "/login",
+    bullets: [
+      "Up to 100 active members",
+      "Live revenue snapshot, always on your dashboard",
+      "WhatsApp dues reminders in one tap",
+      "Expense tracking — know what's left after the bills",
+      "Expired members flagged instantly",
+      "Full payment history per member",
+    ],
+  },
+  {
+    key: "growth" as const,
+    name: "Growth",
+    tagline: "Full control over your gym, your team, and your pipeline.",
+    badge: "Most Popular",
+    highlight: true,
+    cta: "Start Free Trial",
+    href: "/login",
+    bullets: [
+      "Unlimited active members",
+      "Everything in Starter",
+      "Lead pipeline — every walk-in tracked, followed up, and converted",
+      "Class scheduling with capacity limits and attendance tracking",
+      "PDF & CSV export of compliance-scoped reports",
+      "Priority support",
+    ],
+  },
+  {
+    key: "pro" as const,
+    name: "Pro",
+    tagline: "Built for gym chains. Every branch, every rupee, under one roof.",
+    highlight: false,
+    cta: "Talk to Sales",
+    href: "mailto:sales@pulseapp.pk",
+    bullets: [
+      "Everything in Growth",
+      "2 branches included — need more? Talk to us",
+      "Referral engine — see exactly which members bring in new business",
+      "Transfer trainer clients in one click to another trainer",
+      "Dedicated onboarding and data migration",
+    ],
+  },
+];
+
+const painPoints = [
+  {
+    icon: Bell,
+    heading: "You find out a member expired when they're already at the front desk.",
+    fix: "Pulse flags every expiry the moment it happens. You always know who owes.",
+  },
+  {
+    icon: MessageSquare,
+    heading: "Collecting dues means manually messaging 30 people on WhatsApp.",
+    fix: "One click sends a personalized WhatsApp reminder to every overdue member.",
+  },
+  {
+    icon: Users,
+    heading: "Your trainers can see every member's details — including clients that aren't theirs.",
+    fix: "Role-based access. Trainers see their clients only. Staff sees what you allow.",
+  },
+];
+
+const features = [
+  {
+    icon: Bell,
+    title: "Dues that collect themselves",
+    body: "Overdue members get a personalized WhatsApp message in one click. No manual copy-paste. No forgetting. No awkward conversations.",
+  },
+  {
+    icon: Users,
+    title: "Access that fits your team",
+    body: "Trainers see their clients only. Front desk sees check-ins. Staff sees what you decide. Nobody accesses what they have no business seeing.",
+  },
+  {
+    icon: TrendingUp,
+    title: "Your numbers, at a glance",
+    body: "Revenue, active members, expiring plans, top earners — your dashboard gives you the full picture the moment you log in.",
+  },
+  {
+    icon: CalendarDays,
+    title: "Classes that fill up, not get lost",
+    body: "Schedule classes, set capacity, track attendance. Know which sessions are popular and which to drop before you waste more floor time.",
+  },
+  {
+    icon: FileText,
+    title: "Leads that don't fall through the cracks",
+    body: "Every walk-in is a lead. Log them, assign follow-up, track conversion. Most gyms lose 40% of their pipeline by not having a system.",
+  },
+  {
+    icon: BarChart3,
+    title: "Reports built for your business",
+    body: "Compliance reports, revenue summaries, member breakdowns — export to PDF or CSV whenever you need them.",
+  },
+];
+
+const faqs = [
+  {
+    q: "Is there a free trial?",
+    a: "Yes — Starter and Growth both come with a 14-day free trial. No credit card required to start.",
+  },
+  {
+    q: "Can I import my existing member data?",
+    a: "Pro tier includes dedicated data migration. On Starter and Growth you can bulk-import members via CSV.",
+  },
+  {
+    q: "What happens if I go over the 100-member limit on Starter?",
+    a: "We'll notify you and give you a grace period before prompting an upgrade. No sudden lockouts.",
+  },
+  {
+    q: "Can I change plans later?",
+    a: "Upgrade or downgrade any time. Changes take effect on your next billing cycle.",
+  },
+  {
+    q: "Is my data safe?",
+    a: "All data is encrypted at rest and in transit. Role-based access controls and a full audit log are built in.",
+  },
+  {
+    q: "Do you support multiple locations?",
+    a: "Multi-location support is on the roadmap. Reach out to sales if this is a requirement — we can discuss options.",
+  },
+];
+
+export default function PricingPage() {
+  const [annual, setAnnual] = useState(false);
+
+  function displayPrice(base: number) {
+    const amount = annual ? Math.round(base * (1 - ANNUAL_DISCOUNT)) : base;
+    return amount.toLocaleString("en-PK");
+  }
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Ambient glow */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -top-60 left-1/2 -translate-x-1/2 w-[900px] h-[500px] rounded-full bg-primary/[0.06] blur-3xl" />
+        <div className="absolute top-1/2 -left-40 w-[400px] h-[400px] rounded-full bg-primary/[0.03] blur-3xl" />
+        <div className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full bg-primary/[0.03] blur-3xl" />
+      </div>
+
+      {/* Nav */}
+      <nav className="relative z-10 flex items-center justify-between px-6 py-5 max-w-6xl mx-auto">
+        <Link href="/" className="flex flex-col items-start">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+              <Zap className="w-4 h-4 text-primary" />
+            </div>
+            <span className="font-serif text-xl text-foreground tracking-tight">Pulse</span>
+          </div>
+          <span className="text-[10px] text-primary/60 uppercase tracking-[0.2em] font-semibold ml-10 -mt-0.5">Pulse of your gym</span>
+        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/login" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            Sign in
+          </Link>
+        </div>
+      </nav>
+
+      {/* Compact hero */}
+      <section className="relative z-10 flex flex-col items-center gap-6 text-center px-6 pt-10 pb-8 max-w-3xl mx-auto">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary/20 bg-primary/5">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+          <span className="text-xs font-semibold text-primary uppercase tracking-widest">Rolling out in Pakistan</span>
+        </div>
+
+        <div className="inline-flex items-center gap-1 p-1 rounded-xl border border-sidebar-border bg-card">
+          <button
+            onClick={() => setAnnual(false)}
+            className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${
+              !annual ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Monthly
+          </button>
+          <button
+            onClick={() => setAnnual(true)}
+            className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-all ${
+              annual ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Annual
+            <span className={`text-xs px-1.5 py-0.5 rounded-md font-bold ${annual ? "bg-primary-foreground/20 text-primary-foreground" : "bg-primary/10 text-primary"}`}>
+              Save 20%
+            </span>
+          </button>
+        </div>
+      </section>
+
+      {/* Pricing cards */}
+      <section className="relative z-10 px-6 pb-16 max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          {tiers.map((tier) => (
+            <div
+              key={tier.name}
+              className={`relative rounded-2xl border p-7 flex flex-col gap-6 ${
+                tier.highlight
+                  ? "border-primary/40 bg-primary/[0.04] shadow-[0_0_60px_-10px] shadow-primary/20"
+                  : "border-sidebar-border bg-card"
+              }`}
+            >
+              {tier.badge && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                  <span className="px-3 py-1 rounded-full bg-primary text-primary-foreground text-xs font-bold uppercase tracking-wider shadow-lg">
+                    {tier.badge}
+                  </span>
+                </div>
+              )}
+
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1">
+                  {tier.name}
+                </p>
+                <div className="flex items-end gap-1 mb-1">
+                  <span className="text-sm text-muted-foreground">PKR</span>
+                  <span className="text-4xl font-bold text-foreground tabular-nums">
+                    {displayPrice(BASE_PRICES[tier.key])}
+                  </span>
+                  <span className="text-sm text-muted-foreground pb-1">/mo</span>
+                </div>
+                {annual && (
+                  <p className="text-xs text-primary mb-2">
+                    Billed as PKR {(Math.round(BASE_PRICES[tier.key] * (1 - ANNUAL_DISCOUNT)) * 12).toLocaleString("en-PK")}/year
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground leading-relaxed">{tier.tagline}</p>
+              </div>
+
+              <Link
+                href={tier.href}
+                className={`flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                  tier.highlight
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/20"
+                    : "border border-sidebar-border hover:border-primary/40 hover:bg-primary/5 text-foreground"
+                }`}
+              >
+                {tier.cta}
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+
+              <ul className="space-y-3">
+                {tier.bullets.map((bullet) => (
+                  <li key={bullet} className="flex items-start gap-2.5 text-sm">
+                    <Check className={`w-4 h-4 shrink-0 mt-0.5 ${tier.highlight ? "text-primary" : "text-muted-foreground"}`} />
+                    <span className="text-muted-foreground leading-relaxed">{bullet}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <p className="text-center text-xs text-muted-foreground/60 mt-6">
+          No credit card required to start. Cancel any time. Prices in PKR.
+        </p>
+      </section>
+
+      {/* Pain points */}
+      <section className="relative z-10 px-6 py-12 max-w-6xl mx-auto">
+        <p className="text-center text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-8">
+          Sound familiar?
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {painPoints.map(({ icon: Icon, heading, fix }) => (
+            <div key={heading} className="rounded-2xl border border-sidebar-border bg-card p-5 flex flex-col gap-4">
+              <div className="w-9 h-9 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center justify-center shrink-0">
+                <Icon className="w-4 h-4 text-destructive" />
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">{heading}</p>
+              <div className="mt-auto pt-3 border-t border-sidebar-border">
+                <div className="flex items-start gap-2">
+                  <Check className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                  <p className="text-xs text-foreground leading-relaxed">{fix}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Feature highlights */}
+      <section className="relative z-10 px-6 py-12 max-w-6xl mx-auto">
+        <div className="text-center mb-10">
+          <h2 className="text-3xl font-serif font-normal tracking-tight mb-3">
+            Everything your gym needs. Nothing it doesn&apos;t.
+          </h2>
+          <p className="text-muted-foreground max-w-xl mx-auto">
+            Built around how gyms actually operate — not how a startup imagines they do.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {features.map(({ icon: Icon, title, body }) => (
+            <div key={title} className="rounded-2xl border border-sidebar-border bg-card p-6 space-y-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+                <Icon className="w-5 h-5 text-primary" />
+              </div>
+              <h3 className="font-semibold text-foreground">{title}</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">{body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="relative z-10 px-6 py-12 max-w-3xl mx-auto">
+        <div className="text-center mb-10">
+          <h2 className="text-3xl font-serif font-normal tracking-tight mb-2">Common questions</h2>
+          <p className="text-muted-foreground">Anything else — reach out directly.</p>
+        </div>
+        <div className="space-y-3">
+          {faqs.map(({ q, a }) => (
+            <div key={q} className="rounded-2xl border border-sidebar-border bg-card px-6 py-5">
+              <p className="font-semibold text-foreground mb-2">{q}</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">{a}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Bottom CTA */}
+      <section className="relative z-10 px-6 py-16 max-w-4xl mx-auto text-center">
+        <div className="rounded-3xl border border-primary/20 bg-primary/[0.04] p-12">
+          <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-6">
+            <Zap className="w-7 h-7 text-primary" />
+          </div>
+          <h2 className="text-4xl font-serif font-normal tracking-tight mb-4">
+            Your gym is bleeding money<br />every month you wait.
+          </h2>
+          <p className="text-muted-foreground max-w-lg mx-auto mb-8 leading-relaxed">
+            Expired members slipping through. Dues going uncollected. Walk-ins never followed up on.
+            Most gyms fix this in their first week on Pulse.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link
+              href="/login"
+              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all duration-200 shadow-lg shadow-primary/20 text-sm"
+            >
+              Start your free 14-day trial
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+            <Link
+              href="mailto:sales@pulseapp.pk"
+              className="flex items-center gap-2 px-6 py-3 rounded-xl border border-sidebar-border hover:border-primary/40 text-foreground font-semibold transition-colors text-sm"
+            >
+              Talk to sales
+            </Link>
+          </div>
+          <p className="text-xs text-muted-foreground/60 mt-5">No credit card required. Cancel any time.</p>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="relative z-10 border-t border-sidebar-border px-6 py-8">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+              <Zap className="w-3 h-3 text-primary" />
+            </div>
+            <span className="font-serif text-base text-foreground">Pulse</span>
+          </Link>
+          <p className="text-xs text-muted-foreground/60">
+            © {new Date().getFullYear()} Pulse GMS. Built for gyms that mean business.
+          </p>
+          <Link href="/login" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            Sign in →
+          </Link>
+        </div>
+      </footer>
+    </div>
+  );
+}

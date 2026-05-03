@@ -301,7 +301,7 @@ export function DashboardClient({ data, leadsSummary }: Props) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Dumbbell className="w-4 h-4 text-primary" />
-              <h2 className="text-sm font-semibold text-foreground">Collection Performance</h2>
+              <h2 className="text-sm font-semibold text-foreground">Trainer Collection Performance</h2>
               <span className="text-xs text-muted-foreground">— {new Date().toLocaleDateString("en-US", { month: "long" })}</span>
             </div>
             <Link href="/trainers" className="text-xs text-muted-foreground hover:text-foreground transition-colors">Manage →</Link>

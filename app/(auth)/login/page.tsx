@@ -49,7 +49,7 @@ export default function LoginPage() {
             <Zap className="w-6 h-6 text-primary" />
           </div>
           <h1 className="font-serif text-3xl text-foreground tracking-tight">Pulse</h1>
-          <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary/70">The pulse of your gym</p>
+          <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary/70">Pulse of your gym</p>
         </div>
 
         {/* Card */}

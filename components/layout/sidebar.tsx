@@ -105,14 +105,14 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         )}
       >
         {/* Logo */}
-        <div className="flex items-center justify-between px-4 py-4 border-b border-sidebar-border">
+        <div className="flex items-center justify-between px-4 h-14 border-b border-sidebar-border">
           <Link href="/dashboard" className="flex items-center gap-2.5 group" onClick={onClose}>
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/15 border border-primary/25 transition-all group-hover:bg-primary/20">
               <Zap className="w-4 h-4 text-primary" />
             </div>
             <div>
               <p className="text-foreground font-bold text-sm tracking-tight leading-none">Pulse</p>
-              <p className="text-muted-foreground text-[11px] mt-0.5 font-medium tracking-wide uppercase">Gym Management</p>
+              <p className="text-primary/60 text-[10px] mt-0.5 font-semibold tracking-[0.15em] uppercase">Pulse of your gym</p>
             </div>
           </Link>
           <button
