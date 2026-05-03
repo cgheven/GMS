@@ -20,7 +20,7 @@ const tiers = [
     cta: "Get Started",
     href: "/login",
     bullets: [
-      "Up to 100 active members",
+      "Up to 200 active members",
       "Live revenue snapshot, always on your dashboard",
       "WhatsApp dues reminders in one tap",
       "Expense tracking — know what's left after the bills",
@@ -37,7 +37,7 @@ const tiers = [
     cta: "Get Started",
     href: "/login",
     bullets: [
-      "Unlimited active members",
+      "Up to 1000 active members",
       "Everything in Starter",
       "Lead pipeline — every walk-in tracked, followed up, and converted",
       "Class scheduling with capacity limits and attendance tracking",
@@ -54,6 +54,7 @@ const tiers = [
     href: "mailto:sales@pulseapp.pk",
     bullets: [
       "Everything in Growth",
+      "Up to 2000 active members per branch",
       "2 branches included — need more? Talk to us",
       "Referral engine — see exactly which members bring in new business",
       "Transfer trainer clients in one click to another trainer",
@@ -119,7 +120,7 @@ const faqs = [
     a: "Pro tier includes dedicated data migration. On Starter and Growth you can bulk-import members via CSV.",
   },
   {
-    q: "What happens if I go over the 100-member limit on Starter?",
+    q: "What happens if I go over the member limit on my plan?",
     a: "We'll notify you and give you a grace period before prompting an upgrade. No sudden lockouts.",
   },
   {
