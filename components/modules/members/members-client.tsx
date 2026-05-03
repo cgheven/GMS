@@ -121,15 +121,29 @@ interface MemberTableProps {
   planMap: Record<string, MembershipPlan>;
   onEdit: (m: Member) => void;
   onDelete: (m: Member) => void;
+  selectedIds: Set<string>;
+  onToggle: (id: string) => void;
+  onSelectAll: () => void;
 }
 
-const MemberTable = memo(function MemberTable({ list, showExpired, planMap, onEdit, onDelete }: MemberTableProps) {
+const MemberTable = memo(function MemberTable({ list, showExpired, planMap, onEdit, onDelete, selectedIds, onToggle, onSelectAll }: MemberTableProps) {
   if (list.length === 0) return null;
+  const allSelected = list.length > 0 && list.every((m) => selectedIds.has(m.id));
+  const someSelected = !allSelected && list.some((m) => selectedIds.has(m.id));
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-sidebar-border">
+            <th className="px-3 sm:px-4 py-3 w-10">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                onChange={onSelectAll}
+                className="w-4 h-4 rounded accent-primary cursor-pointer"
+              />
+            </th>
             <th className="text-left px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Member</th>
             <th className="text-left px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Plan</th>
             <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Trainer</th>
@@ -147,8 +161,17 @@ const MemberTable = memo(function MemberTable({ list, showExpired, planMap, onEd
             const planName = planData?.name ?? plan?.name;
             const planColor = planData?.color ?? plan?.color ?? "#6B7A99";
             const trainerData = (m as Member & { trainer?: { full_name: string } | null }).trainer;
+            const isSelected = selectedIds.has(m.id);
             return (
-              <tr key={m.id} className="hover:bg-white/[0.02] transition-colors group">
+              <tr key={m.id} className={`hover:bg-white/[0.02] transition-colors group ${isSelected ? "bg-primary/[0.04]" : ""}`}>
+                <td className="px-3 sm:px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggle(m.id)}
+                    className="w-4 h-4 rounded accent-primary cursor-pointer"
+                  />
+                </td>
                 <td className="px-3 sm:px-4 py-3">
                   <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                     <div
@@ -231,6 +254,12 @@ export function MembersClient({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null);
   const [deleteMember, setDeleteMember] = useState<Member | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkEditDialog, setBulkEditDialog] = useState(false);
+  const [bulkPlanId, setBulkPlanId] = useState("");
+  const [bulkTrainerId, setBulkTrainerId] = useState("");
+  const [bulkFee, setBulkFee] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   // ── Collect tab state (lazy-loaded) ─────────────────────────────────────────
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -353,6 +382,91 @@ export function MembersClient({
     await reload();
   }
 
+  function closeBulkEdit() {
+    setBulkEditDialog(false);
+    setBulkPlanId("");
+    setBulkTrainerId("");
+    setBulkFee("");
+  }
+
+  async function handleBulkEdit() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
+    if (!gymId || selectedIds.size === 0) return;
+    const selectedPlan = bulkPlanId ? plans.find((p) => p.id === bulkPlanId) : undefined;
+    const customFee = bulkFee !== "" ? parseFloat(bulkFee) : NaN;
+    if (!selectedPlan && isNaN(customFee) && !bulkTrainerId) return;
+    setBulkSaving(true);
+    const supabase = createClient();
+    const allMembers = [...active, ...expired];
+    const memberById = Object.fromEntries(allMembers.map((m) => [m.id, m]));
+
+    // When no new plan is selected, only assign trainer to members whose current plan includes PT
+    let targetIds = Array.from(selectedIds);
+    let skipped = 0;
+    if (!selectedPlan && bulkTrainerId) {
+      const eligible = targetIds.filter((id) => {
+        const m = memberById[id];
+        const plan = m?.plan_id ? planMap[m.plan_id] : null;
+        return !plan || plan.includes_pt;
+      });
+      skipped = targetIds.length - eligible.length;
+      targetIds = eligible;
+      if (targetIds.length === 0) {
+        toast({ title: "No eligible members", description: "None of the selected members are on a plan that includes a trainer.", variant: "destructive" });
+        setBulkSaving(false);
+        return;
+      }
+    }
+
+    const payload: Record<string, unknown> = {};
+    if (selectedPlan) {
+      payload.plan_id = selectedPlan.id;
+      payload.monthly_fee = selectedPlan.price;
+      if (!selectedPlan.includes_pt) payload.assigned_trainer_id = null;
+      else if (bulkTrainerId) payload.assigned_trainer_id = bulkTrainerId;
+    } else if (bulkTrainerId) {
+      payload.assigned_trainer_id = bulkTrainerId;
+    }
+    if (!isNaN(customFee)) payload.monthly_fee = customFee;
+    const { error } = await supabase.from("pulse_members")
+      .update(payload)
+      .in("id", targetIds);
+    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
+    else {
+      const msg = skipped > 0 ? ` (${skipped} skipped — no trainer in their plan)` : "";
+      toast({ title: `${targetIds.length} member${targetIds.length !== 1 ? "s" : ""} updated${msg}` });
+      closeBulkEdit();
+      setSelectedIds(new Set());
+      await reload();
+    }
+    setBulkSaving(false);
+  }
+
+  function toggleMember(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function selectAll(list: Member[]) {
+    const allSelected = list.every((m) => selectedIds.has(m.id));
+    if (allSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        list.forEach((m) => next.delete(m.id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        list.forEach((m) => next.add(m.id));
+        return next;
+      });
+    }
+  }
+
   function filterList(list: Member[]) {
     let filtered = list;
     if (trainerFilter === "self") {
@@ -394,6 +508,8 @@ export function MembersClient({
 
   const filteredActive = useMemo(() => filterList(active), [active, trainerFilter, search]);
   const filteredExpired = useMemo(() => filterList(expired), [expired, trainerFilter, search]);
+
+  useEffect(() => { setSelectedIds(new Set()); }, [trainerFilter, tab, search]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -506,7 +622,7 @@ export function MembersClient({
                   <p className="text-sm">{search ? "No members match your search" : empty}</p>
                 </div>
               ) : (
-                <MemberTable list={list} showExpired={showExpired} planMap={planMap} onEdit={openEdit} onDelete={setDeleteMember} />
+                <MemberTable list={list} showExpired={showExpired} planMap={planMap} onEdit={openEdit} onDelete={setDeleteMember} selectedIds={selectedIds} onToggle={toggleMember} onSelectAll={() => selectAll(list)} />
               )}
             </div>
           </TabsContent>
@@ -710,6 +826,86 @@ export function MembersClient({
         onCancel={() => setDeleteMember(null)}
       />
 
+      {/* ── Bulk Action Bar ─────────────────────────────────────────────────── */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl border border-primary/30 bg-card/95 backdrop-blur shadow-xl animate-in slide-in-from-bottom-2 duration-200">
+          <span className="text-sm font-semibold text-foreground tabular-nums">
+            {selectedIds.size} selected
+          </span>
+          <div className="w-px h-4 bg-sidebar-border" />
+          <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => { setBulkPlanId(""); setBulkTrainerId(""); setBulkFee(""); setBulkEditDialog(true); }}>
+            Bulk Edit
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8 text-xs text-muted-foreground hover:text-foreground" onClick={() => setSelectedIds(new Set())}>
+            Clear
+          </Button>
+        </div>
+      )}
+
+      {/* ── Bulk Edit Dialog ─────────────────────────────────────────────────── */}
+      <Dialog open={bulkEditDialog} onOpenChange={(o) => { if (!o) closeBulkEdit(); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>Bulk Edit Members</DialogTitle></DialogHeader>
+          <div className="py-2 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Applying to <span className="font-semibold text-foreground">{selectedIds.size} member{selectedIds.size !== 1 ? "s" : ""}</span>. Fill only the fields you want to change.
+            </p>
+            <div className="space-y-1.5">
+              <Label>Plan <span className="text-muted-foreground text-xs font-normal">(optional)</span></Label>
+              <Select value={bulkPlanId || "no-change"} onValueChange={(v) => { setBulkPlanId(v === "no-change" ? "" : v); setBulkTrainerId(""); }}>
+                <SelectTrigger><SelectValue placeholder="No change" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="no-change">No change</SelectItem>
+                  {plans.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      <span className="flex items-center gap-2">
+                        <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
+                        {p.name} · {formatCurrency(p.price)}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {(!bulkPlanId || planMap[bulkPlanId]?.includes_pt) && (
+              <div className="space-y-1.5">
+                <Label>Trainer <span className="text-muted-foreground text-xs font-normal">(optional)</span></Label>
+                <Select value={bulkTrainerId || "no-change"} onValueChange={(v) => setBulkTrainerId(v === "no-change" ? "" : v)}>
+                  <SelectTrigger><SelectValue placeholder="No change (keep existing)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="no-change">No change (keep existing)</SelectItem>
+                    {staff.map((s) => (<SelectItem key={s.id} value={s.id}>{s.full_name}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+                {!bulkPlanId && bulkTrainerId && (
+                  <p className="text-xs text-amber-400">Only applies to members on plans that include a trainer.</p>
+                )}
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label>Monthly Fee (Rs.) <span className="text-muted-foreground text-xs font-normal">(optional)</span></Label>
+              <Input
+                type="number"
+                min="0"
+                placeholder="No change"
+                value={bulkFee}
+                onChange={(e) => setBulkFee(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleBulkEdit()}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeBulkEdit}>Cancel</Button>
+            <Button
+              onClick={handleBulkEdit}
+              disabled={bulkSaving || (!bulkPlanId && bulkFee === "" && !bulkTrainerId)}
+            >
+              {bulkSaving ? "Updating…" : "Apply"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Add / Edit Dialog — isolated component so typing doesn't re-render the table */}
       <MemberFormDialog
         open={dialogOpen}
@@ -868,7 +1064,7 @@ function MemberFormDialog({
         address: editing.address ?? "",
         member_number: editing.member_number ?? "",
         plan_id: editing.plan_id ?? "",
-        assigned_trainer_id: editing.assigned_trainer_id ?? "",
+        assigned_trainer_id: (() => { const ep = editing.plan_id ? planMap[editing.plan_id] : null; return (ep && !ep.includes_pt) ? "" : (editing.assigned_trainer_id ?? ""); })(),
         referrer_id: (editing as Member & { referrer_id?: string | null }).referrer_id ?? "",
         social_lead_id: "",
         join_date: editing.join_date,
@@ -896,6 +1092,7 @@ function MemberFormDialog({
       plan_id: planId,
       monthly_fee: plan ? plan.price.toString() : f.monthly_fee,
       admission_fee: plan?.admission_fee > 0 ? plan.admission_fee.toString() : f.admission_fee,
+      assigned_trainer_id: (plan && !plan.includes_pt) ? "" : f.assigned_trainer_id,
     }));
   }
 
@@ -1169,6 +1366,7 @@ function MemberFormDialog({
                     </SelectContent>
                   </Select>
                 </div>
+                {(() => { const sp = form.plan_id ? planMap[form.plan_id] : null; return (!sp || sp.includes_pt) ? (
                 <div className="space-y-1.5">
                   <Label>Assigned Trainer</Label>
                   <Select value={form.assigned_trainer_id || "none"} onValueChange={(v) => setForm((f) => ({ ...f, assigned_trainer_id: v === "none" ? "" : v }))}>
@@ -1179,6 +1377,7 @@ function MemberFormDialog({
                     </SelectContent>
                   </Select>
                 </div>
+                ) : null; })()}
                 {!editing && referrers.length > 0 && (
                   <div className="space-y-1.5">
                     <Label>Referred by <span className="text-muted-foreground text-xs">(optional)</span></Label>

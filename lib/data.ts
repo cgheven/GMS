@@ -207,6 +207,21 @@ async function _fetchDashboard(gymId: string, gym: Gym | null) {
     };
   });
 
+  const selfMembers = assignedMembers.filter((m) => !m.assigned_trainer_id);
+  const selfMemberIds = new Set(selfMembers.map((m) => m.id));
+  const selfPayments = currentMonthPayments.filter((p) => p.member_id && selfMemberIds.has(p.member_id));
+  const selfPaidIds = new Set(selfPayments.filter((p) => p.status === "paid").map((p) => p.member_id));
+  const selfStat: TrainerStat | null = selfMembers.length > 0 ? {
+    id: "__self__",
+    name: "Self",
+    total: selfMembers.length,
+    paid: selfPaidIds.size,
+    unpaid: selfMembers.length - selfPaidIds.size,
+    collected: selfPayments.filter((p) => p.status === "paid").reduce((s, p) => s + Number(p.total_amount), 0),
+    totalDue: selfMembers.reduce((s, m) => s + Number(m.monthly_fee), 0),
+    rate: Math.round((selfPaidIds.size / selfMembers.length) * 100),
+  } : null;
+
   // ── Goals & wins overview ──────────────────────────────────────────────
   type RawGoal = {
     id: string; member_id: string; trainer_id: string | null;
@@ -282,7 +297,7 @@ async function _fetchDashboard(gymId: string, gym: Gym | null) {
     byTrainer: goalsByTrainer,
   };
 
-  return { stats, upcomingBills: unpaidBills as Bill[], monthlyData, overdueMembers, trainerStats, expiringMembers: expiringThisWeek, goalsOverview };
+  return { stats, upcomingBills: unpaidBills as Bill[], monthlyData, overdueMembers, trainerStats, selfStat, expiringMembers: expiringThisWeek, goalsOverview };
 }
 
 export async function getDashboardData() {

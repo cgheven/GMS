@@ -32,6 +32,7 @@ interface Props {
     monthlyData: { month: string; collected: number; expenses: number }[];
     overdueMembers: DashboardMember[];
     trainerStats: TrainerStat[];
+    selfStat: TrainerStat | null;
     expiringMembers: ExpiringMember[];
     goalsOverview: GoalsOverview;
   } | null;
@@ -48,7 +49,7 @@ export function DashboardClient({ data, leadsSummary }: Props) {
     );
   }
 
-  const { stats, upcomingBills, monthlyData, overdueMembers, trainerStats, expiringMembers, goalsOverview } = data;
+  const { stats, upcomingBills, monthlyData, overdueMembers, trainerStats, selfStat, expiringMembers, goalsOverview } = data;
 
   const isProfit = stats.net_profit >= 0;
   const targetProgress = stats.revenue_target > 0
@@ -296,28 +297,32 @@ export function DashboardClient({ data, leadsSummary }: Props) {
       )}
 
       {/* ── Collection Performance ──────────────────────────── */}
-      {trainerStats.length > 0 && (
+      {(trainerStats.length > 0 || selfStat) && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Dumbbell className="w-4 h-4 text-primary" />
-              <h2 className="text-sm font-semibold text-foreground">Trainer Collection Performance</h2>
+              <h2 className="text-sm font-semibold text-foreground">Collection Performance</h2>
               <span className="text-xs text-muted-foreground">— {new Date().toLocaleDateString("en-US", { month: "long" })}</span>
             </div>
             <Link href="/trainers" className="text-xs text-muted-foreground hover:text-foreground transition-colors">Manage →</Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-            {trainerStats.map((t) => {
+            {[...trainerStats, ...(selfStat ? [selfStat] : [])].map((t) => {
               const rateColor = t.rate >= 80 ? "text-emerald-400" : t.rate >= 50 ? "text-primary" : "text-rose-400";
               const barColor  = t.rate >= 80 ? "bg-emerald-400"   : t.rate >= 50 ? "bg-primary"   : "bg-rose-400";
+              const isSelf    = t.id === "__self__";
               return (
                 <div key={t.id} className="rounded-2xl border border-sidebar-border bg-card p-4 space-y-3 hover:border-primary/20 transition-colors">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-primary/15 border border-primary/25 flex items-center justify-center text-sm font-bold text-primary shrink-0">
-                      {t.name[0]?.toUpperCase()}
+                    <div className={`w-9 h-9 rounded-full border flex items-center justify-center text-sm font-bold shrink-0 ${isSelf ? "bg-white/10 border-white/20 text-muted-foreground" : "bg-primary/15 border-primary/25 text-primary"}`}>
+                      {isSelf ? "S" : t.name[0]?.toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{t.name}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm font-semibold text-foreground truncate">{t.name}</p>
+                        {isSelf && <span className="text-[10px] text-muted-foreground border border-sidebar-border rounded px-1 py-0.5 shrink-0">No Trainer</span>}
+                      </div>
                       <p className="text-xs text-muted-foreground">{t.total} member{t.total !== 1 ? "s" : ""}</p>
                     </div>
                     <span className={`text-lg font-bold tabular-nums shrink-0 ${rateColor}`}>{t.rate}%</span>

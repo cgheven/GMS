@@ -143,7 +143,7 @@ export default function LoginPage() {
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-primary/25 bg-primary/5 text-sm font-semibold text-primary hover:bg-primary/10 transition-all disabled:opacity-60"
             >
               {demoLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-              Try Demo — no account needed
+              TRY DEMO — NO ACCOUNT NEEDED
             </button>
           </div>
 

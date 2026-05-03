@@ -17,7 +17,7 @@ const tiers = [
     name: "Starter",
     tagline: "For gyms ready to ditch the spreadsheet.",
     highlight: false,
-    cta: "Start Free Trial",
+    cta: "Get Started",
     href: "/login",
     bullets: [
       "Up to 100 active members",
@@ -34,7 +34,7 @@ const tiers = [
     tagline: "Full control over your gym, your team, and your pipeline.",
     badge: "Most Popular",
     highlight: true,
-    cta: "Start Free Trial",
+    cta: "Get Started",
     href: "/login",
     bullets: [
       "Unlimited active members",
@@ -114,10 +114,6 @@ const features = [
 ];
 
 const faqs = [
-  {
-    q: "Is there a free trial?",
-    a: "Yes — Starter and Growth both come with a 14-day free trial. No credit card required to start.",
-  },
   {
     q: "Can I import my existing member data?",
     a: "Pro tier includes dedicated data migration. On Starter and Growth you can bulk-import members via CSV.",
@@ -292,7 +288,7 @@ export default function PricingPage() {
           ))}
         </div>
         <p className="text-center text-xs text-muted-foreground/60 mt-6">
-          No credit card required to start. Cancel any time. Prices in PKR.
+          Prices in PKR.
         </p>
       </section>
 
@@ -376,7 +372,7 @@ export default function PricingPage() {
               href="/login"
               className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all duration-200 shadow-lg shadow-primary/20 text-sm"
             >
-              Start your free 14-day trial
+              Get Started
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
@@ -386,7 +382,6 @@ export default function PricingPage() {
               Talk to sales
             </Link>
           </div>
-          <p className="text-xs text-muted-foreground/60 mt-5">No credit card required. Cancel any time.</p>
         </div>
       </section>
 
