@@ -30,7 +30,7 @@ const ALL_AMENITIES = [
 ];
 
 export function SettingsClient() {
-  const { profile, gym } = useGymContext();
+  const { profile, gym, isDemo } = useGymContext();
   const gymId = gym?.id ?? null;
 
   const [gymForm, setGymForm] = useState({
@@ -75,6 +75,7 @@ export function SettingsClient() {
   }, [gymId]);
 
   async function createCompliance() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!gymId) return;
     if (!complianceForm.full_name || !complianceForm.email || !complianceForm.password) {
       toast({ title: "Fill all fields", variant: "destructive" }); return;
@@ -93,6 +94,7 @@ export function SettingsClient() {
   }
 
   async function removeCompliance() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!gymId) return;
     setRemovingCompliance(true);
     const res = await removeComplianceLogin(gymId);
@@ -102,6 +104,7 @@ export function SettingsClient() {
   }
 
   async function saveComplianceLimits() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!gymId) return;
     setSavingCompliance(true);
     const res = await updateComplianceSettings(gymId, Number(complianceForm.pct_self) || 50, Number(complianceForm.pct_pt) || 50);
@@ -138,6 +141,7 @@ export function SettingsClient() {
 
   async function saveGym(e: React.FormEvent) {
     e.preventDefault();
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!gymId) return;
     setSavingGym(true);
     const supabase = createClient();
@@ -157,6 +161,7 @@ export function SettingsClient() {
 
   async function saveListing(e: React.FormEvent) {
     e.preventDefault();
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!gymId) return;
     setSavingListing(true);
     const supabase = createClient();
@@ -180,6 +185,7 @@ export function SettingsClient() {
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!profile) return;
     setSavingProfile(true);
     const supabase = createClient();

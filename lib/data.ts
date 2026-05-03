@@ -20,16 +20,28 @@ export const getAuthContext = cache(async () => {
   const cookieStore = await cookies();
   const activeGymId = cookieStore.get("pulse_active_gym")?.value;
 
-  const [{ data: profile }, { data: gymData }] = await Promise.all([
-    supabase.from("pulse_profiles").select("*").eq("id", user.id).single(),
-    supabase.from("pulse_gyms").select("*").eq("owner_id", user.id).order("created_at"),
-  ]);
+  const { data: profile } = await supabase
+    .from("pulse_profiles").select("*").eq("id", user.id).single();
 
-  const gyms = (gymData ?? []) as Gym[];
-  const gym =
-    (activeGymId ? gyms.find((g) => g.id === activeGymId) : null) ??
-    gyms[0] ??
-    null;
+  const p = profile as (Profile & { is_demo?: boolean; demo_gym_id?: string }) | null;
+  const isDemo = !!p?.is_demo;
+
+  let gyms: Gym[];
+  let gym: Gym | null;
+
+  if (isDemo && p?.demo_gym_id) {
+    // Demo user: load the gym they're pointed at using the admin client (bypasses owner RLS)
+    const admin = createAdminClient();
+    const { data: demoGym } = await admin
+      .from("pulse_gyms").select("*").eq("id", p.demo_gym_id).single();
+    gym = (demoGym as Gym | null);
+    gyms = gym ? [gym] : [];
+  } else {
+    const { data: gymData } = await supabase
+      .from("pulse_gyms").select("*").eq("owner_id", user.id).order("created_at");
+    gyms = (gymData ?? []) as Gym[];
+    gym = (activeGymId ? gyms.find((g) => g.id === activeGymId) : null) ?? gyms[0] ?? null;
+  }
 
   return {
     supabase,
@@ -38,6 +50,7 @@ export const getAuthContext = cache(async () => {
     gym,
     gyms,
     gymId: (gym?.id ?? null) as string | null,
+    isDemo,
   };
 });
 

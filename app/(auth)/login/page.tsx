@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Loader2, Zap } from "lucide-react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,23 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
+
+  async function handleDemoLogin() {
+    setDemoLoading(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithPassword({
+      email: "demo@musabkhan.me",
+      password: "PulseDemo2024!",
+    });
+    if (error) {
+      toast({ title: "Demo login failed", description: error.message, variant: "destructive" });
+      setDemoLoading(false);
+      return;
+    }
+    router.push("/dashboard");
+    router.refresh();
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -117,7 +135,19 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <p className="text-center text-xs text-muted-foreground/60 mt-6 leading-relaxed">
+          <div className="mt-4 pt-4 border-t border-sidebar-border">
+            <button
+              type="button"
+              onClick={handleDemoLogin}
+              disabled={demoLoading || loading}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-primary/25 bg-primary/5 text-sm font-semibold text-primary hover:bg-primary/10 transition-all disabled:opacity-60"
+            >
+              {demoLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+              Try Demo — no account needed
+            </button>
+          </div>
+
+          <p className="text-center text-xs text-muted-foreground/60 mt-4 leading-relaxed">
             Access restricted to authorized users only.
             <br />
             Contact your administrator for access.

@@ -175,7 +175,7 @@ function MemberPicker({ members, value, onChange }: {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export function PaymentsClient({ gymId, payments: initialPayments, members }: Props) {
-  const { gym } = useGymContext();
+  const { gym, isDemo } = useGymContext();
   const [payments, setPayments] = useState<Payment[]>(initialPayments);
   const [view, setView] = useState<"members" | "history">("members");
 
@@ -288,6 +288,7 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
   }
 
   async function updateStatus(p: Payment, status: PaymentStatus) {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     setPayments((prev) => prev.map((pay) => pay.id === p.id ? { ...pay, status } : pay));
     const supabase = createClient();
     const { error } = await supabase.from("pulse_payments").update({ status }).eq("id", p.id);
@@ -298,6 +299,7 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
   }
 
   async function handleAddPayment() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!gymId || !addForm.member_id) {
       toast({ title: "Select a member", variant: "destructive" });
       return;

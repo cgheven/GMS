@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/data";
 
 export async function createBranch(data: {
   name: string;
@@ -14,6 +15,8 @@ export async function createBranch(data: {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: "Unauthorized" };
+    const ctx = await getAuthContext();
+    if (ctx?.isDemo) return { error: "Demo mode — sign up to make changes." };
 
     const admin = createAdminClient();
     // Look up branch limit + count current gyms

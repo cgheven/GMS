@@ -70,7 +70,7 @@ const emptyForm = {
 type FormState = typeof emptyForm;
 
 export function ClassesClient({ gymId: initialGymId, classes: initialClasses, staff }: Props) {
-  const { gymId: ctxGymId } = useGymContext();
+  const { gymId: ctxGymId, isDemo } = useGymContext();
   const gymId = ctxGymId ?? initialGymId;
 
   const [classes, setClasses] = useState<GymClass[]>(initialClasses);
@@ -121,6 +121,7 @@ export function ClassesClient({ gymId: initialGymId, classes: initialClasses, st
   }
 
   async function handleSave() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!gymId || !form.name.trim()) {
       toast({ title: "Class name is required", variant: "destructive" });
       return;
@@ -166,6 +167,7 @@ export function ClassesClient({ gymId: initialGymId, classes: initialClasses, st
   }
 
   async function handleToggleActive(c: GymClass) {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     const supabase = createClient();
     const { error } = await supabase.from("pulse_classes").update({ is_active: !c.is_active }).eq("id", c.id);
     if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
@@ -174,6 +176,7 @@ export function ClassesClient({ gymId: initialGymId, classes: initialClasses, st
   }
 
   async function handleDelete() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!deleteTarget) return;
     setDeleting(true);
     const supabase = createClient();

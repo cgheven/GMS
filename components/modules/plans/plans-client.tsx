@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
+import { useGymContext } from "@/contexts/gym-context";
 import { formatCurrency } from "@/lib/utils";
 import type { MembershipPlan, PlanDurationType } from "@/types";
 
@@ -76,6 +77,7 @@ interface Props {
 }
 
 export function PlansClient({ gymId, plans: initialPlans }: Props) {
+  const { isDemo } = useGymContext();
   const [plans, setPlans] = useState<PlanWithCount[]>(initialPlans);
   const [filtered, setFiltered] = useState<PlanWithCount[]>(initialPlans);
   const [search, setSearch] = useState("");
@@ -150,6 +152,7 @@ export function PlansClient({ gymId, plans: initialPlans }: Props) {
   }
 
   async function handleSave() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!gymId) {
       toast({ title: "No gym found", description: "Reload the page and try again.", variant: "destructive" });
       return;
@@ -189,6 +192,7 @@ export function PlansClient({ gymId, plans: initialPlans }: Props) {
   }
 
   async function handleDelete(id: string) {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     const supabase = createClient();
     const { error } = await supabase.from("pulse_membership_plans").delete().eq("id", id);
     if (error) {

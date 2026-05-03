@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
+import { useGymContext } from "@/contexts/gym-context";
 import { formatCurrency, formatDate, formatDateInput, capitalize } from "@/lib/utils";
 import type { Bill, BillCategory, BillCondition, BillStatus } from "@/types";
 
@@ -57,6 +58,7 @@ interface Props {
 }
 
 export function BillsClient({ gymId, bills: initialBills }: Props) {
+  const { isDemo } = useGymContext();
   const [bills, setBills] = useState<Bill[]>(initialBills);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -87,6 +89,7 @@ export function BillsClient({ gymId, bills: initialBills }: Props) {
   }
 
   async function handleSave() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!gymId || !form.title || !form.amount) return;
     setSaving(true);
     const supabase = createClient();
@@ -118,6 +121,7 @@ export function BillsClient({ gymId, bills: initialBills }: Props) {
   }
 
   async function handleDelete(id: string) {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     const supabase = createClient();
     const { error } = await supabase.from("pulse_bills").delete().eq("id", id);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });

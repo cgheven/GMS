@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
+import { useGymContext } from "@/contexts/gym-context";
 import { formatCurrency, formatDate, formatDateInput } from "@/lib/utils";
 import { validateFullName, validateCNIC, validatePakPhone, validateMoney, runValidators } from "@/lib/validation";
 import type { Staff, StaffRole, StaffStatus, SalaryPayment, PaymentMethod } from "@/types";
@@ -116,6 +117,7 @@ function buildUsername(fullName: string, gymName: string | null | undefined, exi
 }
 
 export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayments: initialPayments, mode = "all" }: Props) {
+  const { isDemo } = useGymContext();
   const isTrainersMode = mode === "trainers";
   const isStaffMode = mode === "staff";
   const pageTitle = isTrainersMode ? "Trainers" : isStaffMode ? "Staff" : "Staff & Trainers";
@@ -144,6 +146,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
   const [transferTarget, setTransferTarget] = useState<Staff | null>(null);
 
   async function handleCreateLogin() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!loginDialog || !loginForm.username || !loginForm.password) return;
     setLoginSaving(true);
     const email = `${loginForm.username.trim().toLowerCase()}@musabkhan.me`;
@@ -235,6 +238,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
   }
 
   async function handleSave() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!gymId) return;
 
     const check = runValidators(
@@ -274,6 +278,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
   }
 
   async function handleDelete(id: string) {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     const result = await deleteStaffMember(id);
     if (result.blocked === "has_members") {
       toast({
@@ -352,6 +357,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
   }
 
   async function handlePay() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!payDialog) return;
     setPaying(true);
     const supabase = createClient();
@@ -931,6 +937,7 @@ interface TransferClientsDialogProps {
 }
 
 function TransferClientsDialog({ source, candidates, gymId, onClose, onTransferred }: TransferClientsDialogProps) {
+  const { isDemo } = useGymContext();
   const [destinationId, setDestinationId] = useState<string>("");
   const [transferGoals, setTransferGoals] = useState(true);
   const [activeCount, setActiveCount] = useState<number | null>(null);
@@ -970,6 +977,7 @@ function TransferClientsDialog({ source, candidates, gymId, onClose, onTransferr
   }, [source, gymId]);
 
   async function handleTransfer() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!source || !destinationId) return;
     setSubmitting(true);
     const result = await transferTrainerClients(source.id, destinationId, transferGoals);

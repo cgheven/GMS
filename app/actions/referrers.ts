@@ -7,7 +7,7 @@ import type { ReferrerCommissionType } from "@/types";
 
 async function requireOwner() {
   const ctx = await getAuthContext();
-  if (!ctx?.user || !ctx.gymId) return null;
+  if (!ctx?.user || !ctx.gymId || ctx.isDemo) return null;
   return ctx;
 }
 

@@ -19,7 +19,7 @@ type LeadInput = {
 
 async function requireOwnerCtx() {
   const ctx = await getAuthContext();
-  if (!ctx?.gymId) return null;
+  if (!ctx?.gymId || ctx.isDemo) return null;
   return ctx;
 }
 

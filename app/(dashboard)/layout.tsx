@@ -11,7 +11,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if ((ctx.profile as { role?: string } | null)?.role === "referrer") redirect("/referrer");
 
   return (
-    <GymProvider profile={ctx.profile} gym={ctx.gym} gyms={ctx.gyms ?? []}>
+    <GymProvider profile={ctx.profile} gym={ctx.gym} gyms={ctx.gyms ?? []} isDemo={ctx.isDemo}>
       <DashboardShell>{children}</DashboardShell>
     </GymProvider>
   );

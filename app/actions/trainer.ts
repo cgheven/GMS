@@ -7,6 +7,7 @@ import { writeAuditLog } from "@/lib/audit";
 export async function createTrainerLogin(staffId: string, email: string, password: string) {
   const ctx = await getAuthContext();
   if (!ctx?.gymId) return { error: "Unauthorized" };
+  if (ctx.isDemo) return { error: "Demo mode — sign up to make changes." };
 
   if (!email.endsWith("@musabkhan.me")) return { error: "Email must use @musabkhan.me domain" };
 
@@ -491,6 +492,7 @@ export async function undoMetricSkip(memberId: string, weekStart: string) {
 export async function removeTrainerLogin(staffId: string) {
   const ctx = await getAuthContext();
   if (!ctx?.gymId) return { error: "Unauthorized" };
+  if (ctx.isDemo) return { error: "Demo mode — sign up to make changes." };
 
   const admin = createAdminClient();
 
@@ -522,6 +524,7 @@ export async function transferTrainerClients(
 ): Promise<{ transferredCount?: number; goalsTransferred?: number; error?: string }> {
   const ctx = await getAuthContext();
   if (!ctx?.user || !ctx.gymId) return { error: "Unauthorized" };
+  if (ctx.isDemo) return { error: "Demo mode — sign up to make changes." };
   if (!fromTrainerId || !toTrainerId) return { error: "Both trainers are required" };
   if (fromTrainerId === toTrainerId) return { error: "Source and destination must be different" };
 
@@ -611,6 +614,7 @@ export async function deleteStaffMember(staffId: string): Promise<{
 }> {
   const ctx = await getAuthContext();
   if (!ctx?.user || !ctx.gymId) return { error: "Unauthorized" };
+  if (ctx.isDemo) return { error: "Demo mode — sign up to make changes." };
   const gymId = ctx.gymId;
   const admin = createAdminClient();
 

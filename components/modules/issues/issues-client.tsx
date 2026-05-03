@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
+import { useGymContext } from "@/contexts/gym-context";
 import { formatDate, capitalize } from "@/lib/utils";
 import type { Issue, IssueCategory, IssuePriority, IssueStatus, Member } from "@/types";
 
@@ -45,6 +46,7 @@ const emptyForm = {
 };
 
 export function IssuesClient({ gymId, issues: initial, members }: Props) {
+  const { isDemo } = useGymContext();
   const [issues, setIssues] = useState<Issue[]>(initial);
   const [tab, setTab] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -64,6 +66,7 @@ export function IssuesClient({ gymId, issues: initial, members }: Props) {
   }
 
   async function handleSave() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!gymId || !form.title) return;
     setSaving(true);
     const supabase = createClient();
@@ -90,6 +93,7 @@ export function IssuesClient({ gymId, issues: initial, members }: Props) {
   }
 
   async function handleResolve() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!resolveDialog) return;
     setSaving(true);
     const supabase = createClient();
@@ -104,6 +108,7 @@ export function IssuesClient({ gymId, issues: initial, members }: Props) {
   }
 
   async function handleDelete(id: string) {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     const supabase = createClient();
     const { error } = await supabase.from("pulse_issues").delete().eq("id", id);
     if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }

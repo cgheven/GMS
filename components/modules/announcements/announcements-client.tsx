@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
+import { useGymContext } from "@/contexts/gym-context";
 import { formatDate } from "@/lib/utils";
 import type { Announcement } from "@/types";
 
@@ -20,6 +21,7 @@ interface Props {
 const emptyForm = { title: "", content: "", is_pinned: false };
 
 export function AnnouncementsClient({ gymId, announcements: initial }: Props) {
+  const { isDemo } = useGymContext();
   const [announcements, setAnnouncements] = useState<Announcement[]>(initial);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -37,6 +39,7 @@ export function AnnouncementsClient({ gymId, announcements: initial }: Props) {
   }
 
   async function handleSave() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!gymId || !form.title || !form.content) return;
     setSaving(true);
     const supabase = createClient();
@@ -59,6 +62,7 @@ export function AnnouncementsClient({ gymId, announcements: initial }: Props) {
   }
 
   async function handleDelete(id: string) {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     const supabase = createClient();
     const { error } = await supabase.from("pulse_announcements").delete().eq("id", id);
     if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }

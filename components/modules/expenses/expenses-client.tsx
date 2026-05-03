@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
+import { useGymContext } from "@/contexts/gym-context";
 import { formatCurrency, formatDate, formatDateInput } from "@/lib/utils";
 import type { Expense, ExpenseCategory } from "@/types";
 
@@ -93,6 +94,7 @@ interface Props {
 }
 
 export function ExpensesClient({ gymId, expenses: initialExpenses, monthFilter: defaultMonth }: Props) {
+  const { isDemo } = useGymContext();
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState("all");
@@ -140,6 +142,7 @@ export function ExpensesClient({ gymId, expenses: initialExpenses, monthFilter: 
   }
 
   async function handleSave() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!gymId || !form.title || !form.amount) return;
     setSaving(true);
     const supabase = createClient();
@@ -166,6 +169,7 @@ export function ExpensesClient({ gymId, expenses: initialExpenses, monthFilter: 
   }
 
   async function handleDelete(id: string) {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     const supabase = createClient();
     const { error } = await supabase.from("pulse_expenses").delete().eq("id", id);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });

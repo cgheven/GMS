@@ -23,6 +23,7 @@ interface SaveSettingsInput {
 export async function saveComplianceSettings(input: SaveSettingsInput) {
   const ctx = await getAuthContext();
   if (!ctx?.gymId) return { error: "Unauthorized" };
+  if (ctx.isDemo) return { error: "Demo mode — sign up to make changes." };
   const admin = createAdminClient();
   const reportSettings: Record<string, unknown> = {};
   if (input.fields !== undefined)       reportSettings.fields = input.fields;
@@ -80,6 +81,7 @@ export async function createComplianceLogin(
 ): Promise<{ error: string | null }> {
   const ctx = await getAuthContext();
   if (!ctx?.gymId || ctx.gymId !== gymId) return { error: "Unauthorized" };
+  if (ctx.isDemo) return { error: "Demo mode — sign up to make changes." };
   if (!fullName.trim()) return { error: "Full name is required" };
   if (password.length < 8) return { error: "Password must be at least 8 characters" };
 
@@ -127,6 +129,7 @@ export async function removeComplianceLogin(
 ): Promise<{ error: string | null }> {
   const ctx = await getAuthContext();
   if (!ctx?.gymId || ctx.gymId !== gymId) return { error: "Unauthorized" };
+  if (ctx.isDemo) return { error: "Demo mode — sign up to make changes." };
 
   const admin = createAdminClient();
 
@@ -164,6 +167,7 @@ export async function updateComplianceSettings(
 ): Promise<{ error: string | null }> {
   const ctx = await getAuthContext();
   if (!ctx?.gymId || ctx.gymId !== gymId) return { error: "Unauthorized" };
+  if (ctx.isDemo) return { error: "Demo mode — sign up to make changes." };
 
   const clampedSelf = Math.min(100, Math.max(1, Math.round(pctSelf)));
   const clampedPt = Math.min(100, Math.max(1, Math.round(pctPt)));

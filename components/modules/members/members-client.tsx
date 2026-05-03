@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
+import { useGymContext } from "@/contexts/gym-context";
 import { formatCurrency, formatDate, formatDateInput, cn } from "@/lib/utils";
 import { validateFullName, validateCNIC, validatePakPhone, validateDOB, validateMoney, runValidators, type ValidationResult } from "@/lib/validation";
 import type { Member, MembershipPlan, MemberStatus, MemberGender, Staff, Payment, PaymentMethod, PaymentStatus, Referrer, SocialManager, SocialLead } from "@/types";
@@ -218,6 +219,7 @@ export function MembersClient({
   staff: initialStaff,
   referrers: initialReferrers,
 }: Props) {
+  const { isDemo } = useGymContext();
   const [active, setActive] = useState(initialActive);
   const [expired, setExpired] = useState(initialExpired);
   const [plans] = useState(initialPlans);
@@ -284,6 +286,7 @@ export function MembersClient({
   }
 
   async function handlePay() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!payDialog || !gymId) return;
     setPaySaving(true);
     const { member, payment } = payDialog;
@@ -339,6 +342,7 @@ export function MembersClient({
   }
 
   async function handleDelete(m: Member) {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     const supabase = createClient();
     const { error } = await supabase.from("pulse_members").delete().eq("id", m.id);
     if (error) {
@@ -802,6 +806,7 @@ function normalizePhone(raw: string | null | undefined): string {
 function MemberFormDialog({
   open, onOpenChange, editing, existingMembers, plans, staff, referrers, gymId, onSaved, onOpenExisting,
 }: MemberFormDialogProps) {
+  const { isDemo } = useGymContext();
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [allowDuplicate, setAllowDuplicate] = useState(false);
@@ -895,6 +900,7 @@ function MemberFormDialog({
   }
 
   async function handleSave() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     if (!gymId) return;
 
     const check = runValidators(

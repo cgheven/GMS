@@ -1,10 +1,12 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Check, Zap, Users, Bell, BarChart3, TrendingUp,
-  CalendarDays, MessageSquare, FileText, ArrowRight,
+  CalendarDays, MessageSquare, FileText, ArrowRight, Loader2,
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 const BASE_PRICES = { starter: 10000, growth: 15000, pro: 25000 };
 const ANNUAL_DISCOUNT = 0.20;
@@ -140,6 +142,22 @@ const faqs = [
 
 export default function PricingPage() {
   const [annual, setAnnual] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
+  const router = useRouter();
+
+  async function handleDemoLogin() {
+    setDemoLoading(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithPassword({
+      email: "demo@musabkhan.me",
+      password: "PulseDemo2024!",
+    });
+    if (error) {
+      setDemoLoading(false);
+      return;
+    }
+    router.push("/dashboard");
+  }
 
   function displayPrice(base: number) {
     const amount = annual ? Math.round(base * (1 - ANNUAL_DISCOUNT)) : base;
@@ -166,7 +184,15 @@ export default function PricingPage() {
           </div>
           <span className="text-[10px] text-primary/60 uppercase tracking-[0.2em] font-semibold ml-10 -mt-0.5">Pulse of your gym</span>
         </Link>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleDemoLogin}
+            disabled={demoLoading}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary/30 bg-primary/5 text-sm font-semibold text-primary hover:bg-primary/10 transition-all disabled:opacity-60"
+          >
+            {demoLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+            Try Demo
+          </button>
           <Link href="/login" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             Sign in
           </Link>

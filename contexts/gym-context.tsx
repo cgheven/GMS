@@ -8,6 +8,7 @@ interface GymContextValue {
   gym: Gym | null;
   gyms: Gym[];
   gymId: string | null;
+  isDemo: boolean;
   setActiveGym: (gymId: string) => void;
 }
 
@@ -16,6 +17,7 @@ const GymContext = createContext<GymContextValue>({
   gym: null,
   gyms: [],
   gymId: null,
+  isDemo: false,
   setActiveGym: () => {},
 });
 
@@ -24,11 +26,13 @@ export function GymProvider({
   profile,
   gym,
   gyms,
+  isDemo = false,
 }: {
   children: React.ReactNode;
   profile: Profile | null;
   gym: Gym | null;
   gyms: Gym[];
+  isDemo?: boolean;
 }) {
   const router = useRouter();
 
@@ -41,8 +45,8 @@ export function GymProvider({
   );
 
   const value = useMemo(
-    () => ({ profile, gym, gyms, gymId: gym?.id ?? null, setActiveGym }),
-    [profile, gym, gyms, setActiveGym]
+    () => ({ profile, gym, gyms, gymId: gym?.id ?? null, isDemo, setActiveGym }),
+    [profile, gym, gyms, isDemo, setActiveGym]
   );
 
   return <GymContext.Provider value={value}>{children}</GymContext.Provider>;
