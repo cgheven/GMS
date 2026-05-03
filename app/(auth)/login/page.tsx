@@ -140,9 +140,9 @@ export default function LoginPage() {
               type="button"
               onClick={handleDemoLogin}
               disabled={demoLoading || loading}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-primary/25 bg-primary/5 text-sm font-semibold text-primary hover:bg-primary/10 transition-all disabled:opacity-60"
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-primary/25 bg-primary/5 text-xs font-semibold text-primary hover:bg-primary/10 transition-all disabled:opacity-60 whitespace-nowrap"
             >
-              {demoLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+              {demoLoading ? <Loader2 className="w-4 h-4 animate-spin shrink-0" /> : <Zap className="w-4 h-4 shrink-0" />}
               TRY DEMO — NO ACCOUNT NEEDED
             </button>
           </div>
