@@ -22,6 +22,9 @@ export type ExpenseCategory = "equipment" | "maintenance" | "cleaning" | "market
 export type StaffRole = "trainer" | "manager" | "frontdesk" | "cleaner" | "guard" | "cook" | "other";
 export type ReferrerCommissionType = "flat" | "percentage";
 export type ReferralStatus = "pending" | "paid";
+export type SocialCommissionType = "flat" | "percentage";
+export type SocialPlatform = "instagram" | "facebook" | "tiktok" | "whatsapp" | "other";
+export type SocialLeadStatus = "unmatched" | "pending_review" | "pending_payment" | "rejected" | "paid" | "expired";
 export type StaffStatus = "active" | "inactive";
 export type SalaryStatus = "pending" | "paid";
 export type IssueCategory = "equipment" | "cleanliness" | "staff" | "facility" | "billing" | "other";
@@ -148,6 +151,46 @@ export interface Referrer {
   status: "active" | "inactive";
   created_at: string;
   updated_at: string;
+}
+
+export interface SocialManager {
+  id: string;
+  gym_id: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+  notes: string | null;
+  commission_type: SocialCommissionType;
+  commission_value: number;
+  user_id: string | null;
+  status: "active" | "inactive";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SocialLead {
+  id: string;
+  gym_id: string;
+  manager_id: string;
+  lead_name: string;
+  lead_phone: string | null;
+  lead_social_handle: string | null;
+  platform: SocialPlatform;
+  evidence_url: string | null;
+  notes: string | null;
+  member_id: string | null;
+  matched_by: "auto" | "manual" | null;
+  matched_at: string | null;
+  commission_amount: number | null;
+  status: SocialLeadStatus;
+  rejection_reason: string | null;
+  approved_at: string | null;
+  paid_at: string | null;
+  expires_at: string;
+  created_at: string;
+  updated_at: string;
+  manager?: Pick<SocialManager, "full_name"> | null;
+  member?: Pick<Member, "full_name" | "phone" | "join_date"> | null;
 }
 
 export interface Referral {
@@ -455,6 +498,9 @@ export interface DashboardStats {
   pending_commissions_amount: number;
   pending_commissions_count: number;
   paid_commissions_this_month: number;
+  pending_social_commissions_amount: number;
+  pending_social_commissions_count: number;
+  paid_social_commissions_this_month: number;
 }
 
 export interface DashboardMember {

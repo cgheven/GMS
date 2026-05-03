@@ -30,7 +30,7 @@ export default function LoginPage() {
       .select("is_admin, role")
       .eq("id", data.user.id)
       .single();
-    const dest = profile?.is_admin ? "/admin/gyms" : profile?.role === "trainer" ? "/trainer" : profile?.role === "referrer" ? "/referrer" : "/dashboard";
+    const dest = profile?.is_admin ? "/admin/gyms" : profile?.role === "trainer" ? "/trainer" : profile?.role === "referrer" ? "/referrer" : profile?.role === "compliance" ? "/compliance-portal" : "/dashboard";
     router.push(dest);
     router.refresh();
   }
@@ -49,7 +49,7 @@ export default function LoginPage() {
             <Zap className="w-6 h-6 text-primary" />
           </div>
           <h1 className="font-serif text-3xl text-foreground tracking-tight">Pulse</h1>
-          <p className="text-muted-foreground text-sm mt-1">The pulse of your gym, in one place</p>
+          <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary/70">The pulse of your gym</p>
         </div>
 
         {/* Card */}

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Building2, User, Save, Loader2, Globe, ExternalLink, Target, Phone } from "lucide-react";
+import { Building2, User, Save, Loader2, Globe, ExternalLink, Target, Phone, Shield, Trash2, Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useGymContext } from "@/contexts/gym-context";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { PaymentRecoverySection } from "./payment-recovery-section";
+import { createComplianceLogin, removeComplianceLogin, updateComplianceSettings, getComplianceSettingsAction } from "@/app/actions/compliance";
 import type { GymType } from "@/types";
 
 const GYM_TYPES: { value: GymType; label: string }[] = [
@@ -48,6 +49,66 @@ export function SettingsClient() {
   const [savingGym, setSavingGym] = useState(false);
   const [savingListing, setSavingListing] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+
+  // ── Compliance ─────────────────────────────────────────────────────────────
+  const [complianceLoaded, setComplianceLoaded] = useState(false);
+  const [hasComplianceLogin, setHasComplianceLogin] = useState(false);
+  const [complianceUserName, setComplianceUserName] = useState<string | null>(null);
+  const [complianceForm, setComplianceForm] = useState({ full_name: "", email: "", password: "", pct_self: "50", pct_pt: "50" });
+  const [complianceTotals, setComplianceTotals] = useState({ totalSelf: 0, totalPt: 0 });
+  const [complianceEmail, setComplianceEmail] = useState<string | null>(null);
+  const [showCompliancePass, setShowCompliancePass] = useState(false);
+  const [savingCompliance, setSavingCompliance] = useState(false);
+  const [removingCompliance, setRemovingCompliance] = useState(false);
+
+  useEffect(() => {
+    if (!gymId) return;
+    getComplianceSettingsAction().then((res) => {
+      if (!res) return;
+      setHasComplianceLogin(res.hasLogin);
+      setComplianceUserName(res.complianceUser?.full_name ?? null);
+      setComplianceEmail(res.complianceUser?.email ?? null);
+      setComplianceForm((f) => ({ ...f, pct_self: String(res.pctSelf), pct_pt: String(res.pctPt) }));
+      setComplianceTotals({ totalSelf: res.totalSelf, totalPt: res.totalPt });
+      setComplianceLoaded(true);
+    });
+  }, [gymId]);
+
+  async function createCompliance() {
+    if (!gymId) return;
+    if (!complianceForm.full_name || !complianceForm.email || !complianceForm.password) {
+      toast({ title: "Fill all fields", variant: "destructive" }); return;
+    }
+    setSavingCompliance(true);
+    const res = await createComplianceLogin(gymId, complianceForm.full_name, complianceForm.email, complianceForm.password);
+    if (res.error) toast({ title: "Error", description: res.error, variant: "destructive" });
+    else {
+      await updateComplianceSettings(gymId, Number(complianceForm.pct_self) || 50, Number(complianceForm.pct_pt) || 50);
+      toast({ title: "Compliance login created" });
+      setHasComplianceLogin(true);
+      setComplianceUserName(complianceForm.full_name);
+      setComplianceForm((f) => ({ ...f, full_name: "", email: "", password: "" }));
+    }
+    setSavingCompliance(false);
+  }
+
+  async function removeCompliance() {
+    if (!gymId) return;
+    setRemovingCompliance(true);
+    const res = await removeComplianceLogin(gymId);
+    if (res.error) toast({ title: "Error", description: res.error, variant: "destructive" });
+    else { toast({ title: "Compliance login removed" }); setHasComplianceLogin(false); setComplianceUserName(null); }
+    setRemovingCompliance(false);
+  }
+
+  async function saveComplianceLimits() {
+    if (!gymId) return;
+    setSavingCompliance(true);
+    const res = await updateComplianceSettings(gymId, Number(complianceForm.pct_self) || 50, Number(complianceForm.pct_pt) || 50);
+    if (res.error) toast({ title: "Error", description: res.error, variant: "destructive" });
+    else toast({ title: "Compliance limits updated" });
+    setSavingCompliance(false);
+  }
 
   useEffect(() => {
     if (gym) {
@@ -377,6 +438,165 @@ export function SettingsClient() {
 
       {/* Payment Recovery */}
       <PaymentRecoverySection gym={gym} />
+
+      <Separator />
+
+      {/* Compliance Manager */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-muted-foreground" />
+            <CardTitle className="text-base">Compliance Manager</CardTitle>
+          </div>
+          <CardDescription>Create a limited-access account for compliance officers. They see a controlled subset of members — not actual business totals.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {!complianceLoaded ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : hasComplianceLogin ? (
+            <div className="space-y-5">
+              <div className="flex items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-xs font-bold text-emerald-400">
+                    {complianceUserName?.[0]?.toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{complianceUserName}</p>
+                    <p className="text-xs text-muted-foreground">Compliance Officer · Active</p>
+                    {complianceEmail && (
+                      <p className="text-xs text-muted-foreground/70 font-mono mt-0.5">{complianceEmail}</p>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={removeCompliance}
+                  disabled={removingCompliance}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-destructive hover:bg-destructive/10 border border-destructive/20 transition-colors disabled:opacity-50"
+                >
+                  {removingCompliance ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  Remove Access
+                </button>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Member Visibility — Percentage</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Self-Training Visible</Label>
+                      <span className="text-sm font-semibold tabular-nums text-primary">{complianceForm.pct_self}%</span>
+                    </div>
+                    <input
+                      type="range" min="1" max="100"
+                      value={complianceForm.pct_self}
+                      onChange={(e) => setComplianceForm((f) => ({ ...f, pct_self: e.target.value }))}
+                      className="w-full accent-primary"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {complianceForm.pct_self}% of {complianceTotals.totalSelf} self members ={" "}
+                      <span className="font-semibold text-foreground">
+                        {Math.max(1, Math.floor(complianceTotals.totalSelf * Number(complianceForm.pct_self) / 100))} shown
+                      </span>
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Personal Training Visible</Label>
+                      <span className="text-sm font-semibold tabular-nums text-primary">{complianceForm.pct_pt}%</span>
+                    </div>
+                    <input
+                      type="range" min="1" max="100"
+                      value={complianceForm.pct_pt}
+                      onChange={(e) => setComplianceForm((f) => ({ ...f, pct_pt: e.target.value }))}
+                      className="w-full accent-primary"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {complianceForm.pct_pt}% of {complianceTotals.totalPt} PT members ={" "}
+                      <span className="font-semibold text-foreground">
+                        {Math.max(1, Math.floor(complianceTotals.totalPt * Number(complianceForm.pct_pt) / 100))} shown
+                      </span>
+                    </p>
+                  </div>
+                </div>
+                <Button onClick={saveComplianceLimits} disabled={savingCompliance} className="mt-4 gap-2">
+                  {savingCompliance ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Limits
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">No compliance login yet. Create one below.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Full Name</Label>
+                  <Input placeholder="Compliance Officer" value={complianceForm.full_name} onChange={(e) => setComplianceForm((f) => ({ ...f, full_name: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Email</Label>
+                  <Input type="email" placeholder="compliance@example.com" value={complianceForm.email} onChange={(e) => setComplianceForm((f) => ({ ...f, email: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Password</Label>
+                  <div className="relative">
+                    <Input
+                      type={showCompliancePass ? "text" : "password"}
+                      placeholder="Strong password"
+                      value={complianceForm.password}
+                      onChange={(e) => setComplianceForm((f) => ({ ...f, password: e.target.value }))}
+                      className="pr-9"
+                    />
+                    <button type="button" onClick={() => setShowCompliancePass((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                      {showCompliancePass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Self-Training Visible</Label>
+                    <span className="text-sm font-semibold tabular-nums text-primary">{complianceForm.pct_self}%</span>
+                  </div>
+                  <input
+                    type="range" min="1" max="100"
+                    value={complianceForm.pct_self}
+                    onChange={(e) => setComplianceForm((f) => ({ ...f, pct_self: e.target.value }))}
+                    className="w-full accent-primary"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {complianceForm.pct_self}% of {complianceTotals.totalSelf} self members ={" "}
+                    <span className="font-semibold text-foreground">
+                      {Math.max(1, Math.floor(complianceTotals.totalSelf * Number(complianceForm.pct_self) / 100))} shown
+                    </span>
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Personal Training Visible</Label>
+                    <span className="text-sm font-semibold tabular-nums text-primary">{complianceForm.pct_pt}%</span>
+                  </div>
+                  <input
+                    type="range" min="1" max="100"
+                    value={complianceForm.pct_pt}
+                    onChange={(e) => setComplianceForm((f) => ({ ...f, pct_pt: e.target.value }))}
+                    className="w-full accent-primary"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {complianceForm.pct_pt}% of {complianceTotals.totalPt} PT members ={" "}
+                    <span className="font-semibold text-foreground">
+                      {Math.max(1, Math.floor(complianceTotals.totalPt * Number(complianceForm.pct_pt) / 100))} shown
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <Button onClick={createCompliance} disabled={savingCompliance} className="gap-2">
+                {savingCompliance ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+                Create Compliance Login
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Separator />
 

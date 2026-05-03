@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "@/hooks/use-toast";
 import { formatDate, formatDateInput, formatCurrency } from "@/lib/utils";
+import { whatsappUrl } from "@/lib/whatsapp-reminder";
 import {
   createLead, updateLead, deleteLead, setLeadStatus, markLeadLost,
   logLeadActivity, convertLeadToMember,
@@ -479,10 +480,12 @@ function LeadDetailDialog({ lead, plans, trainers, onClose, onChanged }: {
       return;
     }
     const msg = template.text.replace("{name}", lead.full_name.split(" ")[0]);
-    const cleanPhone = lead.phone.replace(/[^\d+]/g, "");
-    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
+    const url = whatsappUrl(lead.phone, msg);
+    if (!url) {
+      toast({ title: "Invalid phone number", variant: "destructive" });
+      return;
+    }
     window.open(url, "_blank");
-    // Log as activity
     logLeadActivity(lead.id, "offer", `Sent: ${template.label}`).then(() => onChanged());
   }
 

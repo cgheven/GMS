@@ -9,7 +9,7 @@ import type {
   Expense, Bill, Staff, SalaryPayment, CheckIn, GymClass,
   DashboardStats, DashboardMember, RevenueMonth, AgingBucket, TrainerStat,
   MemberGoal, GoalProgressEntry, BodyMetric, MetricSkip, Lead, LeadActivity,
-  Referrer,
+  Referrer, SocialManager, SocialLead,
 } from "@/types";
 
 export const getAuthContext = cache(async () => {
@@ -74,6 +74,8 @@ async function _fetchDashboard(gymId: string, gym: Gym | null) {
     goalsRes,
     pendingReferralsRes,
     paidReferralsRes,
+    pendingSocialRes,
+    paidSocialRes,
   ] = await Promise.all([
     supabase.from("pulse_members").select("id, full_name, status, monthly_fee, plan_expiry_date").eq("gym_id", gymId),
     supabase.from("pulse_check_ins").select("id").eq("gym_id", gymId).gte("checked_in_at", `${todayStr}T00:00:00`).lte("checked_in_at", `${todayStr}T23:59:59`),
@@ -92,6 +94,8 @@ async function _fetchDashboard(gymId: string, gym: Gym | null) {
       .order("updated_at", { ascending: false }),
     supabase.from("pulse_referrals").select("commission_amount").eq("gym_id", gymId).eq("status", "pending"),
     supabase.from("pulse_referrals").select("commission_amount").eq("gym_id", gymId).eq("status", "paid").gte("paid_at", start).lte("paid_at", end),
+    supabase.from("pulse_social_leads").select("commission_amount").eq("gym_id", gymId).in("status", ["pending_review", "pending_payment"]),
+    supabase.from("pulse_social_leads").select("commission_amount").eq("gym_id", gymId).eq("status", "paid").gte("paid_at", start).lte("paid_at", end),
   ]);
 
   const members = membersRes.data ?? [];
@@ -161,9 +165,12 @@ async function _fetchDashboard(gymId: string, gym: Gym | null) {
     pending_commissions_amount: (pendingReferralsRes.data ?? []).reduce((s, r) => s + Number(r.commission_amount), 0),
     pending_commissions_count: pendingReferralsRes.data?.length ?? 0,
     paid_commissions_this_month: (paidReferralsRes.data ?? []).reduce((s, r) => s + Number(r.commission_amount), 0),
+    pending_social_commissions_amount: (pendingSocialRes.data ?? []).reduce((s, r) => s + Number(r.commission_amount), 0),
+    pending_social_commissions_count: pendingSocialRes.data?.length ?? 0,
+    paid_social_commissions_this_month: (paidSocialRes.data ?? []).reduce((s, r) => s + Number(r.commission_amount), 0),
   };
-  // Recalculate net profit to include paid partner commissions this month
-  stats.net_profit = stats.monthly_collected - stats.monthly_expenses - stats.monthly_salaries - stats.paid_commissions_this_month;
+  // Recalculate net profit to include paid partner + social commissions this month
+  stats.net_profit = stats.monthly_collected - stats.monthly_expenses - stats.monthly_salaries - stats.paid_commissions_this_month - stats.paid_social_commissions_this_month;
 
   const trainers = trainersRes.data ?? [];
   const assignedMembers = assignedMembersRes.data ?? [];
@@ -633,6 +640,70 @@ export async function getReferrerPageData() {
   return { referrer: ctx.referrer, referrals: referrals ?? [] };
 }
 
+// ── Social Media Managers ─────────────────────────────────────────────────────
+
+export async function getSocialManagersData() {
+  const ctx = await getAuthContext();
+  if (!ctx?.gymId) return { gymId: null, gymName: null, managers: [], leads: [] };
+  const admin = createAdminClient();
+  const [{ data: managers }, { data: leads }] = await Promise.all([
+    admin.from("pulse_social_managers").select("*").eq("gym_id", ctx.gymId).order("full_name"),
+    admin.from("pulse_social_leads")
+      .select("*, manager:pulse_social_managers(full_name), member:pulse_members(full_name, phone, join_date)")
+      .eq("gym_id", ctx.gymId)
+      .order("created_at", { ascending: false }),
+  ]);
+  return {
+    gymId: ctx.gymId,
+    gymName: ctx.gym?.name ?? null,
+    managers: (managers ?? []) as SocialManager[],
+    leads: (leads ?? []) as SocialLead[],
+  };
+}
+
+export const getSocialManagerContext = cache(async () => {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: profile } = await supabase
+    .from("pulse_profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (profile?.role !== "social_manager") return null;
+  const admin = createAdminClient();
+  const { data: manager } = await admin
+    .from("pulse_social_managers")
+    .select("*, gym:pulse_gyms(name)")
+    .eq("user_id", user.id)
+    .single();
+  if (!manager) return null;
+  return { user, manager };
+});
+
+export async function getSocialManagerPageData() {
+  const ctx = await getSocialManagerContext();
+  if (!ctx) return null;
+  const admin = createAdminClient();
+  const { data: leads } = await admin
+    .from("pulse_social_leads")
+    .select("*, member:pulse_members(full_name, phone, join_date)")
+    .eq("manager_id", ctx.manager.id)
+    .order("created_at", { ascending: false });
+  return { manager: ctx.manager, leads: (leads ?? []) as SocialLead[] };
+}
+
+export async function getUnmatchedSocialLeads(gymId: string) {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("pulse_social_leads")
+    .select("id, lead_name, lead_phone, lead_social_handle, platform, evidence_url, notes, expires_at, created_at, manager:pulse_social_managers(full_name)")
+    .eq("gym_id", gymId)
+    .eq("status", "unmatched")
+    .order("created_at", { ascending: false });
+  return (data ?? []) as unknown as (Pick<SocialLead, "id" | "lead_name" | "lead_phone" | "lead_social_handle" | "platform" | "evidence_url" | "notes" | "expires_at" | "created_at"> & { manager: { full_name: string } | null })[];
+}
+
 export async function getExpenses(monthFilter: string) {
   const ctx = await getAuthContext();
   if (!ctx?.gymId) return { gymId: null, expenses: [] };
@@ -910,5 +981,171 @@ export async function getComplianceReportData() {
     }>,
     payments: (payments ?? []) as Array<{ member_id: string; total_amount: number; status: string; payment_date: string | null; for_period: string | null }>,
     trainers: (trainers ?? []) as Array<{ id: string; full_name: string }>,
+  };
+}
+
+// ── Compliance ────────────────────────────────────────────────────────────────
+
+export interface ComplianceMember {
+  id: string;
+  full_name: string;
+  cnic: string | null;
+  phone: string | null;
+  date_of_birth: string | null;
+  join_date: string;
+  plan_name: string | null;
+  monthly_fee: number;
+  category: "self" | "pt";
+}
+
+export const getComplianceContext = cache(async () => {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: profile } = await supabase
+    .from("pulse_profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || profile.role !== "compliance") return null;
+
+  const { data: complianceUser } = await supabase
+    .from("pulse_compliance_users")
+    .select("id, gym_id, full_name, gym:pulse_gyms(name)")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!complianceUser) return null;
+
+  const cu = complianceUser as unknown as { id: string; gym_id: string; full_name: string; gym: { name: string } | null };
+  return {
+    user,
+    complianceUser: { id: cu.id, gym_id: cu.gym_id, full_name: cu.full_name },
+    gymName: cu.gym?.name ?? "",
+  };
+});
+
+export async function getCompliancePageData() {
+  const ctx = await getComplianceContext();
+  if (!ctx) return null;
+
+  const { complianceUser } = ctx;
+  const admin = createAdminClient();
+
+  const [{ data: gymData }, { data: membersData }] = await Promise.all([
+    admin
+      .from("pulse_gyms")
+      .select("name, compliance_settings")
+      .eq("id", complianceUser.gym_id)
+      .single(),
+    admin
+      .from("pulse_members")
+      .select("id, full_name, cnic, phone, date_of_birth, join_date, monthly_fee, assigned_trainer_id, plan:pulse_membership_plans(name)")
+      .eq("gym_id", complianceUser.gym_id)
+      .eq("status", "active")
+      .order("id", { ascending: true }),
+  ]);
+
+  const settings = gymData?.compliance_settings as { pct_self?: number; pct_pt?: number } | null;
+  const pctSelf = Math.min(100, Math.max(0, settings?.pct_self ?? 50));
+  const pctPt = Math.min(100, Math.max(0, settings?.pct_pt ?? 50));
+
+  type RawMember = {
+    id: string;
+    full_name: string;
+    cnic: string | null;
+    phone: string | null;
+    date_of_birth: string | null;
+    join_date: string;
+    monthly_fee: number;
+    assigned_trainer_id: string | null;
+    plan?: { name: string } | null;
+  };
+
+  const allMembers = (membersData ?? []) as unknown as RawMember[];
+
+  const allSelf = allMembers.filter((m) => m.assigned_trainer_id === null);
+  const allPt = allMembers.filter((m) => m.assigned_trainer_id !== null);
+
+  const selfRaw = allSelf.slice(0, Math.floor(allSelf.length * pctSelf / 100));
+  const ptRaw = allPt.slice(0, Math.floor(allPt.length * pctPt / 100));
+
+  const toComplianceMember = (m: RawMember, category: "self" | "pt"): ComplianceMember => ({
+    id: m.id,
+    full_name: m.full_name,
+    cnic: m.cnic,
+    phone: m.phone,
+    date_of_birth: m.date_of_birth,
+    join_date: m.join_date,
+    plan_name: m.plan?.name ?? null,
+    monthly_fee: m.monthly_fee,
+    category,
+  });
+
+  const members: ComplianceMember[] = [
+    ...selfRaw.map((m) => toComplianceMember(m, "self")),
+    ...ptRaw.map((m) => toComplianceMember(m, "pt")),
+  ];
+
+  const shownRevenue = [...selfRaw, ...ptRaw].reduce((s, m) => s + (m.monthly_fee ?? 0), 0);
+
+  return {
+    gymName: gymData?.name ?? "",
+    members,
+    pctSelf,
+    pctPt,
+    totalSelf: allSelf.length,
+    totalPt: allPt.length,
+    shownRevenue,
+  };
+}
+
+export async function getComplianceSettingsForGym(gymId: string) {
+  const admin = createAdminClient();
+
+  const [{ data: complianceUser }, { data: gymData }, { data: membersData }] = await Promise.all([
+    admin
+      .from("pulse_compliance_users")
+      .select("full_name, user_id")
+      .eq("gym_id", gymId)
+      .maybeSingle(),
+    admin
+      .from("pulse_gyms")
+      .select("compliance_settings")
+      .eq("id", gymId)
+      .single(),
+    admin
+      .from("pulse_members")
+      .select("assigned_trainer_id, monthly_fee")
+      .eq("gym_id", gymId)
+      .eq("status", "active"),
+  ]);
+
+  const settings = gymData?.compliance_settings as { pct_self?: number; pct_pt?: number } | null;
+  const members = (membersData ?? []) as { assigned_trainer_id: string | null; monthly_fee: number }[];
+  const totalSelf = members.filter((m) => m.assigned_trainer_id === null).length;
+  const totalPt = members.filter((m) => m.assigned_trainer_id !== null).length;
+
+  const cu = complianceUser as unknown as { full_name: string; user_id: string } | null;
+
+  let complianceEmail: string | null = null;
+  if (cu?.user_id) {
+    const { data: profile } = await admin
+      .from("pulse_profiles")
+      .select("email")
+      .eq("id", cu.user_id)
+      .maybeSingle();
+    complianceEmail = (profile as { email: string } | null)?.email ?? null;
+  }
+
+  return {
+    hasLogin: cu !== null,
+    complianceUser: cu ? { full_name: cu.full_name, email: complianceEmail } : null,
+    pctSelf: settings?.pct_self ?? 50,
+    pctPt: settings?.pct_pt ?? 50,
+    totalSelf,
+    totalPt,
   };
 }

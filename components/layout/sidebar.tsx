@@ -1,11 +1,12 @@
 "use client";
+import { memo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, CreditCard, FileText, Settings, X,
   Shield, Building2, Globe, LogIn, Trophy, Target,
   BarChart3, UserCog, Dumbbell, CalendarDays,
-  Receipt, ClipboardList, Zap, HandCoins,
+  Receipt, ClipboardList, Zap, HandCoins, Instagram,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsAdmin } from "@/hooks/use-is-admin";
@@ -32,7 +33,8 @@ const navGroups = [
     items: [
       { href: "/classes",   label: "Classes",   icon: CalendarDays },
       { href: "/trainers",  label: "Trainers",  icon: Dumbbell },
-      { href: "/referrers", label: "Partners",  icon: HandCoins },
+      { href: "/referrers",    label: "Partners",       icon: HandCoins },
+      { href: "/social-media", label: "Social Media",  icon: Instagram },
     ],
   },
   {
@@ -60,33 +62,35 @@ const navGroups = [
   },
 ];
 
+interface NavLinkProps { href: string; label: string; icon: typeof LayoutDashboard; pathname: string; onClose: () => void; }
+
+const NavLink = memo(function NavLink({ href, label, icon: Icon, pathname, onClose }: NavLinkProps) {
+  const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+  return (
+    <Link
+      href={href}
+      onClick={onClose}
+      className={cn(
+        "relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group",
+        active
+          ? "bg-primary/10 text-primary"
+          : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+      )}
+    >
+      {active && (
+        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-primary" />
+      )}
+      <Icon className={cn("w-4 h-4 shrink-0 transition-colors", active ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
+      <span>{label}</span>
+    </Link>
+  );
+});
+
 interface SidebarProps { open: boolean; onClose: () => void; }
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { isAdmin } = useIsAdmin();
-
-  function NavLink({ href, label, icon: Icon }: { href: string; label: string; icon: typeof LayoutDashboard }) {
-    const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
-    return (
-      <Link
-        href={href}
-        onClick={onClose}
-        className={cn(
-          "relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group",
-          active
-            ? "bg-primary/10 text-primary"
-            : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
-        )}
-      >
-        {active && (
-          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-primary" />
-        )}
-        <Icon className={cn("w-4 h-4 shrink-0 transition-colors", active ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
-        <span>{label}</span>
-      </Link>
-    );
-  }
 
   return (
     <>
@@ -126,7 +130,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               <p className="text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-widest px-3 mb-1">{group.label}</p>
               <div className="space-y-0.5">
                 {group.items.map((item) => (
-                  <NavLink key={item.href} {...item} />
+                  <NavLink key={item.href} {...item} pathname={pathname} onClose={onClose} />
                 ))}
               </div>
             </div>
@@ -139,10 +143,10 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                 <p className="text-[10px] font-semibold text-primary/60 uppercase tracking-widest">Admin</p>
               </div>
               <div className="space-y-0.5 rounded-lg border border-primary/10 bg-primary/[0.04] p-1">
-                <NavLink href="/admin/users"     label="User Management"  icon={Shield} />
-                <NavLink href="/admin/gyms"      label="Gyms"             icon={Building2} />
-                <NavLink href="/admin/prospects" label="Gym Pipeline"     icon={UserCog} />
-                <NavLink href="/admin/audit"     label="Audit Log"        icon={ClipboardList} />
+                <NavLink href="/admin/users"     label="User Management"  icon={Shield}         pathname={pathname} onClose={onClose} />
+                <NavLink href="/admin/gyms"      label="Gyms"             icon={Building2}      pathname={pathname} onClose={onClose} />
+                <NavLink href="/admin/prospects" label="Gym Pipeline"     icon={UserCog}        pathname={pathname} onClose={onClose} />
+                <NavLink href="/admin/audit"     label="Audit Log"        icon={ClipboardList}  pathname={pathname} onClose={onClose} />
               </div>
             </div>
           )}

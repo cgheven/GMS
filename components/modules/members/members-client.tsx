@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, memo } from "react";
 import {
   Plus, Users, Search, Edit2, Trash2,
   UserCheck, Clock, CalendarX,
@@ -18,7 +18,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate, formatDateInput, cn } from "@/lib/utils";
 import { validateFullName, validateCNIC, validatePakPhone, validateDOB, validateMoney, runValidators, type ValidationResult } from "@/lib/validation";
-import type { Member, MembershipPlan, MemberStatus, MemberGender, Staff, Payment, PaymentMethod, PaymentStatus, Referrer } from "@/types";
+import type { Member, MembershipPlan, MemberStatus, MemberGender, Staff, Payment, PaymentMethod, PaymentStatus, Referrer, SocialManager, SocialLead } from "@/types";
+import { matchSocialLead } from "@/app/actions/social";
 
 // ── Payment helpers ────────────────────────────────────────────────────────────
 const methodLabels: Record<PaymentMethod, string> = {
@@ -47,6 +48,8 @@ const CURRENT_MONTH = (() => {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`;
 })();
 
+type UnmatchedLead = Pick<SocialLead, "id" | "lead_name" | "lead_phone" | "lead_social_handle" | "platform" | "evidence_url" | "notes" | "expires_at" | "created_at"> & { manager: Pick<SocialManager, "full_name" | "commission_type" | "commission_value"> | null };
+
 interface Props {
   gymId: string | null;
   active: Member[];
@@ -68,6 +71,7 @@ const emptyForm = {
   plan_id: "",
   assigned_trainer_id: "",
   referrer_id: "",
+  social_lead_id: "",
   join_date: formatDateInput(new Date()),
   plan_start_date: formatDateInput(new Date()),
   plan_expiry_date: "",
@@ -97,6 +101,114 @@ const DURATION_LABELS: Record<string, string> = {
   annual:    "Annual",
   dropin:    "Drop-in",
 };
+
+// ── Module-level components (stable identity — never re-mounted on parent re-render) ──
+
+function StatusBadge({ status }: { status: MemberStatus }) {
+  const cfg = STATUS_CONFIG[status];
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.className}`}>
+      <cfg.icon className="w-3 h-3" />
+      {cfg.label}
+    </span>
+  );
+}
+
+interface MemberTableProps {
+  list: Member[];
+  showExpired: boolean;
+  planMap: Record<string, MembershipPlan>;
+  onEdit: (m: Member) => void;
+  onDelete: (m: Member) => void;
+}
+
+const MemberTable = memo(function MemberTable({ list, showExpired, planMap, onEdit, onDelete }: MemberTableProps) {
+  if (list.length === 0) return null;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-sidebar-border">
+            <th className="text-left px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Member</th>
+            <th className="text-left px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Plan</th>
+            <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Trainer</th>
+            <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Phone</th>
+            <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">{showExpired ? "Expired" : "Joined"}</th>
+            <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fee</th>
+            <th className="text-center px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Status</th>
+            <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-sidebar-border/50">
+          {list.map((m) => {
+            const plan = m.plan_id ? planMap[m.plan_id] : null;
+            const planData = (m as Member & { plan?: { name: string; color: string } | null }).plan;
+            const planName = planData?.name ?? plan?.name;
+            const planColor = planData?.color ?? plan?.color ?? "#6B7A99";
+            const trainerData = (m as Member & { trainer?: { full_name: string } | null }).trainer;
+            return (
+              <tr key={m.id} className="hover:bg-white/[0.02] transition-colors group">
+                <td className="px-3 sm:px-4 py-3">
+                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                      style={{ backgroundColor: `${planColor}22`, color: planColor }}
+                    >
+                      {m.full_name[0].toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground truncate">{m.full_name}</p>
+                      {m.member_number && <p className="text-xs text-muted-foreground font-mono">{m.member_number}</p>}
+                      {planName && <p className="sm:hidden text-[11px] mt-0.5" style={{ color: planColor }}>● {planName}</p>}
+                    </div>
+                  </div>
+                </td>
+                <td className="px-4 py-3 hidden sm:table-cell">
+                  {planName ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-md"
+                      style={{ backgroundColor: `${planColor}20`, color: planColor }}>
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: planColor }} />
+                      {planName}
+                    </span>
+                  ) : <span className="text-xs text-muted-foreground">—</span>}
+                </td>
+                <td className="px-4 py-3 hidden md:table-cell">
+                  <span className="text-sm text-muted-foreground">{trainerData?.full_name ?? "—"}</span>
+                </td>
+                <td className="px-4 py-3 hidden lg:table-cell">
+                  <span className="text-sm text-muted-foreground">{m.phone ?? "—"}</span>
+                </td>
+                <td className="px-4 py-3 hidden lg:table-cell">
+                  <span className="text-sm text-muted-foreground">
+                    {showExpired ? (m.plan_expiry_date ? formatDate(m.plan_expiry_date) : "—") : (m.join_date ? formatDate(m.join_date) : "—")}
+                  </span>
+                </td>
+                <td className="px-3 sm:px-4 py-3 text-right">
+                  <p className="font-semibold text-foreground whitespace-nowrap">{formatCurrency(m.monthly_fee)}<span className="text-muted-foreground">/mo</span></p>
+                  {m.admission_fee > 0 && <p className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap">+{formatCurrency(m.admission_fee)} <span className="hidden sm:inline">admission</span><span className="sm:hidden">adm</span></p>}
+                  {m.outstanding_balance > 0 && <p className="text-[10px] sm:text-xs text-rose-400 whitespace-nowrap">Due: {formatCurrency(m.outstanding_balance)}</p>}
+                </td>
+                <td className="px-4 py-3 text-center hidden sm:table-cell">
+                  <StatusBadge status={m.status} />
+                </td>
+                <td className="px-3 sm:px-4 py-3 text-right">
+                  <div className="flex items-center justify-end gap-0.5 sm:gap-1">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(m)}>
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => onDelete(m)}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+});
 
 export function MembersClient({
   gymId,
@@ -147,10 +259,11 @@ export function MembersClient({
   }, [active, paidMemberIds, monthPayments]);
 
   const memberRows = useMemo(() => {
+    const paymentByMember = new Map(monthPayments.map((p) => [p.member_id, p]));
     const q = collectSearch.toLowerCase();
     return active
       .filter((m) => !q || m.full_name.toLowerCase().includes(q))
-      .map((m) => ({ member: m, payment: monthPayments.find((p) => p.member_id === m.id) ?? null }))
+      .map((m) => ({ member: m, payment: paymentByMember.get(m.id) ?? null }))
       .sort((a, b) => {
         const rank = (r: typeof a) => (!r.payment || r.payment.status === "overdue" ? 0 : r.payment.status === "pending" ? 1 : 2);
         return rank(a) - rank(b);
@@ -270,132 +383,13 @@ export function MembersClient({
     return counts;
   }, [active, expired, staff]);
 
-  // Auto-fill monthly fee when plan is selected
   const stats = {
     active: active.length,
     expired: expired.length,
   };
 
-  function StatusBadge({ status }: { status: MemberStatus }) {
-    const cfg = STATUS_CONFIG[status];
-    return (
-      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.className}`}>
-        <cfg.icon className="w-3 h-3" />
-        {cfg.label}
-      </span>
-    );
-  }
-
-  function MemberTable({ list, showExpired = false }: { list: Member[]; showExpired?: boolean }) {
-    if (list.length === 0) return null;
-    return (
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-sidebar-border">
-              <th className="text-left px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Member</th>
-              <th className="text-left px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Plan</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Trainer</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Phone</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">{showExpired ? "Expired" : "Joined"}</th>
-              <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fee</th>
-              <th className="text-center px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Status</th>
-              <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-sidebar-border/50">
-            {list.map((m) => {
-              const plan = m.plan_id ? planMap[m.plan_id] : null;
-              const planData = (m as Member & { plan?: { name: string; color: string } | null }).plan;
-              const planName = planData?.name ?? plan?.name;
-              const planColor = planData?.color ?? plan?.color ?? "#6B7A99";
-              const trainerData = (m as Member & { trainer?: { full_name: string } | null }).trainer;
-              return (
-                <tr key={m.id} className="hover:bg-white/[0.02] transition-colors group">
-                  {/* Member */}
-                  <td className="px-3 sm:px-4 py-3">
-                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                      <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                        style={{ backgroundColor: `${planColor}22`, color: planColor }}
-                      >
-                        {m.full_name[0].toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-medium text-foreground truncate">{m.full_name}</p>
-                        {m.member_number && (
-                          <p className="text-xs text-muted-foreground font-mono">{m.member_number}</p>
-                        )}
-                        {/* On mobile only: show plan inline as it's hidden as a column */}
-                        {planName && (
-                          <p className="sm:hidden text-[11px] mt-0.5" style={{ color: planColor }}>● {planName}</p>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  {/* Plan */}
-                  <td className="px-4 py-3 hidden sm:table-cell">
-                    {planName ? (
-                      <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-md"
-                        style={{ backgroundColor: `${planColor}20`, color: planColor }}>
-                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: planColor }} />
-                        {planName}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  {/* Trainer */}
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    <span className="text-sm text-muted-foreground">
-                      {trainerData?.full_name ?? "—"}
-                    </span>
-                  </td>
-                  {/* Phone */}
-                  <td className="px-4 py-3 hidden lg:table-cell">
-                    <span className="text-sm text-muted-foreground">{m.phone ?? "—"}</span>
-                  </td>
-                  {/* Date */}
-                  <td className="px-4 py-3 hidden lg:table-cell">
-                    <span className="text-sm text-muted-foreground">
-                      {showExpired
-                        ? (m.plan_expiry_date ? formatDate(m.plan_expiry_date) : "—")
-                        : (m.join_date ? formatDate(m.join_date) : "—")}
-                    </span>
-                  </td>
-                  {/* Fee */}
-                  <td className="px-3 sm:px-4 py-3 text-right">
-                    <p className="font-semibold text-foreground whitespace-nowrap">{formatCurrency(m.monthly_fee)}<span className="text-muted-foreground">/mo</span></p>
-                    {m.admission_fee > 0 && (
-                      <p className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap">+{formatCurrency(m.admission_fee)} <span className="hidden sm:inline">admission</span><span className="sm:hidden">adm</span></p>
-                    )}
-                    {m.outstanding_balance > 0 && (
-                      <p className="text-[10px] sm:text-xs text-rose-400 whitespace-nowrap">Due: {formatCurrency(m.outstanding_balance)}</p>
-                    )}
-                  </td>
-                  {/* Status */}
-                  <td className="px-4 py-3 text-center hidden sm:table-cell">
-                    <StatusBadge status={m.status} />
-                  </td>
-                  {/* Actions — always visible on mobile (no hover on touch) */}
-                  <td className="px-3 sm:px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-0.5 sm:gap-1">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(m)}>
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteMember(m)}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
+  const filteredActive = useMemo(() => filterList(active), [active, trainerFilter, search]);
+  const filteredExpired = useMemo(() => filterList(expired), [expired, trainerFilter, search]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -497,8 +491,8 @@ export function MembersClient({
         </div>
 
         {[
-          { value: "active",  list: filterList(active),  empty: "No active members yet",            showExpired: false, emptyIcon: Users },
-          { value: "expired", list: filterList(expired), empty: "No expired or cancelled members",  showExpired: true,  emptyIcon: CalendarX },
+          { value: "active",  list: filteredActive,  empty: "No active members yet",            showExpired: false, emptyIcon: Users },
+          { value: "expired", list: filteredExpired, empty: "No expired or cancelled members",  showExpired: true,  emptyIcon: CalendarX },
         ].map(({ value, list, empty, showExpired, emptyIcon: Icon }) => (
           <TabsContent key={value} value={value}>
             <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
@@ -508,7 +502,7 @@ export function MembersClient({
                   <p className="text-sm">{search ? "No members match your search" : empty}</p>
                 </div>
               ) : (
-                <MemberTable list={list} showExpired={showExpired} />
+                <MemberTable list={list} showExpired={showExpired} planMap={planMap} onEdit={openEdit} onDelete={setDeleteMember} />
               )}
             </div>
           </TabsContent>
@@ -811,6 +805,9 @@ function MemberFormDialog({
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [allowDuplicate, setAllowDuplicate] = useState(false);
+  const [leadPickerOpen, setLeadPickerOpen] = useState(false);
+  const [selectedLead, setSelectedLead] = useState<UnmatchedLead | null>(null);
+  const [unmatchedLeads, setUnmatchedLeads] = useState<UnmatchedLead[]>([]);
 
   // Detect a member with the same phone (ignoring the one being edited).
   // Only triggers once 10+ digits have been entered to avoid early false positives.
@@ -822,8 +819,33 @@ function MemberFormDialog({
     ) ?? null;
   }, [form.phone, existingMembers, editing?.id]);
 
-  // Reset override whenever phone changes / dialog opens
+  // Auto-detect social lead by phone number match (Tier 1)
+  const autoSocialMatch = useMemo(() => {
+    if (editing || !form.phone) return null;
+    const norm = normalizePhone(form.phone);
+    if (norm.length < 10) return null;
+    return unmatchedLeads.find((l) => l.lead_phone && normalizePhone(l.lead_phone) === norm) ?? null;
+  }, [form.phone, unmatchedLeads, editing]);
+
+  // If auto-match found and no manual lead selected, use auto-match
+  const activeLead = selectedLead ?? (autoSocialMatch ?? null);
+
+  // Lazy-fetch unmatched social leads only when Add dialog opens (not on page load)
+  useEffect(() => {
+    if (!open || editing || !gymId) return;
+    const supabase = createClient();
+    supabase
+      .from("pulse_social_leads")
+      .select("id,lead_name,lead_phone,lead_social_handle,platform,evidence_url,notes,expires_at,created_at,manager:pulse_social_managers(full_name,commission_type,commission_value)")
+      .eq("gym_id", gymId)
+      .eq("status", "unmatched")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => setUnmatchedLeads((data ?? []) as unknown as UnmatchedLead[]));
+  }, [open, editing, gymId]);
+
+  // Reset override and lead selection whenever dialog opens/closes
   useEffect(() => { setAllowDuplicate(false); }, [form.phone, open]);
+  useEffect(() => { if (!open) { setSelectedLead(null); setLeadPickerOpen(false); setUnmatchedLeads([]); } }, [open]);
 
   const planMap = useMemo(() => Object.fromEntries(plans.map((p) => [p.id, p])), [plans]);
 
@@ -843,6 +865,7 @@ function MemberFormDialog({
         plan_id: editing.plan_id ?? "",
         assigned_trainer_id: editing.assigned_trainer_id ?? "",
         referrer_id: (editing as Member & { referrer_id?: string | null }).referrer_id ?? "",
+        social_lead_id: "",
         join_date: editing.join_date,
         plan_start_date: editing.plan_start_date ?? "",
         plan_expiry_date: editing.plan_expiry_date ?? "",
@@ -980,6 +1003,19 @@ function MemberFormDialog({
           });
         }
       }
+      // Social lead matching
+      if (activeLead && gymId) {
+        const monthly = parseFloat(form.monthly_fee) || 0;
+        const mgr = activeLead.manager;
+        const commission = mgr
+          ? (mgr.commission_type === "flat"
+              ? Number(mgr.commission_value)
+              : Math.round((monthly * Number(mgr.commission_value)) / 100))
+          : 0;
+        const matchType = autoSocialMatch?.id === activeLead.id ? "auto" : "manual";
+        await matchSocialLead(activeLead.id, newMember.id, commission, matchType);
+        setUnmatchedLeads((prev) => prev.filter((l) => l.id !== activeLead.id));
+      }
     }
 
     toast({ title: editing ? "Member updated" : "Member added" });
@@ -989,6 +1025,7 @@ function MemberFormDialog({
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -1152,6 +1189,46 @@ function MemberFormDialog({
                     </Select>
                   </div>
                 )}
+                {/* Social media lead matching */}
+                {!editing && (
+                  <div className="space-y-1.5 sm:col-span-2">
+                    {autoSocialMatch && !selectedLead && (
+                      <div className="rounded-lg border border-green-500/30 bg-green-500/8 px-3 py-2 flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-green-400">Social Media Lead Matched</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {autoSocialMatch.lead_name} · via {autoSocialMatch.platform} · by {autoSocialMatch.manager?.full_name ?? "—"}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground/60 mt-0.5">Phone matched — commission auto-approved on save</p>
+                        </div>
+                        <button onClick={() => setSelectedLead({ ...autoSocialMatch, _dismissed: true } as UnmatchedLead & { _dismissed?: boolean })} className="text-[10px] text-muted-foreground hover:text-red-400 shrink-0">Dismiss</button>
+                      </div>
+                    )}
+                    {!autoSocialMatch && unmatchedLeads.length > 0 && !selectedLead && (
+                      <button
+                        type="button"
+                        onClick={() => setLeadPickerOpen(true)}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        Social media lead? Browse {unmatchedLeads.length} unmatched lead{unmatchedLeads.length > 1 ? "s" : ""}
+                      </button>
+                    )}
+                    {selectedLead && !(selectedLead as UnmatchedLead & { _dismissed?: boolean })._dismissed && (
+                      <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/8 px-3 py-2 flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-yellow-400">Social Lead — Needs Owner Review</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {selectedLead.lead_name} · via {selectedLead.platform} · by {selectedLead.manager?.full_name ?? "—"}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground/60 mt-0.5">Manual match — owner approval required before commission is paid</p>
+                        </div>
+                        <button onClick={() => setSelectedLead(null)} className="text-[10px] text-muted-foreground hover:text-red-400 shrink-0">Remove</button>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <Label>Join Date *</Label>
                   <Input type="date" value={form.join_date} onChange={(e) => setForm((f) => ({ ...f, join_date: e.target.value }))} />
@@ -1269,5 +1346,37 @@ function MemberFormDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Social lead picker dialog (Tier 2 — manual match) */}
+    <Dialog open={leadPickerOpen} onOpenChange={setLeadPickerOpen}>
+      <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Match Social Media Lead</DialogTitle></DialogHeader>
+        <p className="text-sm text-muted-foreground">Select the pre-registered lead that matches this new member. The owner will review and approve the commission.</p>
+        <div className="space-y-2 mt-2">
+          {unmatchedLeads.map((lead) => (
+            <button
+              key={lead.id}
+              onClick={() => { setSelectedLead(lead); setLeadPickerOpen(false); }}
+              className="w-full text-left rounded-lg border border-sidebar-border bg-card px-3 py-2.5 hover:border-primary/40 hover:bg-primary/5 transition-colors"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium text-foreground">{lead.lead_name}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {lead.lead_phone ?? lead.lead_social_handle ?? "No contact"} · {lead.platform} · by {lead.manager?.full_name ?? "—"}
+                  </p>
+                  <p className="text-xs text-muted-foreground/60">Added {formatDate(lead.created_at)}</p>
+                </div>
+                {lead.evidence_url && <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" aria-label="Has evidence" />}
+              </div>
+            </button>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setLeadPickerOpen(false)} className="border-sidebar-border">Cancel</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
