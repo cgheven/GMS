@@ -21,7 +21,7 @@ import { toast } from "@/hooks/use-toast";
 import { useGymContext } from "@/contexts/gym-context";
 import { formatCurrency, formatDate, formatDateInput } from "@/lib/utils";
 import { validateFullName, validateCNIC, validatePakPhone, validateMoney, runValidators } from "@/lib/validation";
-import type { Staff, StaffRole, StaffStatus, SalaryPayment, PaymentMethod } from "@/types";
+import type { Staff, StaffRole, StaffStatus, SalaryPayment, PaymentMethod, TrainerShift } from "@/types";
 
 const ROLES: { value: StaffRole; label: string; icon: string }[] = [
   { value: "trainer",   label: "Trainer",    icon: "💪" },
@@ -136,6 +136,61 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // ── Trainer shifts state ──────────────────────────────────
+  // shifts keyed by staff_id
+  const [shifts, setShifts] = useState<Record<string, TrainerShift[]>>({});
+  const [shiftForm, setShiftForm] = useState({ name: "", start_time: "", end_time: "", commission_type: "percentage" as "percentage" | "flat", commission_value: "" });
+  const [shiftSaving, setShiftSaving] = useState(false);
+
+  useEffect(() => {
+    if (!gymId) return;
+    createClient().from("pulse_trainer_shifts").select("*").eq("gym_id", gymId)
+      .then(({ data }) => {
+        if (!data) return;
+        const grouped: Record<string, TrainerShift[]> = {};
+        data.forEach((s: TrainerShift) => { (grouped[s.staff_id] ??= []).push(s); });
+        setShifts(grouped);
+      });
+  }, [gymId]);
+
+  function reloadShifts() {
+    if (!gymId) return;
+    createClient().from("pulse_trainer_shifts").select("*").eq("gym_id", gymId)
+      .then(({ data }) => {
+        if (!data) return;
+        const grouped: Record<string, TrainerShift[]> = {};
+        data.forEach((s: TrainerShift) => { (grouped[s.staff_id] ??= []).push(s); });
+        setShifts(grouped);
+      });
+  }
+
+  async function handleAddShift() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
+    if (!editing || !gymId || !shiftForm.name || !shiftForm.start_time || !shiftForm.end_time) return;
+    setShiftSaving(true);
+    const { error } = await createClient().from("pulse_trainer_shifts").insert({
+      staff_id: editing.id,
+      gym_id: gymId,
+      name: shiftForm.name,
+      start_time: shiftForm.start_time,
+      end_time: shiftForm.end_time,
+      commission_type: shiftForm.commission_type,
+      commission_value: parseFloat(shiftForm.commission_value) || 0,
+    });
+    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
+    else {
+      setShiftForm({ name: "", start_time: "", end_time: "", commission_type: "percentage", commission_value: "" });
+      reloadShifts();
+    }
+    setShiftSaving(false);
+  }
+
+  async function handleDeleteShift(shiftId: string) {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
+    await createClient().from("pulse_trainer_shifts").delete().eq("id", shiftId);
+    reloadShifts();
+  }
 
   // ── Trainer login state ───────────────────────────────────
   const [loginDialog, setLoginDialog] = useState<Staff | null>(null);
@@ -307,25 +362,32 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
     setGenerating(true);
     const supabase = createClient();
 
-    // Fetch already-generated records and active members in parallel
-    const [{ data: existing }, { data: activeMembers }] = await Promise.all([
+    // Fetch already-generated records, active members, and shifts in parallel
+    const [{ data: existing }, { data: activeMembers }, { data: allShifts }] = await Promise.all([
       supabase.from("pulse_salary_payments").select("staff_id").eq("gym_id", gymId).eq("for_month", selectedMonth),
-      supabase.from("pulse_members").select("assigned_trainer_id,monthly_fee").eq("gym_id", gymId).eq("status", "active"),
+      supabase.from("pulse_members").select("assigned_trainer_id,monthly_fee,assigned_shift_id").eq("gym_id", gymId).eq("status", "active"),
+      supabase.from("pulse_trainer_shifts").select("*").eq("gym_id", gymId),
     ]);
 
     const existingIds = new Set((existing ?? []).map((r) => r.staff_id));
     const members = activeMembers ?? [];
+    const shiftMap = Object.fromEntries((allShifts ?? []).map((sh: TrainerShift) => [sh.id, sh]));
 
     const rows = active
       .filter((s) => !existingIds.has(s.id))
       .map((s) => {
         let commissionAmount = 0;
-        if (s.role === "trainer" && s.commission_percentage > 0) {
-          const myFees = members
-            .filter((m) => m.assigned_trainer_id === s.id)
-            .reduce((sum, m) => sum + Number(m.monthly_fee), 0);
-          commissionAmount = Math.round(myFees * s.commission_percentage / 100);
-          if (s.commission_floor > 0) commissionAmount = Math.max(commissionAmount, s.commission_floor);
+        if (s.role === "trainer") {
+          const myMembers = members.filter((m) => m.assigned_trainer_id === s.id);
+          commissionAmount = myMembers.reduce((sum, m) => {
+            const fee = Number(m.monthly_fee);
+            const netFee = Math.max(0, fee - s.commission_floor);
+            const shift = m.assigned_shift_id ? shiftMap[m.assigned_shift_id] : null;
+            if (shift) {
+              return sum + (shift.commission_type === "flat" ? shift.commission_value : Math.round(netFee * shift.commission_value / 100));
+            }
+            return sum + (s.commission_percentage > 0 ? Math.round(netFee * s.commission_percentage / 100) : 0);
+          }, 0);
         }
         return {
           gym_id: gymId,
@@ -657,13 +719,13 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
 
       {/* ── Add / Edit Staff Dialog ───────────────────────── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-lg flex flex-col gap-0 max-h-[90dvh] p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 shrink-0 border-b border-sidebar-border">
             <DialogTitle>
               {editing ? `Edit ${isTrainersMode ? "Trainer" : "Staff"}` : addButtonLabel}
             </DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-2">
+          <div className="grid gap-4 py-4 px-6 overflow-y-auto flex-1 min-h-0">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5 col-span-2">
                 <Label>Full Name *</Label>
@@ -716,6 +778,50 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
             </div>
             <div className="space-y-1.5"><Label>Notes</Label><Textarea placeholder="Optional…" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} /></div>
 
+            {/* ── Shifts (trainers only, when editing) ─── */}
+            {form.role === "trainer" && editing && (
+              <div className="rounded-lg border border-sidebar-border bg-white/[0.02] p-3 space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Shifts</p>
+                <p className="text-[11px] text-muted-foreground leading-snug">Each shift can have its own commission rate. Members assigned to a shift use that rate instead of the default above.</p>
+
+                {/* Existing shifts */}
+                {(shifts[editing.id] ?? []).map((sh) => (
+                  <div key={sh.id} className="flex items-center justify-between gap-2 rounded-md border border-sidebar-border bg-card px-3 py-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{sh.name}</p>
+                      <p className="text-xs text-muted-foreground">{sh.start_time.slice(0, 5)} – {sh.end_time.slice(0, 5)} · {sh.commission_type === "flat" ? `PKR ${sh.commission_value}` : `${sh.commission_value}%`}</p>
+                    </div>
+                    <button type="button" onClick={() => handleDeleteShift(sh.id)} className="text-muted-foreground hover:text-destructive transition-colors shrink-0">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+
+                {/* Add shift inline form */}
+                <div className="space-y-2 pt-1 border-t border-sidebar-border">
+                  <p className="text-xs text-muted-foreground font-medium">Add Shift</p>
+                  <Input placeholder="Shift name (e.g. Morning)" value={shiftForm.name} onChange={(e) => setShiftForm({ ...shiftForm, name: e.target.value })} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1"><p className="text-[11px] text-muted-foreground">Start</p><Input type="time" value={shiftForm.start_time} onChange={(e) => setShiftForm({ ...shiftForm, start_time: e.target.value })} /></div>
+                    <div className="space-y-1"><p className="text-[11px] text-muted-foreground">End</p><Input type="time" value={shiftForm.end_time} onChange={(e) => setShiftForm({ ...shiftForm, end_time: e.target.value })} /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Select value={shiftForm.commission_type} onValueChange={(v) => setShiftForm({ ...shiftForm, commission_type: v as "percentage" | "flat" })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="percentage">Percentage %</SelectItem>
+                        <SelectItem value="flat">Flat (PKR)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input type="number" placeholder={shiftForm.commission_type === "flat" ? "PKR amount" : "e.g. 30"} value={shiftForm.commission_value} onChange={(e) => setShiftForm({ ...shiftForm, commission_value: e.target.value })} />
+                  </div>
+                  <Button size="sm" variant="outline" className="w-full" onClick={handleAddShift} disabled={shiftSaving || !shiftForm.name || !shiftForm.start_time || !shiftForm.end_time}>
+                    {shiftSaving ? "Saving…" : "+ Add Shift"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Permissions */}
             <div className="rounded-lg border border-sidebar-border bg-white/[0.02] p-3 space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Permissions</p>
@@ -730,7 +836,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
               </label>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="px-6 py-4 shrink-0 border-t border-sidebar-border">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleSave} disabled={saving || !form.full_name || !form.monthly_salary}>
               {saving ? "Saving…" : editing ? "Update" : "Add Staff"}

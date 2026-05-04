@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2, Clock, Wallet, Users,
@@ -15,12 +15,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate, formatDateInput } from "@/lib/utils";
-import type { Payment, PaymentMethod, PaymentStatus, Member, MembershipPlan, Staff, MemberGoal, BodyMetric, MetricSkip } from "@/types";
+import type { Payment, PaymentMethod, PaymentStatus, Member, MembershipPlan, Staff, MemberGoal, BodyMetric, MetricSkip, TrainerShift } from "@/types";
 
 type MemberRow = Pick<Member,
   "id" | "full_name" | "member_number" | "phone" | "email" | "cnic" |
   "gender" | "date_of_birth" | "emergency_contact" | "address" |
-  "monthly_fee" | "admission_fee" | "plan_id" | "assigned_trainer_id" |
+  "monthly_fee" | "admission_fee" | "plan_id" | "assigned_trainer_id" | "assigned_shift_id" |
   "status" | "plan_expiry_date" | "outstanding_balance" | "join_date" | "notes"
 > & { plan?: { name: string } | null };
 
@@ -85,6 +85,15 @@ export function TrainerClient({ staff, gymId, members, selfMembers, payments: in
   const router = useRouter();
   const [payments, setPayments] = useState<Payment[]>(initialPayments);
   const [selectedMonth, setSelectedMonth] = useState(CURRENT_MONTH);
+  const [shiftMap, setShiftMap] = useState<Record<string, TrainerShift>>({});
+
+  useEffect(() => {
+    createClient().from("pulse_trainer_shifts").select("*").eq("staff_id", staff.id)
+      .then(({ data }) => {
+        if (!data) return;
+        setShiftMap(Object.fromEntries(data.map((s: TrainerShift) => [s.id, s])));
+      });
+  }, [staff.id]);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"my" | "self">("my");
   const [checkedInToday, setCheckedInToday] = useState<Set<string>>(new Set(initialCheckedIn));
@@ -252,19 +261,30 @@ export function TrainerClient({ staff, gymId, members, selfMembers, payments: in
   // commission to the original trainer. Pending commission still uses currently
   // assigned members' monthly_fee, since that's the only forecast we have.
   const earnings = useMemo(() => {
-    const pct = staff.commission_percentage / 100;
     const floor = staff.commission_floor ?? 0;
-    const cutFor = (fee: number) => Math.max(0, fee - floor) * pct;
+    const defaultPct = staff.commission_percentage / 100;
+
+    const cutForMember = (m: MemberRow) => {
+      const fee = Number(m.monthly_fee);
+      const netFee = Math.max(0, fee - floor);
+      const shift = m.assigned_shift_id ? shiftMap[m.assigned_shift_id] : null;
+      if (shift) return shift.commission_type === "flat" ? shift.commission_value : netFee * (shift.commission_value / 100);
+      return netFee * defaultPct;
+    };
+
     const earnedCommission = monthPayments
       .filter((p) => p.status === "paid" && p.trainer_id === staff.id)
-      .reduce((s, p) => s + cutFor(Number(p.total_amount)), 0);
+      .reduce((s, p) => {
+        const m = members.find((mb) => mb.id === p.member_id);
+        return s + (m ? cutForMember(m) : Math.max(0, Number(p.total_amount) - floor) * defaultPct);
+      }, 0);
     const pendingCommission = members
       .filter((m) => !paidMemberIds.has(m.id))
-      .reduce((s, m) => s + cutFor(m.monthly_fee), 0);
+      .reduce((s, m) => s + cutForMember(m), 0);
     const totalPotential = earnedCommission + pendingCommission;
     const totalEarned = staff.monthly_salary + earnedCommission;
-    return { earnedCommission, pendingCommission, totalPotential, totalEarned, pct: staff.commission_percentage, floor, cutFor };
-  }, [members, paidMemberIds, monthPayments, staff]);
+    return { earnedCommission, pendingCommission, totalPotential, totalEarned, pct: staff.commission_percentage, floor, cutForMember };
+  }, [members, paidMemberIds, monthPayments, staff, shiftMap]);
 
   const memberRows = useMemo(() => {
     const q = search.toLowerCase();
@@ -547,9 +567,18 @@ export function TrainerClient({ staff, gymId, members, selfMembers, payments: in
                         <span className="font-medium text-foreground">{formatCurrency(member.monthly_fee)}</span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <span className={`text-sm font-semibold ${isPaid ? "text-primary" : "text-muted-foreground"}`}>
-                          {formatCurrency(earnings.cutFor(member.monthly_fee))}
-                        </span>
+                        <div className="flex flex-col items-end gap-0.5">
+                          <span className={`text-sm font-semibold ${isPaid ? "text-primary" : "text-muted-foreground"}`}>
+                            {formatCurrency(earnings.cutForMember(member))}
+                          </span>
+                          {(() => {
+                            const shift = member.assigned_shift_id ? shiftMap[member.assigned_shift_id] : null;
+                            const label = shift
+                              ? `${shift.name} · ${shift.commission_type === "flat" ? `PKR ${shift.commission_value}` : `${shift.commission_value}%`}`
+                              : earnings.pct > 0 ? `${earnings.pct}%` : null;
+                            return label ? <span className="text-[10px] text-muted-foreground">{label}</span> : null;
+                          })()}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-center">
                         {payment ? (

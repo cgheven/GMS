@@ -193,6 +193,21 @@ export interface SocialLead {
   member?: Pick<Member, "full_name" | "phone" | "join_date"> | null;
 }
 
+export type CommissionType = "percentage" | "flat";
+
+export interface TrainerShift {
+  id: string;
+  staff_id: string;
+  gym_id: string;
+  name: string;
+  start_time: string;
+  end_time: string;
+  commission_type: CommissionType;
+  commission_value: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Referral {
   id: string;
   gym_id: string;
@@ -212,6 +227,7 @@ export interface Member {
   gym_id: string;
   plan_id: string | null;
   assigned_trainer_id: string | null;
+  assigned_shift_id: string | null;
   referrer_id: string | null;
   member_number: string | null;
   full_name: string;

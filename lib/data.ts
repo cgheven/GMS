@@ -431,7 +431,7 @@ export async function getTrainerPageData() {
   const [{ data: members }, { data: plans }, { data: trainers }] = await Promise.all([
     supabase
       .from("pulse_members")
-      .select("id,full_name,member_number,phone,email,cnic,gender,date_of_birth,emergency_contact,address,monthly_fee,admission_fee,plan_id,assigned_trainer_id,status,plan_expiry_date,outstanding_balance,join_date,notes,plan:pulse_membership_plans(name)")
+      .select("id,full_name,member_number,phone,email,cnic,gender,date_of_birth,emergency_contact,address,monthly_fee,admission_fee,plan_id,assigned_trainer_id,assigned_shift_id,status,plan_expiry_date,outstanding_balance,join_date,notes,plan:pulse_membership_plans(name)")
       .eq("assigned_trainer_id", staff.id)
       .eq("status", "active")
       .order("full_name"),

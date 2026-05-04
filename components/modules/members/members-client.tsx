@@ -19,7 +19,7 @@ import { toast } from "@/hooks/use-toast";
 import { useGymContext } from "@/contexts/gym-context";
 import { formatCurrency, formatDate, formatDateInput, cn } from "@/lib/utils";
 import { validateFullName, validateCNIC, validatePakPhone, validateDOB, validateMoney, runValidators, type ValidationResult } from "@/lib/validation";
-import type { Member, MembershipPlan, MemberStatus, MemberGender, Staff, Payment, PaymentMethod, PaymentStatus, Referrer, SocialManager, SocialLead } from "@/types";
+import type { Member, MembershipPlan, MemberStatus, MemberGender, Staff, Payment, PaymentMethod, PaymentStatus, Referrer, SocialManager, SocialLead, TrainerShift } from "@/types";
 import { matchSocialLead } from "@/app/actions/social";
 
 // ── Payment helpers ────────────────────────────────────────────────────────────
@@ -71,6 +71,7 @@ const emptyForm = {
   member_number: "",
   plan_id: "",
   assigned_trainer_id: "",
+  assigned_shift_id: "",
   referrer_id: "",
   social_lead_id: "",
   join_date: formatDateInput(new Date()),
@@ -248,6 +249,18 @@ export function MembersClient({
   const [plans] = useState(initialPlans);
   const [staff] = useState(initialStaff);
   const [referrers] = useState(initialReferrers);
+  const [shifts, setShifts] = useState<Record<string, TrainerShift[]>>({});
+
+  useEffect(() => {
+    if (!gymId) return;
+    createClient().from("pulse_trainer_shifts").select("*").eq("gym_id", gymId)
+      .then(({ data }) => {
+        if (!data) return;
+        const grouped: Record<string, TrainerShift[]> = {};
+        data.forEach((s: TrainerShift) => { (grouped[s.staff_id] ??= []).push(s); });
+        setShifts(grouped);
+      });
+  }, [gymId]);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("active");
   const [trainerFilter, setTrainerFilter] = useState<string>("all");
@@ -914,6 +927,7 @@ export function MembersClient({
         existingMembers={[...active, ...expired]}
         plans={plans}
         staff={staff}
+        shifts={shifts}
         referrers={referrers}
         gymId={gymId}
         onSaved={reload}
@@ -985,6 +999,7 @@ interface MemberFormDialogProps {
   existingMembers: Member[];
   plans: MembershipPlan[];
   staff: Pick<Staff, "id" | "full_name" | "role">[];
+  shifts: Record<string, TrainerShift[]>;
   referrers: Pick<Referrer, "id" | "full_name" | "commission_type" | "commission_value">[];
   gymId: string | null;
   onSaved: () => void | Promise<void>;
@@ -1000,7 +1015,7 @@ function normalizePhone(raw: string | null | undefined): string {
 }
 
 function MemberFormDialog({
-  open, onOpenChange, editing, existingMembers, plans, staff, referrers, gymId, onSaved, onOpenExisting,
+  open, onOpenChange, editing, existingMembers, plans, staff, shifts, referrers, gymId, onSaved, onOpenExisting,
 }: MemberFormDialogProps) {
   const { isDemo } = useGymContext();
   const [form, setForm] = useState(emptyForm);
@@ -1065,6 +1080,7 @@ function MemberFormDialog({
         member_number: editing.member_number ?? "",
         plan_id: editing.plan_id ?? "",
         assigned_trainer_id: (() => { const ep = editing.plan_id ? planMap[editing.plan_id] : null; return (ep && !ep.includes_pt) ? "" : (editing.assigned_trainer_id ?? ""); })(),
+        assigned_shift_id: (() => { const ep = editing.plan_id ? planMap[editing.plan_id] : null; return (ep && !ep.includes_pt) ? "" : (editing.assigned_shift_id ?? ""); })(),
         referrer_id: (editing as Member & { referrer_id?: string | null }).referrer_id ?? "",
         social_lead_id: "",
         join_date: editing.join_date,
@@ -1093,6 +1109,7 @@ function MemberFormDialog({
       monthly_fee: plan ? plan.price.toString() : f.monthly_fee,
       admission_fee: plan?.admission_fee > 0 ? plan.admission_fee.toString() : f.admission_fee,
       assigned_trainer_id: (plan && !plan.includes_pt) ? "" : f.assigned_trainer_id,
+      assigned_shift_id: (plan && !plan.includes_pt) ? "" : f.assigned_shift_id,
     }));
   }
 
@@ -1141,6 +1158,7 @@ function MemberFormDialog({
       ...(editing ? { member_number: form.member_number || null } : {}),
       plan_id: form.plan_id || null,
       assigned_trainer_id: form.assigned_trainer_id || null,
+      assigned_shift_id: form.assigned_shift_id || null,
       referrer_id: form.referrer_id || null,
       join_date: form.join_date || formatDateInput(new Date()),
       plan_start_date: form.plan_start_date || null,
@@ -1367,9 +1385,10 @@ function MemberFormDialog({
                   </Select>
                 </div>
                 {(() => { const sp = form.plan_id ? planMap[form.plan_id] : null; return (!sp || sp.includes_pt) ? (
+                <>
                 <div className="space-y-1.5">
                   <Label>Assigned Trainer</Label>
-                  <Select value={form.assigned_trainer_id || "none"} onValueChange={(v) => setForm((f) => ({ ...f, assigned_trainer_id: v === "none" ? "" : v }))}>
+                  <Select value={form.assigned_trainer_id || "none"} onValueChange={(v) => setForm((f) => ({ ...f, assigned_trainer_id: v === "none" ? "" : v, assigned_shift_id: "" }))}>
                     <SelectTrigger><SelectValue placeholder="No trainer" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">No trainer</SelectItem>
@@ -1377,6 +1396,23 @@ function MemberFormDialog({
                     </SelectContent>
                   </Select>
                 </div>
+                {form.assigned_trainer_id && (shifts[form.assigned_trainer_id] ?? []).length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label>Shift <span className="text-muted-foreground text-xs font-normal">(optional)</span></Label>
+                    <Select value={form.assigned_shift_id || "none"} onValueChange={(v) => setForm((f) => ({ ...f, assigned_shift_id: v === "none" ? "" : v }))}>
+                      <SelectTrigger><SelectValue placeholder="No shift (use trainer default)" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No shift (use trainer default)</SelectItem>
+                        {(shifts[form.assigned_trainer_id] ?? []).map((sh) => (
+                          <SelectItem key={sh.id} value={sh.id}>
+                            {sh.name} · {sh.start_time.slice(0, 5)}–{sh.end_time.slice(0, 5)} · {sh.commission_type === "flat" ? `PKR ${sh.commission_value}` : `${sh.commission_value}%`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                </>
                 ) : null; })()}
                 {!editing && referrers.length > 0 && (
                   <div className="space-y-1.5">
