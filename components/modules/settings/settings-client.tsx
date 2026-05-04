@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Building2, User, Save, Loader2, Globe, ExternalLink, Target, Phone, Shield, Trash2, Eye, EyeOff } from "lucide-react";
+import { Building2, User, Save, Loader2, Globe, ExternalLink, Target, Phone, Shield, Trash2, Eye, EyeOff, Ban } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useGymContext } from "@/contexts/gym-context";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -49,6 +49,8 @@ export function SettingsClient() {
   const [savingGym, setSavingGym] = useState(false);
   const [savingListing, setSavingListing] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [defaulterThreshold, setDefaulterThreshold] = useState(2);
+  const [savingDefaulter, setSavingDefaulter] = useState(false);
 
   // ── Compliance ─────────────────────────────────────────────────────────────
   const [complianceLoaded, setComplianceLoaded] = useState(false);
@@ -124,6 +126,8 @@ export function SettingsClient() {
         email: gym.email ?? "",
         monthly_revenue_target: gym.monthly_revenue_target?.toString() ?? "",
       });
+      const cs = (gym as typeof gym & { compliance_settings?: Record<string, unknown> | null }).compliance_settings;
+      setDefaulterThreshold(Math.max(1, Math.min(6, (cs?.defaulter_threshold_months as number) ?? 2)));
       setListingForm({
         listing_enabled: gym.listing_enabled ?? false,
         maps_url: gym.maps_url ?? "",
@@ -193,6 +197,19 @@ export function SettingsClient() {
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
     else toast({ title: "Profile updated" });
     setSavingProfile(false);
+  }
+
+  async function saveDefaulterThreshold() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
+    if (!gymId) return;
+    setSavingDefaulter(true);
+    const supabase = createClient();
+    const { error } = await supabase.from("pulse_gyms")
+      .update({ compliance_settings: { ...(gym as typeof gym & { compliance_settings?: Record<string, unknown> | null }).compliance_settings, defaulter_threshold_months: defaulterThreshold } })
+      .eq("id", gymId);
+    if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
+    else toast({ title: "Defaulter threshold updated" });
+    setSavingDefaulter(false);
   }
 
   function toggleAmenity(a: string) {
@@ -444,6 +461,47 @@ export function SettingsClient() {
 
       {/* Payment Recovery */}
       <PaymentRecoverySection gym={gym} />
+
+      <Separator />
+
+      {/* Member Defaults */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Ban className="w-4 h-4 text-muted-foreground" />
+            <CardTitle className="text-base">Member Defaults</CardTitle>
+          </div>
+          <CardDescription>Configure automatic member status rules.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-3">
+            <Label>Defaulter Threshold</Label>
+            <p className="text-xs text-muted-foreground">
+              Members are auto-flagged as <span className="font-medium text-rose-400">Defaulter</span> after this many consecutive unpaid months.
+            </p>
+            <div className="flex items-center gap-4">
+              <input
+                type="range"
+                min={1}
+                max={6}
+                value={defaulterThreshold}
+                onChange={(e) => setDefaulterThreshold(Number(e.target.value))}
+                className="flex-1 accent-rose-500"
+              />
+              <span className="text-sm font-bold text-foreground w-16 text-center">
+                {defaulterThreshold} month{defaulterThreshold !== 1 ? "s" : ""}
+              </span>
+            </div>
+            <div className="flex justify-between text-[10px] text-muted-foreground px-0.5">
+              {[1,2,3,4,5,6].map((n) => <span key={n}>{n}mo</span>)}
+            </div>
+          </div>
+          <Button size="sm" onClick={saveDefaulterThreshold} disabled={savingDefaulter} className="gap-2">
+            {savingDefaulter ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            Save
+          </Button>
+        </CardContent>
+      </Card>
 
       <Separator />
 

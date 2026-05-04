@@ -10,7 +10,7 @@ export interface TrainerStat {
 }
 
 // ── Enums ──────────────────────────────────────────────────────────────────
-export type MemberStatus = "active" | "frozen" | "expired" | "cancelled";
+export type MemberStatus = "active" | "frozen" | "on_hold" | "defaulter" | "expired" | "cancelled";
 export type MemberGender = "male" | "female" | "other";
 export type PlanDurationType = "daily" | "monthly" | "quarterly" | "biannual" | "annual" | "dropin";
 export type PaymentStatus = "paid" | "pending" | "overdue" | "refunded" | "waived";
@@ -247,6 +247,8 @@ export interface Member {
   status: MemberStatus;
   freeze_start_date: string | null;
   freeze_end_date: string | null;
+  hold_since: string | null;
+  defaulter_since: string | null;
   admission_fee: number;
   monthly_fee: number;
   outstanding_balance: number;

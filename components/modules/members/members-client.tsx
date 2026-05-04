@@ -5,6 +5,7 @@ import {
   UserCheck, Clock, CalendarX,
   Snowflake, AlertCircle, CheckCircle,
   ChevronLeft, ChevronRight, CheckCircle2, Wallet, CreditCard,
+  PauseCircle, PlayCircle, Ban,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
@@ -21,6 +22,7 @@ import { formatCurrency, formatDate, formatDateInput, cn } from "@/lib/utils";
 import { validateFullName, validateCNIC, validatePakPhone, validateDOB, validateMoney, runValidators, type ValidationResult } from "@/lib/validation";
 import type { Member, MembershipPlan, MemberStatus, MemberGender, Staff, Payment, PaymentMethod, PaymentStatus, Referrer, SocialManager, SocialLead, TrainerShift } from "@/types";
 import { matchSocialLead } from "@/app/actions/social";
+import { freezeMember, unfreezeMember, putMemberOnHold, resumeMember, markAsDefaulter, clearDefaulter, checkAndClearDefaulter } from "@/app/actions/members";
 
 // ── Payment helpers ────────────────────────────────────────────────────────────
 const methodLabels: Record<PaymentMethod, string> = {
@@ -54,7 +56,11 @@ type UnmatchedLead = Pick<SocialLead, "id" | "lead_name" | "lead_phone" | "lead_
 interface Props {
   gymId: string | null;
   active: Member[];
+  frozen: Member[];
+  on_hold: Member[];
+  defaulters: Member[];
   expired: Member[];
+  defaulterThreshold: number;
   plans: MembershipPlan[];
   staff: Pick<Staff, "id" | "full_name" | "role">[];
   referrers: Pick<Referrer, "id" | "full_name" | "commission_type" | "commission_value">[];
@@ -89,10 +95,12 @@ const emptyForm = {
 };
 
 const STATUS_CONFIG: Record<MemberStatus, { label: string; className: string; icon: React.ElementType }> = {
-  active:    { label: "Active",     className: "status-active",   icon: UserCheck },
-  frozen:    { label: "Frozen",     className: "status-frozen",   icon: Snowflake },
-  expired:   { label: "Expired",    className: "status-expired",  icon: CalendarX },
-  cancelled: { label: "Cancelled",  className: "status-expired",  icon: AlertCircle },
+  active:    { label: "Active",     className: "status-active",    icon: UserCheck },
+  frozen:    { label: "Frozen",     className: "status-frozen",    icon: Snowflake },
+  on_hold:   { label: "On Hold",    className: "status-on-hold",   icon: PauseCircle },
+  defaulter: { label: "Defaulter",  className: "status-defaulter", icon: Ban },
+  expired:   { label: "Expired",    className: "status-expired",   icon: CalendarX },
+  cancelled: { label: "Cancelled",  className: "status-expired",   icon: AlertCircle },
 };
 
 const DURATION_LABELS: Record<string, string> = {
@@ -125,9 +133,10 @@ interface MemberTableProps {
   selectedIds: Set<string>;
   onToggle: (id: string) => void;
   onSelectAll: () => void;
+  extraActions?: (m: Member) => React.ReactNode;
 }
 
-const MemberTable = memo(function MemberTable({ list, showExpired, planMap, onEdit, onDelete, selectedIds, onToggle, onSelectAll }: MemberTableProps) {
+const MemberTable = memo(function MemberTable({ list, showExpired, planMap, onEdit, onDelete, selectedIds, onToggle, onSelectAll, extraActions }: MemberTableProps) {
   if (list.length === 0) return null;
   const allSelected = list.length > 0 && list.every((m) => selectedIds.has(m.id));
   const someSelected = !allSelected && list.some((m) => selectedIds.has(m.id));
@@ -218,6 +227,7 @@ const MemberTable = memo(function MemberTable({ list, showExpired, planMap, onEd
                 </td>
                 <td className="px-3 sm:px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-0.5 sm:gap-1">
+                    {extraActions?.(m)}
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(m)}>
                       <Edit2 className="w-3.5 h-3.5" />
                     </Button>
@@ -238,14 +248,24 @@ const MemberTable = memo(function MemberTable({ list, showExpired, planMap, onEd
 export function MembersClient({
   gymId,
   active: initialActive,
+  frozen: initialFrozen,
+  on_hold: initialOnHold,
+  defaulters: initialDefaulters,
   expired: initialExpired,
+  defaulterThreshold: initialThreshold,
   plans: initialPlans,
   staff: initialStaff,
   referrers: initialReferrers,
 }: Props) {
   const { isDemo } = useGymContext();
   const [active, setActive] = useState(initialActive);
+  const [frozen, setFrozen] = useState(initialFrozen);
+  const [onHold, setOnHold] = useState(initialOnHold);
+  const [defaulters, setDefaulters] = useState(initialDefaulters);
   const [expired, setExpired] = useState(initialExpired);
+  const [defaulterThreshold] = useState(initialThreshold);
+  const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
+  const [timelineMember, setTimelineMember] = useState<Member | null>(null);
   const [plans] = useState(initialPlans);
   const [staff] = useState(initialStaff);
   const [referrers] = useState(initialReferrers);
@@ -297,22 +317,26 @@ export function MembersClient({
   const paidMemberIds = useMemo(() => new Set(monthPayments.filter((p) => p.status === "paid").map((p) => p.member_id)), [monthPayments]);
 
   const collectStats = useMemo(() => {
-    const paid = active.filter((m) => paidMemberIds.has(m.id)).length;
+    const billable = [...active, ...onHold, ...defaulters];
+    const paid = billable.filter((m) => paidMemberIds.has(m.id)).length;
     const collected = monthPayments.filter((p) => p.status === "paid").reduce((s, p) => s + Number(p.total_amount), 0);
-    return { paid, unpaid: active.length - paid, collected, total: active.length };
-  }, [active, paidMemberIds, monthPayments]);
+    return { paid, unpaid: billable.length - paid, collected, total: billable.length };
+  }, [active, onHold, defaulters, paidMemberIds, monthPayments]);
 
   const memberRows = useMemo(() => {
     const paymentByMember = new Map(monthPayments.map((p) => [p.member_id, p]));
     const q = collectSearch.toLowerCase();
-    return active
+    return [...active, ...onHold, ...defaulters]
       .filter((m) => !q || m.full_name.toLowerCase().includes(q))
       .map((m) => ({ member: m, payment: paymentByMember.get(m.id) ?? null }))
       .sort((a, b) => {
+        // defaulters always sort to top, then unpaid, then paid
+        if (a.member.status === "defaulter" && b.member.status !== "defaulter") return -1;
+        if (b.member.status === "defaulter" && a.member.status !== "defaulter") return 1;
         const rank = (r: typeof a) => (!r.payment || r.payment.status === "overdue" ? 0 : r.payment.status === "pending" ? 1 : 2);
         return rank(a) - rank(b);
       });
-  }, [active, monthPayments, collectSearch]);
+  }, [active, onHold, defaulters, monthPayments, collectSearch]);
 
   function openPay(member: Member, payment: Payment | null) {
     setPayDialog({ member, payment });
@@ -344,14 +368,27 @@ export function MembersClient({
       setPayments((prev) => prev.map((p) => p.id === payment.id ? { ...p, ...update } : p));
       const { error } = await supabase.from("pulse_payments").update(update).eq("id", payment.id);
       if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); setPayments((prev) => prev.map((p) => p.id === payment.id ? payment : p)); }
-      else toast({ title: "Payment recorded" });
+      else {
+        toast({ title: "Payment recorded" });
+        if (member.status === "defaulter") {
+          const { cleared } = await checkAndClearDefaulter(member.id);
+          if (cleared) { toast({ title: `${member.full_name} cleared — dues settled, back to active` }); await reload(); }
+        }
+      }
     } else {
       setPayDialog(null);
       const { data: newRow, error } = await supabase.from("pulse_payments")
         .insert({ gym_id: gymId, member_id: member.id, plan_id: member.plan_id ?? null, amount, discount, late_fee: lateFee, total_amount: total, payment_method: payForm.method, payment_date: payForm.date, for_period: selectedMonth, status: "paid", receipt_number: payForm.receipt_number, notes: payForm.notes || null })
         .select("*, member:pulse_members(full_name,plan_id)").single();
       if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-      else { toast({ title: "Payment recorded" }); setPayments((prev) => [newRow as Payment, ...prev]); }
+      else {
+        toast({ title: "Payment recorded" });
+        setPayments((prev) => [newRow as Payment, ...prev]);
+        if (member.status === "defaulter") {
+          const { cleared } = await checkAndClearDefaulter(member.id);
+          if (cleared) { toast({ title: `${member.full_name} cleared — dues settled, back to active` }); await reload(); }
+        }
+      }
     }
     setPaySaving(false);
   }
@@ -366,11 +403,81 @@ export function MembersClient({
       .order("created_at", { ascending: false });
     const all = (members ?? []) as Member[];
     setActive(all.filter((m) => m.status === "active"));
+    setFrozen(all.filter((m) => m.status === "frozen"));
+    setOnHold(all.filter((m) => m.status === "on_hold"));
+    setDefaulters(all.filter((m) => m.status === "defaulter"));
     setExpired(all.filter((m) => m.status === "expired" || m.status === "cancelled"));
-    // Invalidate server-side cache so next nav back to /members shows fresh data
-    // (and dashboard counters reflect the change).
     void revalidateMembers();
     void revalidateDashboard();
+  }
+
+  function setProcessing(id: string, on: boolean) {
+    setProcessingIds((prev) => {
+      const next = new Set(prev);
+      on ? next.add(id) : next.delete(id);
+      return next;
+    });
+  }
+
+  async function handleFreeze(m: Member) {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
+    setProcessing(m.id, true);
+    const result = await freezeMember(m.id);
+    setProcessing(m.id, false);
+    if ("error" in result) { toast({ title: "Error", description: result.error, variant: "destructive" }); return; }
+    toast({ title: `${m.full_name} frozen` });
+    await reload();
+  }
+
+  async function handleUnfreeze(m: Member) {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
+    setProcessing(m.id, true);
+    const result = await unfreezeMember(m.id);
+    setProcessing(m.id, false);
+    if ("error" in result) { toast({ title: "Error", description: result.error, variant: "destructive" }); return; }
+    const days = "daysFrozen" in result ? result.daysFrozen : 0;
+    toast({ title: `${m.full_name} unfrozen`, description: `Plan extended by ${days} day${days !== 1 ? "s" : ""}` });
+    await reload();
+  }
+
+  async function handleHold(m: Member) {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
+    setProcessing(m.id, true);
+    const result = await putMemberOnHold(m.id);
+    setProcessing(m.id, false);
+    if ("error" in result) { toast({ title: "Error", description: result.error, variant: "destructive" }); return; }
+    toast({ title: `${m.full_name} put on hold` });
+    await reload();
+  }
+
+  async function handleResume(m: Member) {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
+    setProcessing(m.id, true);
+    const result = await resumeMember(m.id);
+    setProcessing(m.id, false);
+    if ("error" in result) { toast({ title: "Error", description: result.error, variant: "destructive" }); return; }
+    toast({ title: `${m.full_name} resumed` });
+    await reload();
+  }
+
+  async function handleMarkDefaulter(m: Member) {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
+    setProcessing(m.id, true);
+    const result = await markAsDefaulter(m.id);
+    setProcessing(m.id, false);
+    if ("error" in result) { toast({ title: "Error", description: result.error, variant: "destructive" }); return; }
+    toast({ title: `${m.full_name} marked as defaulter` });
+    await reload();
+  }
+
+  async function handleClearDefaulter(m: Member) {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
+    setProcessing(m.id, true);
+    const result = await clearDefaulter(m.id);
+    setProcessing(m.id, false);
+    if ("error" in result) { toast({ title: "Error", description: result.error, variant: "destructive" }); return; }
+    toast({ title: `${m.full_name} cleared — back to active` });
+    await reload();
   }
 
   function openAdd() {
@@ -410,7 +517,7 @@ export function MembersClient({
     if (!selectedPlan && isNaN(customFee) && !bulkTrainerId) return;
     setBulkSaving(true);
     const supabase = createClient();
-    const allMembers = [...active, ...expired];
+    const allMembers = [...active, ...frozen, ...onHold, ...defaulters, ...expired];
     const memberById = Object.fromEntries(allMembers.map((m) => [m.id, m]));
 
     // When no new plan is selected, only assign trainer to members whose current plan includes PT
@@ -502,9 +609,9 @@ export function MembersClient({
 
   const planMap = useMemo(() => Object.fromEntries(plans.map((p) => [p.id, p])), [plans]);
 
-  // Counts per trainer chip (across active + expired pools).
+  // Counts per trainer chip (across all member pools).
   const trainerCounts = useMemo(() => {
-    const all = [...active, ...expired];
+    const all = [...active, ...frozen, ...onHold, ...defaulters, ...expired];
     const counts: Record<string, number> = { all: all.length, self: 0 };
     for (const t of staff) counts[t.id] = 0;
     for (const m of all) {
@@ -512,15 +619,21 @@ export function MembersClient({
       else if (counts[m.assigned_trainer_id] !== undefined) counts[m.assigned_trainer_id] += 1;
     }
     return counts;
-  }, [active, expired, staff]);
+  }, [active, frozen, onHold, expired, staff]);
 
   const stats = {
-    active: active.length,
-    expired: expired.length,
+    active:    active.length,
+    frozen:    frozen.length,
+    on_hold:   onHold.length,
+    defaulters: defaulters.length,
+    expired:   expired.length,
   };
 
-  const filteredActive = useMemo(() => filterList(active), [active, trainerFilter, search]);
-  const filteredExpired = useMemo(() => filterList(expired), [expired, trainerFilter, search]);
+  const filteredActive    = useMemo(() => filterList(active),    [active,    trainerFilter, search]);
+  const filteredFrozen    = useMemo(() => filterList(frozen),    [frozen,    trainerFilter, search]);
+  const filteredOnHold    = useMemo(() => filterList(onHold),    [onHold,    trainerFilter, search]);
+  const filteredDefaulters = useMemo(() => filterList(defaulters), [defaulters, trainerFilter, search]);
+  const filteredExpired   = useMemo(() => filterList(expired),   [expired,   trainerFilter, search]);
 
   useEffect(() => { setSelectedIds(new Set()); }, [trainerFilter, tab, search]);
 
@@ -541,13 +654,15 @@ export function MembersClient({
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-4">
         {[
-          { label: "Active",   sub: "Members",     value: stats.active,  icon: UserCheck, color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
-          { label: "Expired",  sub: "Cancelled",   value: stats.expired, icon: CalendarX, color: "text-rose-400",    bg: "bg-rose-500/10 border border-rose-500/20" },
+          { label: "Active",    sub: "Members",     value: stats.active,     icon: UserCheck,   color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
+          { label: "Frozen",    sub: "Paused",      value: stats.frozen,     icon: Snowflake,   color: "text-cyan-400",    bg: "bg-cyan-500/10 border border-cyan-500/20" },
+          { label: "On Hold",   sub: "Resume List", value: stats.on_hold,    icon: PauseCircle, color: "text-amber-400",   bg: "bg-amber-500/10 border border-amber-500/20" },
+          { label: "Defaulters", sub: "Unpaid",     value: stats.defaulters, icon: Ban,         color: "text-rose-400",    bg: "bg-rose-500/10 border border-rose-500/20" },
+          { label: "Expired",   sub: "Cancelled",   value: stats.expired,    icon: CalendarX,   color: "text-muted-foreground", bg: "bg-white/5 border border-white/10" },
         ].map(({ label, sub, value, icon: Icon, color, bg }) => (
           <div key={label} className="rounded-2xl border border-sidebar-border bg-card p-3 sm:p-5">
-            {/* Mobile: stacked / Desktop: row */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
               <div className={`flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${bg} shrink-0`}>
                 <Icon className={`w-4 h-4 ${color}`} />
@@ -614,6 +729,15 @@ export function MembersClient({
             <TabsTrigger value="active" className="whitespace-nowrap">
               <UserCheck className="w-3.5 h-3.5" /> Active ({active.length})
             </TabsTrigger>
+            <TabsTrigger value="frozen" className="whitespace-nowrap">
+              <Snowflake className="w-3.5 h-3.5" /> Frozen ({frozen.length})
+            </TabsTrigger>
+            <TabsTrigger value="on_hold" className="whitespace-nowrap">
+              <PauseCircle className="w-3.5 h-3.5" /> On Hold ({onHold.length})
+            </TabsTrigger>
+            <TabsTrigger value="defaulters" className="whitespace-nowrap">
+              <Ban className="w-3.5 h-3.5" /> Defaulters ({defaulters.length})
+            </TabsTrigger>
             <TabsTrigger value="expired" className="whitespace-nowrap">
               <CalendarX className="w-3.5 h-3.5" /> Expired ({expired.length})
             </TabsTrigger>
@@ -623,38 +747,323 @@ export function MembersClient({
           </TabsList>
         </div>
 
-        {[
-          { value: "active",  list: filteredActive,  empty: "No active members yet",            showExpired: false, emptyIcon: Users },
-          { value: "expired", list: filteredExpired, empty: "No expired or cancelled members",  showExpired: true,  emptyIcon: CalendarX },
-        ].map(({ value, list, empty, showExpired, emptyIcon: Icon }) => (
-          <TabsContent key={value} value={value}>
-            <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
-              {list.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
-                  <Icon className="w-10 h-10 opacity-20" />
-                  <p className="text-sm">{search ? "No members match your search" : empty}</p>
-                </div>
-              ) : (
-                <MemberTable list={list} showExpired={showExpired} planMap={planMap} onEdit={openEdit} onDelete={setDeleteMember} selectedIds={selectedIds} onToggle={toggleMember} onSelectAll={() => selectAll(list)} />
-              )}
+        {/* Active tab */}
+        <TabsContent value="active">
+          <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
+            {filteredActive.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
+                <Users className="w-10 h-10 opacity-20" />
+                <p className="text-sm">{search ? "No members match your search" : "No active members yet"}</p>
+              </div>
+            ) : (
+              <MemberTable
+                list={filteredActive} showExpired={false} planMap={planMap}
+                onEdit={openEdit} onDelete={setDeleteMember}
+                selectedIds={selectedIds} onToggle={toggleMember} onSelectAll={() => selectAll(filteredActive)}
+                extraActions={(m) => (
+                  <>
+                    <Button variant="ghost" size="icon" title="History" className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                      onClick={() => setTimelineMember(m)}>
+                      <Clock className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" title="Freeze" className="h-7 w-7 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10"
+                      disabled={processingIds.has(m.id)} onClick={() => handleFreeze(m)}>
+                      <Snowflake className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" title="Put on hold" className="h-7 w-7 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                      disabled={processingIds.has(m.id)} onClick={() => handleHold(m)}>
+                      <PauseCircle className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" title="Mark as defaulter" className="h-7 w-7 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
+                      disabled={processingIds.has(m.id)} onClick={() => handleMarkDefaulter(m)}>
+                      <Ban className="w-3.5 h-3.5" />
+                    </Button>
+                  </>
+                )}
+              />
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Frozen tab */}
+        <TabsContent value="frozen">
+          <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
+            {filteredFrozen.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
+                <Snowflake className="w-10 h-10 opacity-20" />
+                <p className="text-sm">{search ? "No members match your search" : "No frozen members"}</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-sidebar-border">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Member</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Plan</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Frozen Since</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Days Frozen</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Expiry (extended)</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-sidebar-border/50">
+                    {filteredFrozen.map((m) => {
+                      const planData = (m as Member & { plan?: { name: string; color: string } | null }).plan;
+                      const planColor = planData?.color ?? "#6B7A99";
+                      const daysFrozen = m.freeze_start_date
+                        ? Math.max(0, Math.floor((Date.now() - new Date(m.freeze_start_date).getTime()) / 86400000))
+                        : null;
+                      return (
+                        <tr key={m.id} className="hover:bg-white/[0.02] transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                                style={{ backgroundColor: `${planColor}22`, color: planColor }}>
+                                {m.full_name[0].toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="font-medium text-foreground">{m.full_name}</p>
+                                {m.member_number && <p className="text-xs text-muted-foreground font-mono">{m.member_number}</p>}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 hidden sm:table-cell">
+                            <span className="text-sm text-muted-foreground">{planData?.name ?? "—"}</span>
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell">
+                            <span className="text-sm text-muted-foreground">{m.freeze_start_date ? formatDate(m.freeze_start_date) : "—"}</span>
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell">
+                            <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                              <Snowflake className="w-3 h-3" />
+                              {daysFrozen !== null ? `${daysFrozen}d` : "—"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 hidden lg:table-cell">
+                            <span className="text-sm text-muted-foreground">{m.plan_expiry_date ? formatDate(m.plan_expiry_date) : "—"}</span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button variant="ghost" size="icon" title="History" className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                onClick={() => setTimelineMember(m)}>
+                                <Clock className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button size="sm" variant="ghost"
+                                className="h-7 text-xs gap-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20"
+                                disabled={processingIds.has(m.id)}
+                                onClick={() => handleUnfreeze(m)}>
+                                <PlayCircle className="w-3 h-3" /> Unfreeze
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* On Hold tab */}
+        <TabsContent value="on_hold">
+          <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
+            {filteredOnHold.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
+                <PauseCircle className="w-10 h-10 opacity-20" />
+                <p className="text-sm">{search ? "No members match your search" : "No members on hold — resume list is empty"}</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-sidebar-border">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Member</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Plan</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Phone</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">On Hold Since</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fee / Month</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-sidebar-border/50">
+                    {filteredOnHold.map((m) => {
+                      const planData = (m as Member & { plan?: { name: string; color: string } | null }).plan;
+                      const planColor = planData?.color ?? "#6B7A99";
+                      return (
+                        <tr key={m.id} className="hover:bg-white/[0.02] transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                                style={{ backgroundColor: `${planColor}22`, color: planColor }}>
+                                {m.full_name[0].toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="font-medium text-foreground">{m.full_name}</p>
+                                {m.member_number && <p className="text-xs text-muted-foreground font-mono">{m.member_number}</p>}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 hidden sm:table-cell">
+                            <span className="text-sm text-muted-foreground">{planData?.name ?? "—"}</span>
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell">
+                            <span className="text-sm text-muted-foreground">{m.phone ?? "—"}</span>
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell">
+                            <span className="text-sm text-muted-foreground">{m.hold_since ? formatDate(m.hold_since) : "—"}</span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <p className="font-semibold text-foreground whitespace-nowrap">{formatCurrency(m.monthly_fee)}<span className="text-muted-foreground">/mo</span></p>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button variant="ghost" size="icon" title="History" className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                onClick={() => setTimelineMember(m)}>
+                                <Clock className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button size="sm" variant="ghost"
+                                className="h-7 text-xs gap-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20"
+                                disabled={processingIds.has(m.id)}
+                                onClick={() => handleResume(m)}>
+                                <PlayCircle className="w-3 h-3" /> Resume
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Defaulters tab */}
+        <TabsContent value="defaulters">
+          <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
+            {/* threshold info banner */}
+            <div className="px-4 py-2.5 border-b border-sidebar-border bg-rose-500/5 flex items-center gap-2 text-xs text-muted-foreground">
+              <Ban className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+              Auto-flagged after <span className="font-semibold text-foreground mx-1">{defaulterThreshold}</span> consecutive unpaid months.
+              Change threshold in <span className="text-primary ml-1">Settings → Member Defaults</span>.
             </div>
-          </TabsContent>
-        ))}
+            {filteredDefaulters.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
+                <Ban className="w-10 h-10 opacity-20" />
+                <p className="text-sm">{search ? "No members match your search" : "No defaulters — all members are paying on time"}</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-sidebar-border">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Member</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Plan</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Phone</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Defaulter Since</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fee / Month</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-sidebar-border/50">
+                    {filteredDefaulters.map((m) => {
+                      const planData = (m as Member & { plan?: { name: string; color: string } | null }).plan;
+                      const planColor = planData?.color ?? "#6B7A99";
+                      const daysSince = m.defaulter_since
+                        ? Math.max(0, Math.floor((Date.now() - new Date(m.defaulter_since).getTime()) / 86400000))
+                        : null;
+                      return (
+                        <tr key={m.id} className="hover:bg-white/[0.02] transition-colors bg-rose-500/[0.02]">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                                style={{ backgroundColor: `${planColor}22`, color: planColor }}>
+                                {m.full_name[0].toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="font-medium text-foreground">{m.full_name}</p>
+                                {m.member_number && <p className="text-xs text-muted-foreground font-mono">{m.member_number}</p>}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 hidden sm:table-cell">
+                            <span className="text-sm text-muted-foreground">{planData?.name ?? "—"}</span>
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell">
+                            <span className="text-sm text-muted-foreground">{m.phone ?? "—"}</span>
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell">
+                            <div>
+                              <span className="text-sm text-muted-foreground">{m.defaulter_since ? formatDate(m.defaulter_since) : "—"}</span>
+                              {daysSince !== null && <p className="text-[10px] text-rose-400 mt-0.5">{daysSince}d overdue</p>}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <p className="font-semibold text-foreground whitespace-nowrap">{formatCurrency(m.monthly_fee)}<span className="text-muted-foreground">/mo</span></p>
+                            {m.outstanding_balance > 0 && <p className="text-[10px] text-rose-400">Due: {formatCurrency(m.outstanding_balance)}</p>}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button variant="ghost" size="icon" title="History" className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                onClick={() => setTimelineMember(m)}>
+                                <Clock className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button size="sm" variant="ghost"
+                                className="h-7 text-xs gap-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20"
+                                disabled={processingIds.has(m.id)}
+                                onClick={() => handleClearDefaulter(m)}>
+                                <UserCheck className="w-3 h-3" /> Clear
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Expired tab */}
+        <TabsContent value="expired">
+          <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
+            {filteredExpired.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
+                <CalendarX className="w-10 h-10 opacity-20" />
+                <p className="text-sm">{search ? "No members match your search" : "No expired or cancelled members"}</p>
+              </div>
+            ) : (
+              <MemberTable list={filteredExpired} showExpired={true} planMap={planMap} onEdit={openEdit} onDelete={setDeleteMember}
+                selectedIds={selectedIds} onToggle={toggleMember} onSelectAll={() => selectAll(filteredExpired)}
+                extraActions={(m) => (
+                  <Button variant="ghost" size="icon" title="History" className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    onClick={() => setTimelineMember(m)}>
+                    <Clock className="w-3.5 h-3.5" />
+                  </Button>
+                )} />
+            )}
+          </div>
+        </TabsContent>
 
         {/* ── Collect Fees Tab ──────────────────────────────────────────────── */}
-        <TabsContent value="collect" className="space-y-4 mt-0">
+        <TabsContent value="collect" className="space-y-4 mt-4">
           {/* Month navigator */}
-          <div className="flex items-center gap-3">
+          <div className="inline-flex items-center rounded-lg border border-sidebar-border bg-card overflow-hidden">
             <button onClick={() => setSelectedMonth((m) => offsetMonth(m, -1))}
-              className="p-1.5 rounded-lg border border-sidebar-border text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors">
+              className="px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors border-r border-sidebar-border">
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="text-sm font-semibold text-foreground min-w-[140px] text-center">
+            <span className="text-sm font-semibold text-foreground w-[148px] text-center px-4 py-2">
               {monthLabel(selectedMonth)}
             </span>
             <button onClick={() => setSelectedMonth((m) => offsetMonth(m, 1))}
               disabled={selectedMonth >= CURRENT_MONTH}
-              className="p-1.5 rounded-lg border border-sidebar-border text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors disabled:opacity-30 disabled:pointer-events-none">
+              className="px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors border-l border-sidebar-border disabled:opacity-30 disabled:pointer-events-none">
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -686,7 +1095,7 @@ export function MembersClient({
 
           {/* Member payment table */}
           <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
-            {active.length === 0 ? (
+            {active.length === 0 && onHold.length === 0 && defaulters.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
                 <Users className="w-10 h-10 opacity-20" />
                 <p className="text-sm">No active members</p>
@@ -924,7 +1333,7 @@ export function MembersClient({
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         editing={editing}
-        existingMembers={[...active, ...expired]}
+        existingMembers={[...active, ...frozen, ...onHold, ...defaulters, ...expired]}
         plans={plans}
         staff={staff}
         shifts={shifts}
@@ -932,6 +1341,12 @@ export function MembersClient({
         gymId={gymId}
         onSaved={reload}
         onOpenExisting={(m) => { setEditing(m); /* keeps dialog open, switches to edit */ }}
+      />
+
+      <MemberTimelineDialog
+        member={timelineMember}
+        gymId={gymId}
+        onClose={() => setTimelineMember(null)}
       />
     </div>
   );
@@ -1489,6 +1904,7 @@ function MemberFormDialog({
                     <SelectContent>
                       <SelectItem value="active">Active</SelectItem>
                       <SelectItem value="frozen">Frozen</SelectItem>
+                      <SelectItem value="on_hold">On Hold</SelectItem>
                       <SelectItem value="expired">Expired</SelectItem>
                       <SelectItem value="cancelled">Cancelled</SelectItem>
                     </SelectContent>
@@ -1619,5 +2035,142 @@ function MemberFormDialog({
       </DialogContent>
     </Dialog>
     </>
+  );
+}
+
+// ─── Member Timeline Dialog ──────────────────────────────────────────────────
+
+type AuditRow = { id: string; action: string; created_at: string; meta: Record<string, unknown> | null };
+type PaymentRow = { id: string; total_amount: number; payment_method: string; for_period: string; status: string; receipt_number: string | null; payment_date: string | null; created_at: string };
+
+type TimelineEvent = {
+  id: string;
+  date: string;
+  type: "joined" | "payment" | "freeze" | "unfreeze" | "hold" | "resume" | "defaulter" | "defaulter_cleared" | "status";
+  title: string;
+  description: string;
+};
+
+const TIMELINE_ICONS: Record<TimelineEvent["type"], { icon: React.ElementType; color: string; bg: string }> = {
+  joined:            { icon: UserCheck,   color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/30" },
+  payment:           { icon: CreditCard,  color: "text-primary",     bg: "bg-primary/10 border-primary/30" },
+  freeze:            { icon: Snowflake,   color: "text-cyan-400",    bg: "bg-cyan-500/10 border-cyan-500/30" },
+  unfreeze:          { icon: PlayCircle,  color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/30" },
+  hold:              { icon: PauseCircle, color: "text-amber-400",   bg: "bg-amber-500/10 border-amber-500/30" },
+  resume:            { icon: PlayCircle,  color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/30" },
+  defaulter:         { icon: Ban,         color: "text-rose-400",    bg: "bg-rose-500/10 border-rose-500/30" },
+  defaulter_cleared: { icon: UserCheck,   color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/30" },
+  status:            { icon: AlertCircle, color: "text-muted-foreground", bg: "bg-white/5 border-white/10" },
+};
+
+function buildTimeline(member: Member, audits: AuditRow[], payments: PaymentRow[]): TimelineEvent[] {
+  const events: TimelineEvent[] = [];
+
+  events.push({
+    id: "joined",
+    date: member.join_date,
+    type: "joined",
+    title: "Joined",
+    description: `Member registered${member.member_number ? ` · #${member.member_number}` : ""}`,
+  });
+
+  for (const a of audits) {
+    const meta = a.meta ?? {};
+    if (a.action === "member.freeze") {
+      events.push({ id: a.id, date: a.created_at, type: "freeze", title: "Plan Frozen", description: `Freeze started${meta.freeze_start_date ? ` · ${formatDate(meta.freeze_start_date as string)}` : ""}` });
+    } else if (a.action === "member.unfreeze") {
+      const days = meta.days_frozen as number | undefined;
+      const expiry = meta.new_expiry as string | undefined;
+      events.push({ id: a.id, date: a.created_at, type: "unfreeze", title: "Unfrozen", description: `${days != null ? `+${days} day${days !== 1 ? "s" : ""} added to plan` : "Plan resumed"}${expiry ? ` · New expiry ${formatDate(expiry)}` : ""}` });
+    } else if (a.action === "member.hold") {
+      events.push({ id: a.id, date: a.created_at, type: "hold", title: "Put on Hold", description: `Moved to resume list${meta.hold_since ? ` · ${formatDate(meta.hold_since as string)}` : ""}` });
+    } else if (a.action === "member.resume") {
+      events.push({ id: a.id, date: a.created_at, type: "resume", title: "Resumed", description: `Returned to active${meta.was_on_hold_since ? ` · was on hold since ${formatDate(meta.was_on_hold_since as string)}` : ""}` });
+    } else if (a.action === "member.defaulter") {
+      events.push({ id: a.id, date: a.created_at, type: "defaulter", title: "Marked as Defaulter", description: `Flagged for non-payment${meta.defaulter_since ? ` · ${formatDate(meta.defaulter_since as string)}` : ""}` });
+    } else if (a.action === "member.defaulter_cleared" || a.action === "member.defaulter_auto_cleared") {
+      events.push({ id: a.id, date: a.created_at, type: "defaulter_cleared", title: "Defaulter Cleared", description: a.action === "member.defaulter_auto_cleared" ? "Auto-cleared — dues settled" : "Manually cleared by owner" });
+    }
+  }
+
+  for (const p of payments) {
+    const label = p.for_period === "admission" ? "Admission Fee" : (() => {
+      const [y, m] = p.for_period.split("-");
+      return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    })();
+    events.push({
+      id: p.id,
+      date: p.payment_date ?? p.created_at,
+      type: "payment",
+      title: `Payment · ${label}`,
+      description: `${formatCurrency(p.total_amount)} · ${p.payment_method.replace("_", " ")}${p.receipt_number ? ` · #${p.receipt_number}` : ""}`,
+    });
+  }
+
+  return events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
+
+function MemberTimelineDialog({ member, gymId, onClose }: { member: Member | null; gymId: string | null; onClose: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [events, setEvents] = useState<TimelineEvent[]>([]);
+
+  useEffect(() => {
+    if (!member || !gymId) return;
+    setEvents([]);
+    setLoading(true);
+    const supabase = createClient();
+    Promise.all([
+      supabase.from("pulse_audit_log").select("id,action,created_at,meta").eq("entity", "member").eq("entity_id", member.id).order("created_at", { ascending: false }),
+      supabase.from("pulse_payments").select("id,total_amount,payment_method,for_period,status,receipt_number,payment_date,created_at").eq("member_id", member.id).eq("status", "paid").order("payment_date", { ascending: false }),
+    ]).then(([auditRes, payRes]) => {
+      setEvents(buildTimeline(member, (auditRes.data ?? []) as AuditRow[], (payRes.data ?? []) as PaymentRow[]));
+      setLoading(false);
+    });
+  }, [member?.id, gymId]);
+
+  return (
+    <Dialog open={!!member} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-muted-foreground" />
+            {member?.full_name} — History
+          </DialogTitle>
+          {member?.member_number && <p className="text-xs text-muted-foreground font-mono mt-0.5">#{member.member_number}</p>}
+        </DialogHeader>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">Loading timeline…</div>
+        ) : events.length === 0 ? (
+          <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">No history found</div>
+        ) : (
+          <div className="relative mt-2 pb-2">
+            {/* Vertical connector line */}
+            <div className="absolute left-[19px] top-2 bottom-2 w-px bg-sidebar-border" />
+            <div className="space-y-0">
+              {events.map((ev, i) => {
+                const cfg = TIMELINE_ICONS[ev.type];
+                return (
+                  <div key={ev.id} className={`relative flex gap-4 ${i < events.length - 1 ? "pb-5" : ""}`}>
+                    {/* Icon dot */}
+                    <div className={`relative z-10 flex items-center justify-center w-10 h-10 rounded-full border shrink-0 ${cfg.bg}`}>
+                      <cfg.icon className={`w-4 h-4 ${cfg.color}`} />
+                    </div>
+                    {/* Content */}
+                    <div className="flex-1 min-w-0 pt-1.5">
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <p className="text-sm font-semibold text-foreground">{ev.title}</p>
+                        <p className="text-xs text-muted-foreground">{formatDate(ev.date)}</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">{ev.description}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

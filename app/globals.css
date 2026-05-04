@@ -126,6 +126,8 @@
   .status-active   { @apply bg-[hsl(151_100%_41%/0.12)] text-[hsl(151_100%_45%)] border border-[hsl(151_100%_41%/0.2)]; }
   .status-expired  { @apply bg-[hsl(0_72%_55%/0.12)] text-[hsl(0_72%_65%)] border border-[hsl(0_72%_55%/0.2)]; }
   .status-frozen   { @apply bg-[hsl(191_100%_50%/0.12)] text-[hsl(191_100%_55%)] border border-[hsl(191_100%_50%/0.2)]; }
+  .status-on-hold  { @apply bg-[hsl(38_92%_55%/0.12)] text-[hsl(38_92%_65%)] border border-[hsl(38_92%_55%/0.2)]; }
+  .status-defaulter { @apply bg-[hsl(0_72%_55%/0.12)] text-[hsl(0_72%_65%)] border border-[hsl(0_72%_55%/0.2)]; }
   .status-warning  { @apply bg-[hsl(38_92%_55%/0.12)] text-[hsl(38_92%_65%)] border border-[hsl(38_92%_55%/0.2)]; }
 }
 

@@ -310,7 +310,7 @@ export async function getDashboardData() {
 
 async function _fetchMembers(gymId: string) {
   const supabase = createAdminClient();
-  const [{ data: members }, { data: plans }, { data: staff }, { data: referrers }] = await Promise.all([
+  const [{ data: members }, { data: plans }, { data: staff }, { data: referrers }, { data: gymData }] = await Promise.all([
     supabase.from("pulse_members")
       .select("*, plan:pulse_membership_plans(name,duration_type,price,color), trainer:pulse_staff(full_name)")
       .eq("gym_id", gymId)
@@ -318,21 +318,42 @@ async function _fetchMembers(gymId: string) {
     supabase.from("pulse_membership_plans").select("*").eq("gym_id", gymId).eq("is_active", true).order("name"),
     supabase.from("pulse_staff").select("id,full_name,role").eq("gym_id", gymId).eq("status", "active").eq("role", "trainer"),
     supabase.from("pulse_referrers").select("id,full_name,commission_type,commission_value").eq("gym_id", gymId).eq("status", "active").order("full_name"),
+    supabase.from("pulse_gyms").select("compliance_settings").eq("id", gymId).single(),
   ]);
 
-  const all = (members ?? []) as Member[];
+  const threshold = Math.max(1, Math.min(6, (gymData?.compliance_settings as Record<string, unknown> | null)?.defaulter_threshold_months as number ?? 2));
+
+  // Auto-expire members whose plan_expiry_date has passed
+  const { error: expireErr } = await supabase.rpc("auto_expire_members", { p_gym_id: gymId });
+  if (expireErr) console.error("[auto_expire_members]", expireErr.message);
+
+  // Auto-mark defaulters based on threshold
+  const { error: defaulterErr } = await supabase.rpc("check_defaulters", { p_gym_id: gymId, p_threshold: threshold });
+  if (defaulterErr) console.error("[check_defaulters]", defaulterErr.message);
+
+  // Re-fetch after auto-mark so the buckets are accurate
+  const { data: freshMembers } = await supabase.from("pulse_members")
+    .select("*, plan:pulse_membership_plans(name,duration_type,price,color), trainer:pulse_staff(full_name)")
+    .eq("gym_id", gymId)
+    .order("created_at", { ascending: false });
+
+  const all = (freshMembers ?? members ?? []) as Member[];
   return {
-    active: all.filter((m) => m.status === "active"),
-    expired: all.filter((m) => m.status === "expired" || m.status === "cancelled"),
-    plans: (plans ?? []) as MembershipPlan[],
-    staff: (staff ?? []) as Pick<Staff, "id" | "full_name" | "role">[],
+    active:    all.filter((m) => m.status === "active"),
+    frozen:    all.filter((m) => m.status === "frozen"),
+    on_hold:   all.filter((m) => m.status === "on_hold"),
+    defaulters: all.filter((m) => m.status === "defaulter"),
+    expired:   all.filter((m) => m.status === "expired" || m.status === "cancelled"),
+    defaulterThreshold: threshold,
+    plans:     (plans ?? []) as MembershipPlan[],
+    staff:     (staff ?? []) as Pick<Staff, "id" | "full_name" | "role">[],
     referrers: (referrers ?? []) as Pick<Referrer, "id" | "full_name" | "commission_type" | "commission_value">[],
   };
 }
 
 export async function getMembers() {
   const ctx = await getAuthContext();
-  if (!ctx?.gymId) return { gymId: null, active: [], expired: [], plans: [], staff: [], referrers: [] };
+  if (!ctx?.gymId) return { gymId: null, active: [], frozen: [], on_hold: [], defaulters: [], expired: [], defaulterThreshold: 2, plans: [], staff: [], referrers: [] };
   const gymId = ctx.gymId;
   const data = await _fetchMembers(gymId);
   return { gymId, ...data };
