@@ -23,6 +23,7 @@ import {
   createSocialManagerLogin, removeSocialManagerLogin,
   approveSocialLead, rejectSocialLead, markSocialLeadPaid,
 } from "@/app/actions/social";
+import { resetStaffPassword } from "@/app/actions/account";
 import type { SocialManager, SocialLead, SocialCommissionType, SocialLeadStatus } from "@/types";
 
 interface Props {
@@ -66,6 +67,10 @@ export function SocialMediaClient({ gymId, gymName, managers: initial, leads: in
   const [loginSaving, setLoginSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SocialManager | null>(null);
   const [removeLoginTarget, setRemoveLoginTarget] = useState<SocialManager | null>(null);
+  const [resetLoginTarget, setResetLoginTarget] = useState<SocialManager | null>(null);
+  const [resetSmPw, setResetSmPw] = useState("");
+  const [resetSmSaving, setResetSmSaving] = useState(false);
+  const [resetSmDone, setResetSmDone] = useState(false);
   const [evidenceDialog, setEvidenceDialog] = useState<SocialLead | null>(null);
   const [rejectDialog, setRejectDialog] = useState<SocialLead | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -73,6 +78,15 @@ export function SocialMediaClient({ gymId, gymName, managers: initial, leads: in
 
   useEffect(() => { setManagers(initial); }, [initial]);
   useEffect(() => { setLeads(initialLeads); }, [initialLeads]);
+
+  async function handleResetSmPassword() {
+    if (!resetLoginTarget?.user_id || !resetSmPw) return;
+    setResetSmSaving(true);
+    const res = await resetStaffPassword(resetLoginTarget.user_id, resetSmPw);
+    if (res.error) toast({ title: "Error", description: res.error, variant: "destructive" });
+    else setResetSmDone(true);
+    setResetSmSaving(false);
+  }
 
   function openNew() { setEditing(null); setForm(emptyForm); setDialogOpen(true); }
   function openEdit(m: SocialManager) {
@@ -370,9 +384,14 @@ export function SocialMediaClient({ gymId, gymName, managers: initial, leads: in
                             <KeyRound className="w-3 h-3" /> Create Login
                           </Button>
                         ) : (
-                          <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs border-red-500/30 text-red-400 hover:bg-red-500/10 gap-1" onClick={() => setRemoveLoginTarget(m)}>
-                            <UserX className="w-3 h-3" /> Remove Login
-                          </Button>
+                          <>
+                            <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs border-primary/30 text-primary hover:bg-primary/10 gap-1" onClick={() => { setResetLoginTarget(m); setResetSmPw(""); setResetSmDone(false); }}>
+                              <KeyRound className="w-3 h-3" /> Reset PW
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs border-red-500/30 text-red-400 hover:bg-red-500/10 gap-1" onClick={() => setRemoveLoginTarget(m)}>
+                              <UserX className="w-3 h-3" /> Remove Login
+                            </Button>
+                          </>
                         )}
                         <Button size="sm" variant="outline" className="h-7 px-2 border-sidebar-border" onClick={() => openEdit(m)}><Edit2 className="w-3.5 h-3.5" /></Button>
                         <Button size="sm" variant="outline" className="h-7 px-2 border-red-500/30 text-red-400 hover:bg-red-500/10" onClick={() => setDeleteTarget(m)}><Trash2 className="w-3.5 h-3.5" /></Button>
@@ -530,6 +549,43 @@ export function SocialMediaClient({ gymId, gymName, managers: initial, leads: in
         onConfirm={handleRemoveLogin}
         onCancel={() => setRemoveLoginTarget(null)}
       />
+
+      {/* ── Reset Social Manager Password Dialog ─────────── */}
+      <Dialog open={!!resetLoginTarget} onOpenChange={(o) => { if (!o) { setResetLoginTarget(null); setResetSmPw(""); setResetSmDone(false); } }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{resetSmDone ? "Password Reset" : `Reset Password — ${resetLoginTarget?.full_name}`}</DialogTitle>
+          </DialogHeader>
+          {resetSmDone ? (
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2.5 text-xs text-emerald-400">
+                Password reset for {resetLoginTarget?.full_name}.
+              </div>
+              <div className="rounded-lg border border-input bg-muted/30 px-3 py-2.5 space-y-1 text-sm">
+                {resetLoginTarget?.email && <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span className="font-mono font-medium">{resetLoginTarget.email}</span></div>}
+                <div className="flex justify-between"><span className="text-muted-foreground">New Password</span><span className="font-mono font-medium">{resetSmPw}</span></div>
+              </div>
+              <DialogFooter><Button className="w-full" onClick={() => { setResetLoginTarget(null); setResetSmDone(false); }}>Done</Button></DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label>New Password *</Label>
+                  <button type="button" onClick={() => { const c = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$!"; setResetSmPw(Array.from({ length: 10 }, () => c[Math.floor(Math.random() * c.length)]).join("")); }} className="text-xs text-primary hover:underline">Auto-generate</button>
+                </div>
+                <Input type="text" placeholder="Min 8 characters" value={resetSmPw} onChange={(e) => setResetSmPw(e.target.value)} className="font-mono" />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setResetLoginTarget(null)}>Cancel</Button>
+                <Button onClick={handleResetSmPassword} disabled={resetSmSaving || resetSmPw.length < 8}>
+                  {resetSmSaving ? "Resetting…" : "Reset Password"}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

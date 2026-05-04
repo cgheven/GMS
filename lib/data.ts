@@ -1215,7 +1215,7 @@ export async function getComplianceSettingsForGym(gymId: string) {
 
   return {
     hasLogin: cu !== null,
-    complianceUser: cu ? { full_name: cu.full_name, email: complianceEmail } : null,
+    complianceUser: cu ? { full_name: cu.full_name, email: complianceEmail, userId: cu.user_id } : null,
     pctSelf: settings?.pct_self ?? 50,
     pctPt: settings?.pct_pt ?? 50,
     totalSelf,

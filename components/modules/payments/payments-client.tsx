@@ -697,9 +697,9 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
 
       {/* Add Entry Dialog */}
       <Dialog open={addDialog} onOpenChange={(o) => !o && setAddDialog(false)}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
           <DialogHeader><DialogTitle>Record Payment</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 overflow-y-auto flex-1 pr-1">
             <div className="space-y-1.5">
               <Label>Member *</Label>
               <MemberPicker members={members} value={addForm.member_id}

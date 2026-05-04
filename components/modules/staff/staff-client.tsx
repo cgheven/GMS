@@ -6,6 +6,7 @@ import {
   KeyRound, UserX, ArrowRightLeft,
 } from "lucide-react";
 import { createTrainerLogin, removeTrainerLogin, transferTrainerClients, deleteStaffMember } from "@/app/actions/trainer";
+import { resetStaffPassword } from "@/app/actions/account";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -199,6 +200,28 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
   const [loginCreated, setLoginCreated] = useState<{ email: string; password: string; phone: string } | null>(null);
   const [removeTarget, setRemoveTarget] = useState<Staff | null>(null);
   const [transferTarget, setTransferTarget] = useState<Staff | null>(null);
+
+  // ── Reset staff password ──────────────────────────────────
+  const [resetTarget, setResetTarget] = useState<Staff | null>(null);
+  const [resetPw, setResetPw] = useState("");
+  const [resetPwSaving, setResetPwSaving] = useState(false);
+  const [resetPwDone, setResetPwDone] = useState<{ email: string; password: string; phone: string } | null>(null);
+
+  async function handleResetPassword() {
+    if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
+    if (!resetTarget?.user_id || !resetPw) return;
+    setResetPwSaving(true);
+    const res = await resetStaffPassword(resetTarget.user_id, resetPw);
+    if (res.error) toast({ title: "Error", description: res.error, variant: "destructive" });
+    else setResetPwDone({ email: resetTarget.email ?? "", password: resetPw, phone: resetTarget.phone ?? "" });
+    setResetPwSaving(false);
+  }
+
+  function closeResetDialog() {
+    setResetTarget(null);
+    setResetPw("");
+    setResetPwDone(null);
+  }
 
   async function handleCreateLogin() {
     if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
@@ -598,34 +621,40 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
                           </Button>
                         )}
                         {isTrainer && (
-                          member.user_id ? (
-                            <Button
-                              variant="ghost" size="sm"
-                              className="h-8 text-xs gap-1 text-rose-400 hover:text-rose-400 hover:bg-rose-500/10"
-                              onClick={() => setRemoveTarget(member)}
-                              title="Remove login"
-                            >
-                              <UserX className="w-3.5 h-3.5" />
-                              <span className="hidden sm:inline">Login</span>
-                            </Button>
-                          ) : (
+                          <>
+                            {/* Single adaptive button: "Add Login" when no account, "Reset PW" when one exists.
+                                Keeps column width identical across rows. */}
                             <Button
                               variant="ghost" size="sm"
                               className="h-8 text-xs gap-1 text-primary hover:text-primary hover:bg-primary/10"
                               onClick={() => {
-  const existingEmails = staff.map((s) => s.email ?? "").filter(Boolean);
-  const username = member.email
-    ? member.email.replace("@musabkhan.me", "")
-    : buildUsername(member.full_name, gymName, existingEmails);
-  setLoginDialog(member);
-  setLoginForm({ username, password: "", phone: member.phone ?? "" });
-}}
-                              title="Create login"
+                                if (member.user_id) {
+                                  setResetTarget(member); setResetPw(""); setResetPwDone(null);
+                                } else {
+                                  const existingEmails = staff.map((s) => s.email ?? "").filter(Boolean);
+                                  const username = member.email
+                                    ? member.email.replace("@musabkhan.me", "")
+                                    : buildUsername(member.full_name, gymName, existingEmails);
+                                  setLoginDialog(member);
+                                  setLoginForm({ username, password: "", phone: member.phone ?? "" });
+                                }
+                              }}
+                              title={member.user_id ? "Reset password" : "Create login"}
                             >
                               <KeyRound className="w-3.5 h-3.5" />
-                              <span className="hidden sm:inline">Login</span>
+                              <span className="hidden sm:inline">{member.user_id ? "Reset PW" : "Add Login"}</span>
                             </Button>
-                          )
+                            {/* Revoke: invisible (not hidden) when no login so it still occupies space → salary column stays aligned */}
+                            <Button
+                              variant="ghost" size="sm"
+                              className={`h-8 text-xs gap-1 text-rose-400 hover:text-rose-400 hover:bg-rose-500/10 ${!member.user_id ? "invisible pointer-events-none" : ""}`}
+                              onClick={() => setRemoveTarget(member)}
+                              title="Revoke login access"
+                            >
+                              <UserX className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Revoke</span>
+                            </Button>
+                          </>
                         )}
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(member)}><Edit2 className="w-3.5 h-3.5" /></Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteId(member.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
@@ -1023,6 +1052,71 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
               {paying ? "Saving…" : "Confirm Payment"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Reset Staff Password Dialog ───────────────────── */}
+      <Dialog open={!!resetTarget} onOpenChange={(o) => !o && closeResetDialog()}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{resetPwDone ? "Password Reset" : `Reset Password — ${resetTarget?.full_name}`}</DialogTitle>
+          </DialogHeader>
+          {resetPwDone ? (
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2.5 text-xs text-emerald-400">
+                Password reset successfully. Share new credentials with {resetTarget?.full_name}.
+              </div>
+              <div className="rounded-lg border border-input bg-muted/30 px-3 py-2.5 space-y-1 text-sm">
+                {resetPwDone.email && <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span className="font-mono font-medium">{resetPwDone.email}</span></div>}
+                <div className="flex justify-between"><span className="text-muted-foreground">New Password</span><span className="font-mono font-medium">{resetPwDone.password}</span></div>
+              </div>
+              {resetPwDone.phone && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const digits = resetPwDone.phone.replace(/\D/g, "");
+                    const intl = digits.startsWith("0") ? "92" + digits.slice(1) : digits;
+                    const msg = `Hi ${resetTarget?.full_name}! 👋\n\nYour *Pulse GMS* password has been reset:\n\n🔗 Login: ${window.location.origin}/login\n📧 Email: ${resetPwDone.email}\n🔑 New Password: ${resetPwDone.password}\n\nPlease save this safely.`;
+                    window.open(`https://wa.me/${intl}?text=${encodeURIComponent(msg)}`, "_blank");
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-[#25D366]/30 bg-[#25D366]/10 text-[#25D366] text-sm font-medium hover:bg-[#25D366]/20 transition-colors"
+                >
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                  Send via WhatsApp
+                </button>
+              )}
+              <DialogFooter><Button className="w-full" onClick={closeResetDialog}>Done</Button></DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label>New Password *</Label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$!";
+                      setResetPw(Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join(""));
+                    }}
+                    className="text-xs text-primary hover:underline"
+                  >Auto-generate</button>
+                </div>
+                <Input
+                  type="text"
+                  placeholder="Min 8 characters"
+                  value={resetPw}
+                  onChange={(e) => setResetPw(e.target.value)}
+                  className="font-mono"
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={closeResetDialog}>Cancel</Button>
+                <Button onClick={handleResetPassword} disabled={resetPwSaving || resetPw.length < 8}>
+                  {resetPwSaving ? "Resetting…" : "Reset Password"}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

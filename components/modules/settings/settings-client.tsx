@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Building2, User, Save, Loader2, Globe, ExternalLink, Target, Phone, Shield, Trash2, Eye, EyeOff, Ban } from "lucide-react";
+import { Building2, User, Save, Loader2, Globe, ExternalLink, Target, Shield, Trash2, Eye, EyeOff, Ban, KeyRound, X } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/lib/supabase/client";
 import { useGymContext } from "@/contexts/gym-context";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -11,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { PaymentRecoverySection } from "./payment-recovery-section";
 import { createComplianceLogin, removeComplianceLogin, updateComplianceSettings, getComplianceSettingsAction } from "@/app/actions/compliance";
+import { changePassword as changePasswordAction, resetStaffPassword } from "@/app/actions/account";
 import type { GymType } from "@/types";
 
 const GYM_TYPES: { value: GymType; label: string }[] = [
@@ -57,10 +59,21 @@ export function SettingsClient() {
   const [defaulterThreshold, setDefaulterThreshold] = useState(2);
   const [savingDefaulter, setSavingDefaulter] = useState(false);
 
+  // ── Change password ────────────────────────────────────────────────────────
+  const [pwForm, setPwForm] = useState({ current: "", next: "", confirm: "" });
+  const [savingPw, setSavingPw] = useState(false);
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+
   // ── Compliance ─────────────────────────────────────────────────────────────
   const [complianceLoaded, setComplianceLoaded] = useState(false);
   const [hasComplianceLogin, setHasComplianceLogin] = useState(false);
   const [complianceUserName, setComplianceUserName] = useState<string | null>(null);
+  const [complianceUserId, setComplianceUserId] = useState<string | null>(null);
+  const [resetComplianceOpen, setResetComplianceOpen] = useState(false);
+  const [resetCompliancePw, setResetCompliancePw] = useState("");
+  const [resetComplianceSaving, setResetComplianceSaving] = useState(false);
+  const [resetComplianceDone, setResetComplianceDone] = useState(false);
   const [complianceForm, setComplianceForm] = useState({ full_name: "", email: "", password: "", pct_self: "50", pct_pt: "50" });
   const [complianceTotals, setComplianceTotals] = useState({ totalSelf: 0, totalPt: 0 });
   const [complianceEmail, setComplianceEmail] = useState<string | null>(null);
@@ -74,12 +87,23 @@ export function SettingsClient() {
       if (!res) return;
       setHasComplianceLogin(res.hasLogin);
       setComplianceUserName(res.complianceUser?.full_name ?? null);
+      setComplianceUserId(res.complianceUser?.userId ?? null);
       setComplianceEmail(res.complianceUser?.email ?? null);
       setComplianceForm((f) => ({ ...f, pct_self: String(res.pctSelf), pct_pt: String(res.pctPt) }));
       setComplianceTotals({ totalSelf: res.totalSelf, totalPt: res.totalPt });
       setComplianceLoaded(true);
     });
   }, [gymId]);
+
+  async function handleResetCompliancePassword() {
+    if (isDemo) { toast({ title: "Demo mode", description: "Sign up to make changes." }); return; }
+    if (!complianceUserId || !resetCompliancePw) return;
+    setResetComplianceSaving(true);
+    const res = await resetStaffPassword(complianceUserId, resetCompliancePw);
+    if (res.error) toast({ title: "Error", description: res.error, variant: "destructive" });
+    else { setResetComplianceDone(true); toast({ title: "Password reset successfully" }); }
+    setResetComplianceSaving(false);
+  }
 
   async function createCompliance() {
     if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
@@ -225,6 +249,17 @@ export function SettingsClient() {
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
     else toast({ title: "Defaulter threshold updated" });
     setSavingDefaulter(false);
+  }
+
+  async function changePassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (pwForm.next.length < 8) { toast({ title: "Password too short", description: "Minimum 8 characters.", variant: "destructive" }); return; }
+    if (pwForm.next !== pwForm.confirm) { toast({ title: "Passwords don't match", variant: "destructive" }); return; }
+    setSavingPw(true);
+    const res = await changePasswordAction(pwForm.current, pwForm.next);
+    if (res.error) toast({ title: "Error", description: res.error, variant: "destructive" });
+    else { toast({ title: "Password updated successfully" }); setPwForm({ current: "", next: "", confirm: "" }); }
+    setSavingPw(false);
   }
 
   function toggleAmenity(a: string) {
@@ -611,14 +646,23 @@ export function SettingsClient() {
                     )}
                   </div>
                 </div>
-                <button
-                  onClick={removeCompliance}
-                  disabled={removingCompliance}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-destructive hover:bg-destructive/10 border border-destructive/20 transition-colors disabled:opacity-50"
-                >
-                  {removingCompliance ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                  Remove Access
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => { setResetComplianceOpen(true); setResetCompliancePw(""); setResetComplianceDone(false); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-primary hover:bg-primary/10 border border-primary/20 transition-colors"
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                    Reset PW
+                  </button>
+                  <button
+                    onClick={removeCompliance}
+                    disabled={removingCompliance}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-destructive hover:bg-destructive/10 border border-destructive/20 transition-colors disabled:opacity-50"
+                  >
+                    {removingCompliance ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    Remove Access
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -774,6 +818,119 @@ export function SettingsClient() {
           </form>
         </CardContent>
       </Card>
+
+      <Separator />
+
+      {/* Change Password */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <KeyRound className="w-4 h-4 text-muted-foreground" />
+            <CardTitle className="text-base">Change Password</CardTitle>
+          </div>
+          <CardDescription>Requires your current password to confirm the change</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={changePassword} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Current Password</Label>
+              <div className="relative">
+                <Input
+                  type={showCurrentPw ? "text" : "password"}
+                  placeholder="Enter current password"
+                  value={pwForm.current}
+                  onChange={(e) => setPwForm((f) => ({ ...f, current: e.target.value }))}
+                  required
+                  className="pr-9"
+                />
+                <button type="button" onClick={() => setShowCurrentPw((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                  {showCurrentPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>New Password</Label>
+                <div className="relative">
+                  <Input
+                    type={showNewPw ? "text" : "password"}
+                    placeholder="Min. 8 characters"
+                    value={pwForm.next}
+                    onChange={(e) => setPwForm((f) => ({ ...f, next: e.target.value }))}
+                    required
+                    minLength={8}
+                    className="pr-9"
+                  />
+                  <button type="button" onClick={() => setShowNewPw((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                    {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Confirm New Password</Label>
+                <Input
+                  type="password"
+                  placeholder="Repeat new password"
+                  value={pwForm.confirm}
+                  onChange={(e) => setPwForm((f) => ({ ...f, confirm: e.target.value }))}
+                  required
+                />
+              </div>
+            </div>
+            {pwForm.next && pwForm.confirm && pwForm.next !== pwForm.confirm && (
+              <p className="text-xs text-destructive">Passwords do not match</p>
+            )}
+            <Button
+              type="submit"
+              disabled={savingPw || (!!pwForm.next && !!pwForm.confirm && pwForm.next !== pwForm.confirm)}
+              className="gap-2"
+            >
+              {savingPw ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+              Update Password
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* ── Reset Compliance Password Dialog ─────────────── */}
+      <Dialog open={resetComplianceOpen} onOpenChange={(o) => { if (!o) { setResetComplianceOpen(false); setResetCompliancePw(""); setResetComplianceDone(false); } }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{resetComplianceDone ? "Password Reset" : `Reset Password — ${complianceUserName}`}</DialogTitle>
+          </DialogHeader>
+          {resetComplianceDone ? (
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2.5 text-xs text-emerald-400">
+                Password reset successfully for {complianceUserName}.
+              </div>
+              <div className="rounded-lg border border-input bg-muted/30 px-3 py-2.5 space-y-1 text-sm">
+                {complianceEmail && <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span className="font-mono font-medium">{complianceEmail}</span></div>}
+                <div className="flex justify-between"><span className="text-muted-foreground">New Password</span><span className="font-mono font-medium">{resetCompliancePw}</span></div>
+              </div>
+              <DialogFooter><Button className="w-full" onClick={() => { setResetComplianceOpen(false); setResetComplianceDone(false); }}>Done</Button></DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label>New Password *</Label>
+                  <button type="button" onClick={() => { const c = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$!"; setResetCompliancePw(Array.from({ length: 10 }, () => c[Math.floor(Math.random() * c.length)]).join("")); }} className="text-xs text-primary hover:underline">Auto-generate</button>
+                </div>
+                <Input type="text" placeholder="Min 8 characters" value={resetCompliancePw} onChange={(e) => setResetCompliancePw(e.target.value)} className="font-mono" />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setResetComplianceOpen(false)}>Cancel</Button>
+                <Button onClick={handleResetCompliancePassword} disabled={resetComplianceSaving || resetCompliancePw.length < 8}>
+                  {resetComplianceSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Reset Password
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
