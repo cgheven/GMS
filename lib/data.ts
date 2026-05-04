@@ -674,6 +674,8 @@ export async function getSocialManagersData() {
   const ctx = await getAuthContext();
   if (!ctx?.gymId) return { gymId: null, gymName: null, managers: [], leads: [] };
   const admin = createAdminClient();
+  const { error: expireErr } = await admin.rpc("expire_social_leads", { p_gym_id: ctx.gymId });
+  if (expireErr) console.error("[expire_social_leads]", expireErr.message);
   const [{ data: managers }, { data: leads }] = await Promise.all([
     admin.from("pulse_social_managers").select("*").eq("gym_id", ctx.gymId).order("full_name"),
     admin.from("pulse_social_leads")
@@ -713,6 +715,8 @@ export async function getSocialManagerPageData() {
   const ctx = await getSocialManagerContext();
   if (!ctx) return null;
   const admin = createAdminClient();
+  const { error: expireErr } = await admin.rpc("expire_social_leads", { p_gym_id: ctx.manager.gym_id });
+  if (expireErr) console.error("[expire_social_leads]", expireErr.message);
   const { data: leads } = await admin
     .from("pulse_social_leads")
     .select("*, member:pulse_members(full_name, phone, join_date)")
@@ -723,6 +727,8 @@ export async function getSocialManagerPageData() {
 
 export async function getUnmatchedSocialLeads(gymId: string) {
   const admin = createAdminClient();
+  const { error: expireErr } = await admin.rpc("expire_social_leads", { p_gym_id: gymId });
+  if (expireErr) console.error("[expire_social_leads]", expireErr.message);
   const { data } = await admin
     .from("pulse_social_leads")
     .select("id, lead_name, lead_phone, lead_social_handle, platform, evidence_url, notes, expires_at, created_at, manager:pulse_social_managers(full_name)")
@@ -888,7 +894,7 @@ export async function getReportsData() {
 
 export async function getLeadsData() {
   const ctx = await getAuthContext();
-  if (!ctx?.gymId) return { gymId: null, leads: [], plans: [], staff: [] };
+  if (!ctx?.gymId) return { gymId: null, leads: [], plans: [], staff: [], activities: [] };
   const { gymId } = ctx;
 
   const admin = createAdminClient();
@@ -900,13 +906,16 @@ export async function getLeadsData() {
     admin.from("pulse_membership_plans").select("id,name,price").eq("gym_id", gymId).eq("is_active", true),
     admin.from("pulse_staff").select("id,full_name,role").eq("gym_id", gymId).eq("status", "active"),
     admin.from("pulse_lead_activities")
-      .select("lead_id, created_at")
+      .select("lead_id, type, content, created_at")
       .order("created_at", { ascending: false }),
   ]);
 
+  type RawActivity = { lead_id: string; type: string; content: string | null; created_at: string };
+  const activities = (activitiesRes.data ?? []) as RawActivity[];
+
   const lastActivityByLead = new Map<string, string>();
   const countByLead = new Map<string, number>();
-  for (const a of (activitiesRes.data ?? []) as { lead_id: string; created_at: string }[]) {
+  for (const a of activities) {
     if (!lastActivityByLead.has(a.lead_id)) lastActivityByLead.set(a.lead_id, a.created_at);
     countByLead.set(a.lead_id, (countByLead.get(a.lead_id) ?? 0) + 1);
   }
@@ -922,6 +931,7 @@ export async function getLeadsData() {
     leads,
     plans: (plansRes.data ?? []) as Pick<MembershipPlan, "id" | "name" | "price">[],
     staff: (staffRes.data ?? []) as Pick<Staff, "id" | "full_name" | "role">[],
+    activities: activities.map((a) => ({ lead_id: a.lead_id, type: a.type, content: a.content, created_at: a.created_at })),
   };
 }
 

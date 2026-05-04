@@ -91,8 +91,6 @@ export async function deleteSocialManager(managerId: string) {
 export async function createSocialManagerLogin(managerId: string, email: string, password: string) {
   const ctx = await requireOwner();
   if (!ctx) return { error: "Unauthorized" };
-  if (!email.endsWith("@musabkhan.me")) return { error: "Email must use @musabkhan.me domain" };
-
   const admin = createAdminClient();
   const { data: manager } = await admin
     .from("pulse_social_managers")
@@ -178,6 +176,7 @@ export async function matchSocialLead(leadId: string, memberId: string, commissi
   const ctx = await requireOwner();
   if (!ctx) return { error: "Unauthorized" };
   const admin = createAdminClient();
+  const { data: lead } = await admin.from("pulse_social_leads").select("lead_name, manager_id").eq("id", leadId).eq("gym_id", ctx.gymId).single();
   const newStatus = matchedBy === "auto" ? "pending_payment" : "pending_review";
   const { error } = await admin
     .from("pulse_social_leads")
@@ -192,6 +191,7 @@ export async function matchSocialLead(leadId: string, memberId: string, commissi
     .eq("id", leadId)
     .eq("gym_id", ctx.gymId);
   if (error) return { error: error.message };
+  await writeAuditLog({ actor_id: ctx.user.id, actor_email: ctx.user.email ?? "", action: "social_lead.match", entity: "social_lead", entity_id: leadId, meta: { lead_name: lead?.lead_name, matched_by: matchedBy, commission_amount: commissionAmount, new_status: newStatus } });
   revalidateTag(`social-${ctx.gymId}`);
   return { success: true };
 }
@@ -200,13 +200,16 @@ export async function approveSocialLead(leadId: string) {
   const ctx = await requireOwner();
   if (!ctx) return { error: "Unauthorized" };
   const admin = createAdminClient();
-  const { error } = await admin
+  const { data: updated, error } = await admin
     .from("pulse_social_leads")
     .update({ status: "pending_payment", approved_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq("id", leadId)
     .eq("gym_id", ctx.gymId)
-    .eq("status", "pending_review");
+    .eq("status", "pending_review")
+    .select("lead_name, commission_amount");
   if (error) return { error: error.message };
+  if (!updated?.length) return { error: "Lead is not in pending_review state" };
+  await writeAuditLog({ actor_id: ctx.user.id, actor_email: ctx.user.email ?? "", action: "social_lead.approve", entity: "social_lead", entity_id: leadId, meta: { lead_name: updated[0].lead_name, commission_amount: updated[0].commission_amount } });
   revalidateTag(`social-${ctx.gymId}`);
   return { success: true };
 }
@@ -215,12 +218,14 @@ export async function rejectSocialLead(leadId: string, reason: string) {
   const ctx = await requireOwner();
   if (!ctx) return { error: "Unauthorized" };
   const admin = createAdminClient();
+  const { data: lead } = await admin.from("pulse_social_leads").select("lead_name, manager_id").eq("id", leadId).eq("gym_id", ctx.gymId).single();
   const { error } = await admin
     .from("pulse_social_leads")
     .update({ status: "rejected", rejection_reason: reason, updated_at: new Date().toISOString() })
     .eq("id", leadId)
     .eq("gym_id", ctx.gymId);
   if (error) return { error: error.message };
+  await writeAuditLog({ actor_id: ctx.user.id, actor_email: ctx.user.email ?? "", action: "social_lead.reject", entity: "social_lead", entity_id: leadId, meta: { lead_name: lead?.lead_name, reason } });
   revalidateTag(`social-${ctx.gymId}`);
   return { success: true };
 }
@@ -229,13 +234,16 @@ export async function markSocialLeadPaid(leadId: string) {
   const ctx = await requireOwner();
   if (!ctx) return { error: "Unauthorized" };
   const admin = createAdminClient();
-  const { error } = await admin
+  const { data: updated, error } = await admin
     .from("pulse_social_leads")
     .update({ status: "paid", paid_at: new Date().toISOString(), paid_by: ctx.user.id, updated_at: new Date().toISOString() })
     .eq("id", leadId)
     .eq("gym_id", ctx.gymId)
-    .eq("status", "pending_payment");
+    .eq("status", "pending_payment")
+    .select("lead_name, commission_amount");
   if (error) return { error: error.message };
+  if (!updated?.length) return { error: "Lead is not in pending_payment state" };
+  await writeAuditLog({ actor_id: ctx.user.id, actor_email: ctx.user.email ?? "", action: "social_lead.pay", entity: "social_lead", entity_id: leadId, meta: { lead_name: updated[0].lead_name, commission_amount: updated[0].commission_amount } });
   revalidateTag(`social-${ctx.gymId}`);
   return { success: true };
 }
