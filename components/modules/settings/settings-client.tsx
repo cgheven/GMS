@@ -43,7 +43,12 @@ export function SettingsClient() {
     logo_url: "",
     description: "",
     gym_type: "" as GymType | "",
+    gym_types: [] as GymType[],
     amenities: [] as string[],
+    instagram_url: "",
+    tiktok_url: "",
+    facebook_url: "",
+    show_member_count: true,
   });
   const [profileForm, setProfileForm] = useState({ full_name: "" });
   const [savingGym, setSavingGym] = useState(false);
@@ -131,9 +136,14 @@ export function SettingsClient() {
       setListingForm({
         listing_enabled: gym.listing_enabled ?? false,
         maps_url: gym.maps_url ?? "",
+        instagram_url: gym.instagram_url ?? "",
+        tiktok_url: gym.tiktok_url ?? "",
+        facebook_url: gym.facebook_url ?? "",
+        show_member_count: gym.show_member_count ?? true,
         logo_url: gym.logo_url ?? "",
         description: gym.description ?? "",
         gym_type: gym.gym_type ?? "",
+        gym_types: (gym.gym_types ?? []) as GymType[],
         amenities: gym.amenities ?? [],
       });
     }
@@ -174,8 +184,13 @@ export function SettingsClient() {
       maps_url: listingForm.maps_url || null,
       logo_url: listingForm.logo_url || null,
       description: listingForm.description || null,
-      gym_type: listingForm.gym_type || null,
+      gym_type: listingForm.gym_types[0] || null,
+      gym_types: listingForm.gym_types,
       amenities: listingForm.amenities,
+      instagram_url: listingForm.instagram_url || null,
+      tiktok_url: listingForm.tiktok_url || null,
+      facebook_url: listingForm.facebook_url || null,
+      show_member_count: listingForm.show_member_count,
     }).eq("id", gymId);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
     else toast({
@@ -393,6 +408,59 @@ export function SettingsClient() {
                   />
                 </div>
 
+                {/* Show member count toggle */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-sidebar-border bg-white/[0.02]">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Show active member count</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Display how many members are currently active on your listing.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setListingForm((f) => ({ ...f, show_member_count: !f.show_member_count }))}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none ${
+                      listingForm.show_member_count ? "bg-[hsl(219_100%_50%)]" : "bg-muted"
+                    }`}
+                  >
+                    <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition-transform ${
+                      listingForm.show_member_count ? "translate-x-5" : "translate-x-0"
+                    }`} />
+                  </button>
+                </div>
+
+                {/* Social Media */}
+                <div className="space-y-3">
+                  <Label>Social Media</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-muted-foreground">Instagram</p>
+                      <Input
+                        type="url"
+                        placeholder="https://instagram.com/yourgym"
+                        value={listingForm.instagram_url}
+                        onChange={(e) => setListingForm({ ...listingForm, instagram_url: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-muted-foreground">TikTok</p>
+                      <Input
+                        type="url"
+                        placeholder="https://tiktok.com/@yourgym"
+                        value={listingForm.tiktok_url}
+                        onChange={(e) => setListingForm({ ...listingForm, tiktok_url: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-muted-foreground">Facebook</p>
+                      <Input
+                        type="url"
+                        placeholder="https://facebook.com/yourgym"
+                        value={listingForm.facebook_url}
+                        onChange={(e) => setListingForm({ ...listingForm, facebook_url: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 {/* Description */}
                 <div className="space-y-1.5">
                   <Label>Short Description</Label>
@@ -407,22 +475,33 @@ export function SettingsClient() {
 
                 {/* Gym Type */}
                 <div className="space-y-2">
-                  <Label>Gym Type</Label>
+                  <div className="flex items-center justify-between">
+                    <Label>Gym Type</Label>
+                    <span className="text-xs text-muted-foreground">Select all that apply</span>
+                  </div>
                   <div className="flex flex-wrap gap-2">
-                    {GYM_TYPES.map((t) => (
-                      <button
-                        key={t.value}
-                        type="button"
-                        onClick={() => setListingForm((f) => ({ ...f, gym_type: f.gym_type === t.value ? "" : t.value }))}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                          listingForm.gym_type === t.value
-                            ? "bg-[hsl(219_100%_50%/0.1)] text-[hsl(219_100%_50%)] border-[hsl(219_100%_50%/0.3)]"
-                            : "border-sidebar-border text-muted-foreground hover:text-foreground hover:border-sidebar-border/80"
-                        }`}
-                      >
-                        {t.label}
-                      </button>
-                    ))}
+                    {GYM_TYPES.map((t) => {
+                      const selected = listingForm.gym_types.includes(t.value as GymType);
+                      return (
+                        <button
+                          key={t.value}
+                          type="button"
+                          onClick={() => setListingForm((f) => ({
+                            ...f,
+                            gym_types: selected
+                              ? f.gym_types.filter((x) => x !== t.value)
+                              : [...f.gym_types, t.value as GymType],
+                          }))}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                            selected
+                              ? "bg-[hsl(219_100%_50%/0.1)] text-[hsl(219_100%_50%)] border-[hsl(219_100%_50%/0.3)]"
+                              : "border-sidebar-border text-muted-foreground hover:text-foreground hover:border-sidebar-border/80"
+                          }`}
+                        >
+                          {t.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 

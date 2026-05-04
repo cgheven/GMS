@@ -9,7 +9,7 @@ export async function getPublicGyms(): Promise<{ gyms?: PublicGym[]; error?: str
 
     const { data, error } = await admin
       .from("pulse_gyms")
-      .select("id,owner_id,name,address,phone,email,total_capacity,city,area,maps_url,description,gym_type,amenities")
+      .select("id,owner_id,name,address,phone,email,total_capacity,city,area,maps_url,instagram_url,tiktok_url,facebook_url,show_member_count,description,gym_type,gym_types,amenities")
       .eq("listing_enabled", true)
       .order("name");
     if (error) throw error;

@@ -81,11 +81,16 @@ export interface Gym {
   description: string | null;
   total_capacity: number;
   gym_type: GymType | null;
+  gym_types: GymType[];
   amenities: string[];
   operating_hours: Record<string, { open: string; close: string }> | null;
   maps_url: string | null;
   logo_url: string | null;
+  instagram_url: string | null;
+  tiktok_url: string | null;
+  facebook_url: string | null;
   listing_enabled: boolean;
+  show_member_count: boolean;
   monthly_revenue_target: number;
   ntn: string | null;
   report_settings: {
@@ -114,8 +119,13 @@ export interface PublicGym {
   email: string | null;
   description: string | null;
   gym_type: GymType | null;
+  gym_types: GymType[];
   amenities: string[];
   maps_url: string | null;
+  instagram_url: string | null;
+  tiktok_url: string | null;
+  facebook_url: string | null;
+  show_member_count: boolean;
   total_capacity: number;
   active_members: number;
 }
