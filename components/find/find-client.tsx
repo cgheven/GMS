@@ -167,46 +167,46 @@ function GymCard({ g }: { g: PublicGym }) {
     <div className="group flex flex-col rounded-2xl border border-sidebar-border bg-card hover:border-primary/20 transition-all duration-200 overflow-hidden">
       {waitlistOpen && <WaitlistModal gym={g} onClose={() => setWaitlistOpen(false)} />}
 
-      {/* ── Gym Name ── */}
-      <div className="px-4 pt-4">
-        <h3 className="font-semibold text-foreground text-sm leading-tight truncate group-hover:text-primary transition-colors">
+      {/* ── NAME — single line, truncated ── */}
+      <div className="px-4 pt-4 h-[22px] flex items-center">
+        <h3 className="font-semibold text-foreground text-sm leading-none truncate group-hover:text-primary transition-colors w-full">
           {g.name}
         </h3>
       </div>
 
-      {/* ── Location — always reserved, empty string keeps the row height ── */}
-      <div className="px-4 mt-1 h-5 flex items-center gap-1">
-        {(g.area || g.city) ? (
+      {/* ── LOCATION — h-5, always reserved ── */}
+      <div className="px-4 mt-1 h-5 flex items-center gap-1 overflow-hidden">
+        {(g.area || g.city) && (
           <>
             <MapPin className="w-3 h-3 text-muted-foreground shrink-0" />
             <span className="text-xs text-muted-foreground truncate">
               {[g.area, g.city].filter(Boolean).join(", ")}
             </span>
           </>
-        ) : null}
+        )}
       </div>
 
-      {/* ── Divider / white space ── */}
-      <div className="mx-4 mt-3 mb-0 border-t border-sidebar-border/40" />
+      {/* ── DIVIDER ── */}
+      <div className="mx-4 mt-3 border-t border-sidebar-border/40" />
 
-      {/* ── Gym Type — always reserved ── */}
-      <div className="px-4 mt-3 h-6 flex items-center gap-1">
+      {/* ── GYM TYPE — h-6, single row, no wrap ── */}
+      <div className="px-4 mt-3 h-6 flex items-center gap-1 overflow-hidden">
         {types.slice(0, 3).map((t) => {
           const cfg = TYPE_CONFIG[t];
           return cfg ? (
-            <span key={t} className={`inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] font-medium ${cfg.cls}`}>
+            <span key={t} className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded-full border text-[10px] font-medium ${cfg.cls}`}>
               {cfg.label}
             </span>
           ) : null;
         })}
         {types.length > 3 && (
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full border border-white/10 bg-white/[0.04] text-[10px] text-muted-foreground">
+          <span className="inline-flex items-center shrink-0 px-1.5 py-0.5 rounded-full border border-white/10 bg-white/[0.04] text-[10px] text-muted-foreground">
             +{types.length - 3}
           </span>
         )}
       </div>
 
-      {/* ── Active members — always reserved ── */}
+      {/* ── ACTIVE MEMBERS — h-7, always reserved ── */}
       <div className="px-4 mt-2 h-7 flex items-center gap-2">
         {isFull ? (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-xs font-medium text-rose-400">
@@ -222,14 +222,14 @@ function GymCard({ g }: { g: PublicGym }) {
           </span>
         )}
         {g.show_member_count && g.total_capacity > 0 && (
-          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-            <Users className="w-3 h-3" /> {g.total_capacity} cap
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+            · {g.total_capacity} cap
           </span>
         )}
       </div>
 
-      {/* ── Amenities — fixed min-height so it always occupies space ── */}
-      <div className="px-4 mt-2 min-h-[28px] flex flex-wrap gap-1.5 content-start">
+      {/* ── AMENITIES — fixed h-[52px], 2-row max, overflow hidden ── */}
+      <div className="px-4 mt-2 h-[52px] overflow-hidden flex flex-wrap gap-1.5 content-start">
         {visibleAmenities.map((a) => <AmenityChip key={a} label={a} />)}
         {extra > 0 && (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-white/[0.03] border border-white/10 text-xs text-muted-foreground">
@@ -238,11 +238,8 @@ function GymCard({ g }: { g: PublicGym }) {
         )}
       </div>
 
-      {/* ── Spacer pushes CTA to bottom ── */}
-      <div className="flex-1" />
-
-      {/* ── WhatsApp / Waitlist CTA ── */}
-      <div className="px-4 pt-3 pb-4">
+      {/* ── WHATSAPP / WAITLIST — always at same distance from amenities ── */}
+      <div className="px-4 pt-4 pb-4">
         {isFull ? (
           <button
             onClick={() => setWaitlistOpen(true)}
