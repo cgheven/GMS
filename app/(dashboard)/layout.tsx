@@ -9,6 +9,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (ctx.profile?.is_admin) redirect("/admin/gyms");
   if ((ctx.profile as { role?: string } | null)?.role === "trainer") redirect("/trainer");
   if ((ctx.profile as { role?: string } | null)?.role === "referrer") redirect("/referrer");
+  if ((ctx.profile as { role?: string } | null)?.role === "social_manager") redirect("/social");
 
   return (
     <GymProvider profile={ctx.profile} gym={ctx.gym} gyms={ctx.gyms ?? []} isDemo={ctx.isDemo}>
