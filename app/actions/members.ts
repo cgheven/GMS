@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getAuthContext } from "@/lib/data";
 import { writeAuditLog } from "@/lib/audit";
 import { formatDateInput } from "@/lib/utils";
+import { recalcPendingSalary } from "./trainer";
 
 async function requireOwner() {
   const ctx = await getAuthContext();
@@ -14,6 +15,7 @@ async function requireOwner() {
 function revalidate(gymId: string) {
   revalidateTag(`members-${gymId}`);
   revalidateTag(`dashboard-${gymId}`);
+  revalidateTag(`reports-${gymId}`);
 }
 
 // ── Freeze ────────────────────────────────────────────────────────────────────
@@ -243,4 +245,50 @@ export async function checkAndClearDefaulter(memberId: string) {
     revalidate(ctx.gymId);
   }
   return { cleared: data === true };
+}
+
+// ── Owner update ──────────────────────────────────────────────────────────────
+
+export async function updateMember(memberId: string, payload: Record<string, unknown>) {
+  const ctx = await requireOwner();
+  if (!ctx) return { error: "Unauthorized" };
+  const admin = createAdminClient();
+
+  // Fetch current assigned_trainer_id before the update so we can recalc the
+  // old trainer if the assignment changes.
+  const { data: existing } = await admin
+    .from("pulse_members")
+    .select("assigned_trainer_id")
+    .eq("id", memberId)
+    .eq("gym_id", ctx.gymId)
+    .single();
+
+  const { error } = await admin
+    .from("pulse_members")
+    .update(payload)
+    .eq("id", memberId)
+    .eq("gym_id", ctx.gymId);
+
+  if (error) return { error: error.message };
+
+  // Recalculate pending salary for affected trainer(s) when the trainer field
+  // was part of the payload. Fire-and-forget — errors are swallowed inside
+  // recalcPendingSalary so they never block the response.
+  if (typeof payload.assigned_trainer_id !== "undefined") {
+    const newTrainerId = payload.assigned_trainer_id as string | null;
+    const oldTrainerId = existing?.assigned_trainer_id as string | null | undefined;
+    const recalcTasks: Promise<void>[] = [];
+    if (newTrainerId) recalcTasks.push(recalcPendingSalary(newTrainerId, ctx.gymId));
+    if (oldTrainerId && oldTrainerId !== newTrainerId) {
+      recalcTasks.push(recalcPendingSalary(oldTrainerId, ctx.gymId));
+    }
+    try {
+      await Promise.all(recalcTasks);
+    } catch (err) {
+      console.error("[updateMember] recalcPendingSalary failed:", err);
+    }
+  }
+
+  revalidate(ctx.gymId);
+  return { success: true };
 }

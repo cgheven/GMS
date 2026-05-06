@@ -561,6 +561,58 @@ export interface AgingBucket {
   amount: number;
 }
 
+export interface TrainerReportRow {
+  id: string;
+  name: string;
+  activeMembers: number;
+  monthlyFeeGenerated: number;
+  baseSalary: number;
+  commissionEarned: number;
+  totalCost: number;
+  netContribution: number;
+  salaryGenerated: boolean;
+}
+
+export interface ExpiringMember {
+  id: string;
+  name: string;
+  phone: string | null;
+  planExpiry: string;
+  daysLeft: number;
+}
+
+export interface DefaulterRow {
+  id: string;
+  name: string;
+  phone: string | null;
+  defaulterSince: string | null;
+  monthlyFee: number;
+}
+
+export interface PlanDistributionRow {
+  planId: string | null;
+  planName: string;
+  memberCount: number;
+  percentage: number;
+  monthlyRevenue: number;
+}
+
+export interface MemberReportSummary {
+  total: number;
+  active: number;
+  frozen: number;
+  defaulters: number;
+  lapsed: number;
+  newThisMonth: number;
+  newLastMonth: number;
+  avgMonthlyFee: number;
+  expiringIn7Days: ExpiringMember[];
+  expiringIn8To15Days: ExpiringMember[];
+  expiringIn16To30Days: ExpiringMember[];
+  defaulterList: DefaulterRow[];
+  planDistribution: PlanDistributionRow[];
+}
+
 export interface GoalWin {
   id: string;
   memberName: string;

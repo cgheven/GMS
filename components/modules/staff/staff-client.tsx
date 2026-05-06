@@ -82,6 +82,7 @@ const emptyForm = {
   full_name: "", role: "other" as StaffRole, specialization: "", phone: "", cnic: "",
   join_date: formatDateInput(new Date()), monthly_salary: "",
   commission_percentage: "0", commission_floor: "0",
+  member_capacity: "20",
   status: "active" as StaffStatus, notes: "",
   can_add_members: false,
 };
@@ -259,6 +260,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
   const [salaryPayments, setSalaryPayments] = useState(initialPayments);
   const [selectedMonth, setSelectedMonth] = useState(currentMonth());
   const [generating, setGenerating] = useState(false);
+  const [activeTab, setActiveTab] = useState("staff");
   const [payDialog, setPayDialog] = useState<SalaryPayment | null>(null);
   const [payForm, setPayForm] = useState({ method: "cash" as PaymentMethod, date: formatDateInput(new Date()), notes: "", receipt: "" });
   const [paying, setPaying] = useState(false);
@@ -308,6 +310,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
       monthly_salary: s.monthly_salary.toString(),
       commission_percentage: s.commission_percentage.toString(),
       commission_floor: (s.commission_floor ?? 0).toString(),
+      member_capacity: (s.member_capacity ?? 20).toString(),
       status: s.status,
       notes: s.notes ?? "",
       can_add_members: s.can_add_members ?? false,
@@ -343,6 +346,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
       monthly_salary: parseFloat(form.monthly_salary) || 0,
       commission_percentage: parseFloat(form.commission_percentage) || 0,
       commission_floor: parseFloat(form.commission_floor) || 0,
+      member_capacity: Math.max(1, parseInt(form.member_capacity) || 20),
       status: form.status,
       notes: form.notes || null,
       can_add_members: form.can_add_members,
@@ -379,15 +383,16 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
   }
 
   // ── Salary actions ────────────────────────────────────────
-  async function generateSalaries() {
+  // Runs silently — no button, no toast. Called automatically when the
+  // Salaries tab opens or the selected month changes.
+  async function ensureSalariesExist(month: string) {
     const active = staff.filter((s) => s.status === "active");
-    if (!active.length || !gymId) { toast({ title: "No active staff" }); return; }
+    if (!active.length || !gymId) return;
     setGenerating(true);
     const supabase = createClient();
 
-    // Fetch already-generated records, active members, and shifts in parallel
     const [{ data: existing }, { data: activeMembers }, { data: allShifts }] = await Promise.all([
-      supabase.from("pulse_salary_payments").select("staff_id").eq("gym_id", gymId).eq("for_month", selectedMonth),
+      supabase.from("pulse_salary_payments").select("staff_id").eq("gym_id", gymId).eq("for_month", month),
       supabase.from("pulse_members").select("assigned_trainer_id,monthly_fee,assigned_shift_id").eq("gym_id", gymId).eq("status", "active"),
       supabase.from("pulse_trainer_shifts").select("*").eq("gym_id", gymId),
     ]);
@@ -415,7 +420,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
         return {
           gym_id: gymId,
           staff_id: s.id,
-          for_month: selectedMonth,
+          for_month: month,
           base_salary: s.monthly_salary,
           commission_amount: commissionAmount,
           pt_earnings: 0,
@@ -424,16 +429,32 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
         };
       });
 
-    if (!rows.length) {
-      toast({ title: "Already generated", description: "All active staff already have salary records for this month." });
-      setGenerating(false);
-      return;
+    if (rows.length > 0) {
+      const { error } = await supabase.from("pulse_salary_payments").insert(rows);
+      if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
+      else await reloadSalaries(month);
     }
-
-    const { error } = await supabase.from("pulse_salary_payments").insert(rows);
-    if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-    else { toast({ title: `Generated ${rows.length} salary record(s)` }); await reloadSalaries(selectedMonth); }
     setGenerating(false);
+  }
+
+  async function handleTabChange(tab: string) {
+    if (tab === "salaries") {
+      // Set generating=true BEFORE switching tabs so the salaries tab renders in
+      // its "loading" state from the very first paint — no empty→list reflow.
+      setGenerating(true);
+      setActiveTab(tab);
+      await reloadSalaries(selectedMonth);
+      await ensureSalariesExist(selectedMonth);
+      setGenerating(false); // safety: clears spinner if ensureSalariesExist early-returned (zero active staff)
+    } else {
+      setActiveTab(tab);
+    }
+  }
+
+  async function handleMonthChange(month: string) {
+    setSelectedMonth(month);
+    await reloadSalaries(month);
+    if (activeTab === "salaries") await ensureSalariesExist(month);
   }
 
   function openPay(p: SalaryPayment) {
@@ -527,7 +548,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
         ))}
       </div>
 
-      <Tabs defaultValue="staff" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
         <TabsList>
           <TabsTrigger value="staff"><Users className="w-3.5 h-3.5 mr-1.5" />Staff</TabsTrigger>
           <TabsTrigger value="salaries"><Wallet className="w-3.5 h-3.5 mr-1.5" />Salaries</TabsTrigger>
@@ -670,24 +691,46 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
         {/* ── Salaries tab ───────────────────────────────── */}
         <TabsContent value="salaries" className="space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            <Input type="month" value={selectedMonth} onChange={(e) => { setSelectedMonth(e.target.value); reloadSalaries(e.target.value); }} className="w-auto" />
-            <Button onClick={generateSalaries} disabled={generating} variant="outline" className="gap-2">
-              <Plus className="w-4 h-4" />
-              {generating ? "Generating…" : "Generate for All Active"}
-            </Button>
-            {monthPayments.length > 0 && (
+            <Input type="month" value={selectedMonth} onChange={(e) => handleMonthChange(e.target.value)} className="w-auto" />
+            {generating && (
+              <span className="text-xs text-muted-foreground animate-pulse">Calculating salaries…</span>
+            )}
+            {!generating && monthPayments.length > 0 && (
               <span className="text-xs text-muted-foreground ml-auto">
                 {monthPayments.filter((p) => p.status === "paid").length}/{monthPayments.length} paid
               </span>
             )}
           </div>
 
-          {monthPayments.length === 0 ? (
+          {monthPayments.length === 0 && generating ? (
+            /* Skeleton rows — same height as real rows — so there is no layout
+               shift when the actual salary list arrives after the async calls. */
+            <Card>
+              <CardContent className="p-0 divide-y divide-sidebar-border">
+                {Array.from(
+                  { length: Math.max(visibleStaff.filter((s) => s.status === "active").length, 3) },
+                  (_, i) => i
+                ).map((i) => (
+                  <div key={i} className="flex items-center gap-4 px-4 py-3">
+                    <div className="w-7 h-7 rounded-full bg-white/5 animate-pulse shrink-0" />
+                    <div className="flex-1 min-w-0 space-y-1.5">
+                      <div className="h-3.5 w-32 rounded bg-white/5 animate-pulse" />
+                      <div className="h-3 w-20 rounded bg-white/5 animate-pulse" />
+                    </div>
+                    <div className="text-right shrink-0 space-y-1.5">
+                      <div className="h-3.5 w-16 rounded bg-white/5 animate-pulse ml-auto" />
+                      <div className="h-3 w-10 rounded bg-white/5 animate-pulse ml-auto" />
+                    </div>
+                    <div className="h-8 w-14 rounded bg-white/5 animate-pulse shrink-0" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : monthPayments.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                 <Wallet className="w-10 h-10 mb-3 opacity-30" />
-                <p className="font-medium">No salary records for this month</p>
-                <p className="text-sm mt-1">Click "Generate for All Active" to create them</p>
+                <p className="font-medium">No active staff this month</p>
               </CardContent>
             </Card>
           ) : (
@@ -805,6 +848,13 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
                 <p className="text-[11px] text-muted-foreground leading-snug">Deducted from each member's fee before commission applies.</p>
               </div>
             </div>
+            {form.role === "trainer" && (
+              <div className="space-y-1.5">
+                <Label>Max Members Capacity</Label>
+                <Input type="number" placeholder="20" min="1" value={form.member_capacity} onChange={(e) => setForm({ ...form, member_capacity: e.target.value })} />
+                <p className="text-[11px] text-muted-foreground leading-snug">Used in Profit Insights to calculate realistic opportunity gain.</p>
+              </div>
+            )}
             <div className="space-y-1.5"><Label>Notes</Label><Textarea placeholder="Optional…" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} /></div>
 
             {/* ── Shifts (trainers only, when editing) ─── */}

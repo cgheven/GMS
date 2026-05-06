@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, CreditCard, FileText, Settings, X,
   Shield, Building2, Globe, LogIn, Trophy, Target,
   BarChart3, UserCog, Dumbbell, CalendarDays,
-  Receipt, ClipboardList, Zap, HandCoins, Instagram,
+  Receipt, ClipboardList, Zap, HandCoins, Instagram, TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsAdmin } from "@/hooks/use-is-admin";
@@ -21,43 +21,49 @@ const navGroups = [
   {
     label: "Members",
     items: [
-      { href: "/leads",     label: "Leads",        icon: Target },
-      { href: "/members",   label: "Members",      icon: Users },
-      { href: "/check-ins", label: "Check-ins",    icon: LogIn },
-      { href: "/plans",     label: "Plans",        icon: Zap },
-      { href: "/payments",  label: "Payments",     icon: CreditCard },
+      { href: "/members",   label: "Members",   icon: Users      },
+      { href: "/check-ins", label: "Check-ins", icon: LogIn      },
+      { href: "/plans",     label: "Plans",     icon: Zap        },
+      { href: "/payments",  label: "Payments",  icon: CreditCard },
+    ],
+  },
+  {
+    label: "Growth",
+    items: [
+      { href: "/leads",        label: "Leads",           icon: Target     },
+      { href: "/smart-earn",   label: "Profit Insights", icon: TrendingUp },
+      { href: "/referrers",    label: "Partners",        icon: HandCoins  },
+      { href: "/social-media", label: "Social Media",    icon: Instagram  },
     ],
   },
   {
     label: "Training",
     items: [
-      { href: "/classes",   label: "Classes",   icon: CalendarDays },
-      { href: "/trainers",  label: "Trainers",  icon: Dumbbell },
-      { href: "/referrers",    label: "Partners",       icon: HandCoins },
-      { href: "/social-media", label: "Social Media",  icon: Instagram },
+      { href: "/classes",  label: "Classes",  icon: CalendarDays },
+      { href: "/trainers", label: "Trainers", icon: Dumbbell     },
     ],
   },
   {
     label: "Operations",
     items: [
-      { href: "/staff",         label: "Staff",          icon: UserCog },
-      { href: "/expenses",      label: "Expenses",      icon: Receipt },
-      { href: "/bills",         label: "Bills",          icon: FileText },
+      { href: "/staff",    label: "Staff",    icon: UserCog  },
+      { href: "/expenses", label: "Expenses", icon: Receipt  },
+      { href: "/bills",    label: "Bills",    icon: FileText },
     ],
   },
   {
     label: "Analytics",
     items: [
       { href: "/reports",            label: "Reports",     icon: BarChart3 },
-      { href: "/reports/compliance", label: "Compliance",  icon: FileText },
-      { href: "/leaderboard",        label: "Leaderboard", icon: Trophy },
+      { href: "/reports/compliance", label: "Compliance",  icon: FileText  },
+      { href: "/leaderboard",        label: "Leaderboard", icon: Trophy    },
     ],
   },
   {
     label: "System",
     items: [
-      { href: "/settings", label: "Settings",    icon: Settings },
-      { href: "/find",     label: "Gym Directory", icon: Globe },
+      { href: "/settings", label: "Settings",     icon: Settings },
+      { href: "/find",     label: "Gym Directory", icon: Globe    },
     ],
   },
 ];
@@ -72,9 +78,7 @@ const NavLink = memo(function NavLink({ href, label, icon: Icon, pathname, onClo
       onClick={onClose}
       className={cn(
         "relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group",
-        active
-          ? "bg-primary/10 text-primary"
-          : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+        active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
       )}
     >
       {active && (
@@ -127,7 +131,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         <nav className="flex-1 overflow-y-auto py-3 px-2.5 space-y-3 scrollbar-hide">
           {navGroups.map((group) => (
             <div key={group.label}>
-              <p className="text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-widest px-3 mb-1">{group.label}</p>
+              <p className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest px-3 mb-1 mt-1">{group.label}</p>
               <div className="space-y-0.5">
                 {group.items.map((item) => (
                   <NavLink key={item.href} {...item} pathname={pathname} onClose={onClose} />

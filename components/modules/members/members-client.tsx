@@ -22,7 +22,9 @@ import { formatCurrency, formatDate, formatDateInput, cn } from "@/lib/utils";
 import { validateFullName, validateCNIC, validatePakPhone, validateDOB, validateMoney, runValidators, type ValidationResult } from "@/lib/validation";
 import type { Member, MembershipPlan, MemberStatus, MemberGender, Staff, Payment, PaymentMethod, PaymentStatus, Referrer, SocialManager, SocialLead, TrainerShift } from "@/types";
 import { matchSocialLead } from "@/app/actions/social";
-import { freezeMember, unfreezeMember, putMemberOnHold, resumeMember, markAsDefaulter, clearDefaulter, checkAndClearDefaulter } from "@/app/actions/members";
+import { freezeMember, unfreezeMember, putMemberOnHold, resumeMember, markAsDefaulter, clearDefaulter, checkAndClearDefaulter, updateMember } from "@/app/actions/members";
+import { recalcPendingSalary } from "@/app/actions/trainer";
+import { SmartAssignPanel } from "@/components/modules/profit-insights/smart-assign-panel";
 
 // ── Payment helpers ────────────────────────────────────────────────────────────
 const methodLabels: Record<PaymentMethod, string> = {
@@ -62,7 +64,7 @@ interface Props {
   expired: Member[];
   defaulterThreshold: number;
   plans: MembershipPlan[];
-  staff: Pick<Staff, "id" | "full_name" | "role">[];
+  staff: Pick<Staff, "id" | "full_name" | "role" | "commission_percentage" | "commission_floor">[];
   referrers: Pick<Referrer, "id" | "full_name" | "commission_type" | "commission_value">[];
 }
 
@@ -553,6 +555,22 @@ export function MembersClient({
       .in("id", targetIds);
     if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
     else {
+      // Recalc pending salary for all affected trainers when trainer assignment changed.
+      if (gymId && typeof payload.assigned_trainer_id !== "undefined") {
+        const newTrainerId = payload.assigned_trainer_id as string | null;
+        // Collect unique old trainer IDs from the affected members.
+        const oldTrainerIds = new Set<string>();
+        for (const id of targetIds) {
+          const t = memberById[id]?.assigned_trainer_id;
+          if (t) oldTrainerIds.add(t);
+        }
+        const recalcTasks: Promise<void>[] = [];
+        if (newTrainerId) recalcTasks.push(recalcPendingSalary(newTrainerId, gymId));
+        for (const oldId of oldTrainerIds) {
+          if (oldId !== newTrainerId) recalcTasks.push(recalcPendingSalary(oldId, gymId));
+        }
+        Promise.all(recalcTasks).catch((err) => console.error("[handleBulkEdit] recalcPendingSalary failed:", err));
+      }
       const msg = skipped > 0 ? ` (${skipped} skipped — no trainer in their plan)` : "";
       toast({ title: `${targetIds.length} member${targetIds.length !== 1 ? "s" : ""} updated${msg}` });
       closeBulkEdit();
@@ -1413,7 +1431,7 @@ interface MemberFormDialogProps {
   editing: Member | null;
   existingMembers: Member[];
   plans: MembershipPlan[];
-  staff: Pick<Staff, "id" | "full_name" | "role">[];
+  staff: Pick<Staff, "id" | "full_name" | "role" | "commission_percentage" | "commission_floor">[];
   shifts: Record<string, TrainerShift[]>;
   referrers: Pick<Referrer, "id" | "full_name" | "commission_type" | "commission_value">[];
   gymId: string | null;
@@ -1589,9 +1607,9 @@ function MemberFormDialog({
     };
 
     if (editing) {
-      const { error } = await supabase.from("pulse_members").update(payload).eq("id", editing.id);
-      if (error) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
+      const result = await updateMember(editing.id, payload);
+      if (result.error) {
+        toast({ title: "Error", description: result.error, variant: "destructive" });
         setSaving(false);
         return;
       }
@@ -1786,13 +1804,17 @@ function MemberFormDialog({
               <div className="space-y-1.5">
                 <Label>Membership Plan</Label>
                   <Select value={form.plan_id} onValueChange={handlePlanChange}>
-                    <SelectTrigger><SelectValue placeholder="Select plan" /></SelectTrigger>
+                    <SelectTrigger className="overflow-hidden">
+                      <span className="flex-1 min-w-0 truncate text-left">
+                        <SelectValue placeholder="Select plan" />
+                      </span>
+                    </SelectTrigger>
                     <SelectContent>
                       {plans.map((p) => (
                         <SelectItem key={p.id} value={p.id}>
-                          <span className="flex items-center gap-2">
+                          <span className="flex items-center gap-2 min-w-0">
                             <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
-                            {p.name} · {DURATION_LABELS[p.duration_type] ?? p.duration_type} · {formatCurrency(p.price)}
+                            <span className="truncate">{p.name} · {DURATION_LABELS[p.duration_type] ?? p.duration_type} · {formatCurrency(p.price)}</span>
                           </span>
                         </SelectItem>
                       ))}
@@ -1800,34 +1822,15 @@ function MemberFormDialog({
                   </Select>
                 </div>
                 {(() => { const sp = form.plan_id ? planMap[form.plan_id] : null; return (!sp || sp.includes_pt) ? (
-                <>
-                <div className="space-y-1.5">
-                  <Label>Assigned Trainer</Label>
-                  <Select value={form.assigned_trainer_id || "none"} onValueChange={(v) => setForm((f) => ({ ...f, assigned_trainer_id: v === "none" ? "" : v, assigned_shift_id: "" }))}>
-                    <SelectTrigger><SelectValue placeholder="No trainer" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No trainer</SelectItem>
-                      {staff.map((s) => (<SelectItem key={s.id} value={s.id}>{s.full_name}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {form.assigned_trainer_id && (shifts[form.assigned_trainer_id] ?? []).length > 0 && (
-                  <div className="space-y-1.5">
-                    <Label>Shift <span className="text-muted-foreground text-xs font-normal">(optional)</span></Label>
-                    <Select value={form.assigned_shift_id || "none"} onValueChange={(v) => setForm((f) => ({ ...f, assigned_shift_id: v === "none" ? "" : v }))}>
-                      <SelectTrigger><SelectValue placeholder="No shift (use trainer default)" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No shift (use trainer default)</SelectItem>
-                        {(shifts[form.assigned_trainer_id] ?? []).map((sh) => (
-                          <SelectItem key={sh.id} value={sh.id}>
-                            {sh.name} · {sh.start_time.slice(0, 5)}–{sh.end_time.slice(0, 5)} · {sh.commission_type === "flat" ? `PKR ${sh.commission_value}` : `${sh.commission_value}%`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                </>
+                <SmartAssignPanel
+                  trainers={staff}
+                  shifts={shifts}
+                  selectedTrainerId={form.assigned_trainer_id}
+                  selectedShiftId={form.assigned_shift_id}
+                  memberFee={Number(form.monthly_fee) || 0}
+                  onSelectTrainer={(v) => setForm((f) => ({ ...f, assigned_trainer_id: v, assigned_shift_id: "" }))}
+                  onSelectShift={(v) => setForm((f) => ({ ...f, assigned_shift_id: v }))}
+                />
                 ) : null; })()}
                 {!editing && referrers.length > 0 && (
                   <div className="space-y-1.5">

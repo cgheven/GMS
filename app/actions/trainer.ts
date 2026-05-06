@@ -4,6 +4,89 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getAuthContext, getTrainerContext } from "@/lib/data";
 import { writeAuditLog } from "@/lib/audit";
 
+// ── Commission recalculation utility ─────────────────────────────────────────
+// Recalculates the commission_amount (and total_amount) on a trainer's PENDING
+// salary record for the current month. Called silently after any member
+// assignment or transfer. Never touches records with status = 'paid'.
+export async function recalcPendingSalary(trainerId: string, gymId: string): Promise<void> {
+  try {
+    const now = new Date();
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    const admin = createAdminClient();
+
+    // 1. Find pending salary record for this trainer + gym + current month.
+    const { data: salaryRow } = await admin
+      .from("pulse_salary_payments")
+      .select("id, base_salary, status")
+      .eq("staff_id", trainerId)
+      .eq("gym_id", gymId)
+      .eq("for_month", month)
+      .maybeSingle();
+
+    // Nothing to do if no record exists, or if it's already been paid.
+    if (!salaryRow || salaryRow.status !== "pending") return;
+
+    // 2. Fetch all active members assigned to this trainer.
+    const { data: members } = await admin
+      .from("pulse_members")
+      .select("monthly_fee, assigned_shift_id")
+      .eq("gym_id", gymId)
+      .eq("assigned_trainer_id", trainerId)
+      .eq("status", "active");
+
+    // 3. Fetch all shifts for this gym.
+    const { data: shifts } = await admin
+      .from("pulse_trainer_shifts")
+      .select("id, commission_type, commission_value")
+      .eq("gym_id", gymId);
+
+    // 4. Fetch the trainer's commission settings.
+    const { data: trainerStaff } = await admin
+      .from("pulse_staff")
+      .select("commission_percentage, commission_floor")
+      .eq("id", trainerId)
+      .eq("gym_id", gymId)
+      .maybeSingle();
+
+    if (!trainerStaff) return;
+
+    const shiftMap = Object.fromEntries(
+      (shifts ?? []).map((s) => [s.id, s] as [string, { id: string; commission_type: string; commission_value: number }])
+    );
+
+    const trainerCommissionPercentage = Number(trainerStaff.commission_percentage ?? 0);
+    const trainerCommissionFloor = Number(trainerStaff.commission_floor ?? 0);
+
+    // 5. Recalculate commission using the exact same algorithm as ensureSalariesExist.
+    const commissionAmount = (members ?? []).reduce((sum, m) => {
+      const fee = Number(m.monthly_fee);
+      const netFee = Math.max(0, fee - trainerCommissionFloor);
+      const shift = m.assigned_shift_id ? shiftMap[m.assigned_shift_id] : null;
+      if (shift) {
+        return sum + (shift.commission_type === "flat"
+          ? shift.commission_value
+          : Math.round(netFee * shift.commission_value / 100));
+      }
+      return sum + (trainerCommissionPercentage > 0
+        ? Math.round(netFee * trainerCommissionPercentage / 100)
+        : 0);
+    }, 0);
+
+    const totalAmount = Number(salaryRow.base_salary) + commissionAmount;
+
+    // 6. Update the pending record — hard-gated on status = 'pending'.
+    await admin
+      .from("pulse_salary_payments")
+      .update({ commission_amount: commissionAmount, total_amount: totalAmount })
+      .eq("id", salaryRow.id)
+      .eq("status", "pending"); // double-gate: only update if still pending
+  } catch (err) {
+    // Log but never throw — commission recalc must not block member assignment.
+    console.error("[recalcPendingSalary] failed:", err);
+  }
+}
+
 export async function createTrainerLogin(staffId: string, email: string, password: string) {
   const ctx = await getAuthContext();
   if (!ctx?.gymId) return { error: "Unauthorized" };
@@ -154,6 +237,9 @@ export async function createMemberAsTrainer(payload: MemberPayload) {
 
   revalidateTag(`members-${ctx.gymId}`);
   revalidateTag(`dashboard-${ctx.gymId}`);
+  revalidateTag(`reports-${ctx.gymId}`);
+  // Recalc commission on the trainer's pending salary record for this month.
+  if (trainerId) await recalcPendingSalary(trainerId, ctx.gymId);
   return { success: true, memberId: member.id };
 }
 
@@ -217,6 +303,15 @@ export async function updateMemberAsTrainer(memberId: string, payload: UpdatePay
 
   revalidateTag(`members-${ctx.gymId}`);
   revalidateTag(`dashboard-${ctx.gymId}`);
+  revalidateTag(`reports-${ctx.gymId}`);
+  // Recalc commission for affected trainer(s). If the trainer changed, recalc both
+  // the old trainer (lost a member) and the new trainer (gained a member).
+  const oldTrainerId = existing.assigned_trainer_id;
+  const newTrainerId = trainerId;
+  if (newTrainerId) await recalcPendingSalary(newTrainerId, ctx.gymId);
+  if (oldTrainerId && oldTrainerId !== newTrainerId) {
+    await recalcPendingSalary(oldTrainerId, ctx.gymId);
+  }
   return { success: true };
 }
 
@@ -601,6 +696,12 @@ export async function transferTrainerClients(
   revalidateTag(`members-${gymId}`);
   revalidateTag(`staff-${gymId}`);
   revalidateTag(`dashboard-${gymId}`);
+  revalidateTag(`reports-${gymId}`);
+  // Recalc commission for both trainers: src lost members, dest gained them.
+  await Promise.all([
+    recalcPendingSalary(fromTrainerId, gymId),
+    recalcPendingSalary(toTrainerId, gymId),
+  ]);
 
   return { transferredCount, goalsTransferred };
 }
@@ -682,6 +783,7 @@ export async function deleteStaffMember(staffId: string): Promise<{
   revalidateTag(`staff-${gymId}`);
   revalidateTag(`members-${gymId}`);
   revalidateTag(`dashboard-${gymId}`);
+  revalidateTag(`reports-${gymId}`);
 
   return { success: true };
 }

@@ -9,7 +9,8 @@ import type {
   Expense, Bill, Staff, SalaryPayment, CheckIn, GymClass,
   DashboardStats, DashboardMember, RevenueMonth, AgingBucket, TrainerStat,
   MemberGoal, GoalProgressEntry, BodyMetric, MetricSkip, Lead, LeadActivity,
-  Referrer, SocialManager, SocialLead,
+  Referrer, SocialManager, SocialLead, TrainerReportRow, MemberReportSummary,
+  DefaulterRow, PlanDistributionRow,
 } from "@/types";
 
 export const getAuthContext = cache(async () => {
@@ -320,7 +321,7 @@ async function _fetchMembers(gymId: string) {
       .eq("gym_id", gymId)
       .order("created_at", { ascending: false }),
     supabase.from("pulse_membership_plans").select("*").eq("gym_id", gymId).eq("is_active", true).order("name"),
-    supabase.from("pulse_staff").select("id,full_name,role").eq("gym_id", gymId).eq("status", "active").eq("role", "trainer"),
+    supabase.from("pulse_staff").select("id,full_name,role,commission_percentage,commission_floor").eq("gym_id", gymId).eq("status", "active").eq("role", "trainer"),
     supabase.from("pulse_referrers").select("id,full_name,commission_type,commission_value").eq("gym_id", gymId).eq("status", "active").order("full_name"),
     supabase.from("pulse_gyms").select("compliance_settings").eq("id", gymId).single(),
   ]);
@@ -350,7 +351,7 @@ async function _fetchMembers(gymId: string) {
     expired:   all.filter((m) => m.status === "expired" || m.status === "cancelled"),
     defaulterThreshold: threshold,
     plans:     (plans ?? []) as MembershipPlan[],
-    staff:     (staff ?? []) as Pick<Staff, "id" | "full_name" | "role">[],
+    staff:     (staff ?? []) as Pick<Staff, "id" | "full_name" | "role" | "commission_percentage" | "commission_floor">[],
     referrers: (referrers ?? []) as Pick<Referrer, "id" | "full_name" | "commission_type" | "commission_value">[],
   };
 }
@@ -847,7 +848,13 @@ async function _fetchReports(gymId: string) {
   // Bound queries to the 12-month report window so they don't grow unbounded.
   const windowStart = ranges[0].start;
   const windowEnd = ranges[11].end;
-  const [paymentsRes, expensesRes, membersRes, salariesRes] = await Promise.all([
+  const currentMonthKey = ranges[11].monthKey;
+  const today    = formatDateInput(now);
+  const in7Days  = formatDateInput(new Date(now.getTime() +  7 * 86400000));
+  const in15Days = formatDateInput(new Date(now.getTime() + 15 * 86400000));
+  const in30Days = formatDateInput(new Date(now.getTime() + 30 * 86400000));
+
+  const [paymentsRes, expensesRes, membersRes, salariesRes, trainersRes, currentSalariesRes, shiftsRes, plansRes] = await Promise.all([
     supabase.from("pulse_payments").select("payment_date,total_amount,status")
       .eq("gym_id", gymId)
       .gte("payment_date", windowStart)
@@ -856,19 +863,39 @@ async function _fetchReports(gymId: string) {
       .eq("gym_id", gymId)
       .gte("date", windowStart)
       .lte("date", windowEnd),
-    supabase.from("pulse_members").select("join_date,plan_expiry_date,status")
-      .eq("gym_id", gymId)
-      .lte("join_date", windowEnd),
+    supabase.from("pulse_members")
+      .select("id,full_name,phone,status,monthly_fee,assigned_trainer_id,assigned_shift_id,join_date,plan_expiry_date,plan_id,defaulter_since")
+      .eq("gym_id", gymId),
     supabase.from("pulse_salary_payments").select("for_month,total_amount,status")
       .eq("gym_id", gymId)
       .gte("for_month", ranges[0].monthKey)
       .lte("for_month", ranges[11].monthKey),
+    supabase.from("pulse_staff")
+      .select("id,full_name,monthly_salary,commission_percentage,commission_floor")
+      .eq("gym_id", gymId)
+      .eq("role", "trainer")
+      .eq("status", "active"),
+    supabase.from("pulse_salary_payments")
+      .select("staff_id,base_salary,commission_amount,total_amount,status")
+      .eq("gym_id", gymId)
+      .eq("for_month", currentMonthKey),
+    supabase.from("pulse_trainer_shifts")
+      .select("id,staff_id,commission_type,commission_value")
+      .eq("gym_id", gymId),
+    supabase.from("pulse_membership_plans")
+      .select("id,name")
+      .eq("gym_id", gymId),
   ]);
 
   const payments = paymentsRes.data ?? [];
   const expenses = expensesRes.data ?? [];
   const members = membersRes.data ?? [];
   const salaries = salariesRes.data ?? [];
+  const trainers = trainersRes.data ?? [];
+  const currentSalaries = currentSalariesRes.data ?? [];
+  const shiftMap = Object.fromEntries(
+    (shiftsRes.data ?? []).map((s) => [s.id, s as { id: string; staff_id: string; commission_type: string; commission_value: number }])
+  );
 
   const revenueByMonth: RevenueMonth[] = ranges.map(({ month, monthKey, start, end }) => {
     const monthPayments = payments.filter((p) => p.payment_date && p.payment_date >= start && p.payment_date <= end);
@@ -891,7 +918,6 @@ async function _fetchReports(gymId: string) {
     };
   });
 
-  const today = formatDateInput(now);
   const overduePayments = payments.filter((p) => p.status === "pending" || p.status === "overdue");
   const aging: { d30: AgingBucket; d60: AgingBucket; d90: AgingBucket; d90plus: AgingBucket } = {
     d30: { count: 0, amount: 0 },
@@ -910,7 +936,123 @@ async function _fetchReports(gymId: string) {
     else                   { aging.d90plus.count++; aging.d90plus.amount += amt; }
   });
 
-  return { revenueByMonth, aging };
+  // ── Trainer report rows ────────────────────────────────
+  const trainerRows: TrainerReportRow[] = trainers.map((t) => {
+    const activeM = members.filter((m) => m.assigned_trainer_id === t.id && m.status === "active");
+    const monthlyFeeGenerated = activeM.reduce((s, m) => s + Number(m.monthly_fee), 0);
+    const salaryRecord = currentSalaries.find((s) => s.staff_id === t.id);
+    const baseSalary = salaryRecord ? Number(salaryRecord.base_salary) : Number(t.monthly_salary);
+    // If salary has been generated use the stored commission_amount (exact).
+    // Otherwise compute an estimate using the same algorithm as salary generation:
+    // commission floor → shift override → default commission %.
+    const commissionEarned = salaryRecord
+      ? Number(salaryRecord.commission_amount)
+      : activeM.reduce((sum, m) => {
+          const fee = Number(m.monthly_fee);
+          const commissionFloor = Number(t.commission_floor ?? 0);
+          const commissionPct = Number(t.commission_percentage ?? 0);
+          const netFee = Math.max(0, fee - commissionFloor);
+          const shift = (m as { assigned_shift_id?: string | null }).assigned_shift_id
+            ? shiftMap[(m as { assigned_shift_id?: string }).assigned_shift_id!]
+            : null;
+          if (shift) {
+            return sum + (shift.commission_type === "flat"
+              ? shift.commission_value
+              : Math.round(netFee * shift.commission_value / 100));
+          }
+          return sum + (commissionPct > 0
+            ? Math.round(netFee * commissionPct / 100)
+            : 0);
+        }, 0);
+    const totalCost = baseSalary + commissionEarned;
+    return {
+      id: t.id,
+      name: t.full_name,
+      activeMembers: activeM.length,
+      monthlyFeeGenerated,
+      baseSalary,
+      commissionEarned,
+      totalCost,
+      netContribution: monthlyFeeGenerated - totalCost,
+      salaryGenerated: !!salaryRecord,
+    };
+  }).sort((a, b) => b.netContribution - a.netContribution);
+
+  // ── Member summary ─────────────────────────────────────
+  const thisMonthStart = ranges[11].start;
+  const lastMonthStart = ranges[10].start;
+  const lastMonthEnd   = ranges[10].end;
+
+  const planNameMap = Object.fromEntries((plansRes.data ?? []).map((p) => [p.id, p.name]));
+  const activeM = members.filter((m) => m.status === "active");
+
+  const toExpiryRow = (m: typeof members[0]) => ({
+    id: m.id,
+    name: m.full_name,
+    phone: m.phone ?? null,
+    planExpiry: m.plan_expiry_date!,
+    daysLeft: Math.ceil((new Date(m.plan_expiry_date!).getTime() - new Date(today).getTime()) / 86400000),
+  });
+
+  // Plan distribution (active members only, sorted by member count desc)
+  const planBuckets: Record<string, { name: string; count: number; revenue: number }> = {};
+  activeM.forEach((m) => {
+    const key  = m.plan_id ?? "__none__";
+    const name = m.plan_id ? (planNameMap[m.plan_id] ?? "Unknown Plan") : "No Plan";
+    if (!planBuckets[key]) planBuckets[key] = { name, count: 0, revenue: 0 };
+    planBuckets[key].count   += 1;
+    planBuckets[key].revenue += Number(m.monthly_fee);
+  });
+  const planDistribution: PlanDistributionRow[] = Object.entries(planBuckets)
+    .map(([planId, { name, count, revenue }]) => ({
+      planId: planId === "__none__" ? null : planId,
+      planName: name,
+      memberCount: count,
+      percentage: activeM.length > 0 ? Math.round((count / activeM.length) * 100) : 0,
+      monthlyRevenue: revenue,
+    }))
+    .sort((a, b) => b.memberCount - a.memberCount);
+
+  // Defaulter list sorted oldest first
+  const defaulterList: DefaulterRow[] = members
+    .filter((m) => m.status === "defaulter")
+    .map((m) => ({
+      id: m.id,
+      name: m.full_name,
+      phone: m.phone ?? null,
+      defaulterSince: (m as { defaulter_since?: string | null }).defaulter_since ?? null,
+      monthlyFee: Number(m.monthly_fee),
+    }))
+    .sort((a, b) => (a.defaulterSince ?? "").localeCompare(b.defaulterSince ?? ""));
+
+  const memberSummary: MemberReportSummary = {
+    total:        members.length,
+    active:       activeM.length,
+    frozen:       members.filter((m) => m.status === "frozen" || m.status === "on_hold").length,
+    defaulters:   members.filter((m) => m.status === "defaulter").length,
+    lapsed:       members.filter((m) => m.status === "expired" || m.status === "cancelled").length,
+    newThisMonth: members.filter((m) => m.join_date >= thisMonthStart).length,
+    newLastMonth: members.filter((m) => m.join_date >= lastMonthStart && m.join_date <= lastMonthEnd).length,
+    avgMonthlyFee: activeM.length > 0
+      ? Math.round(activeM.reduce((s, m) => s + Number(m.monthly_fee), 0) / activeM.length)
+      : 0,
+    expiringIn7Days: members
+      .filter((m) => m.status === "active" && m.plan_expiry_date && m.plan_expiry_date >= today && m.plan_expiry_date <= in7Days)
+      .map(toExpiryRow)
+      .sort((a, b) => a.daysLeft - b.daysLeft),
+    expiringIn8To15Days: members
+      .filter((m) => m.status === "active" && m.plan_expiry_date && m.plan_expiry_date > in7Days && m.plan_expiry_date <= in15Days)
+      .map(toExpiryRow)
+      .sort((a, b) => a.daysLeft - b.daysLeft),
+    expiringIn16To30Days: members
+      .filter((m) => m.status === "active" && m.plan_expiry_date && m.plan_expiry_date > in15Days && m.plan_expiry_date <= in30Days)
+      .map(toExpiryRow)
+      .sort((a, b) => a.daysLeft - b.daysLeft),
+    defaulterList,
+    planDistribution,
+  };
+
+  return { revenueByMonth, aging, trainerRows, memberSummary };
 }
 
 export async function getReportsData() {
@@ -1222,3 +1364,34 @@ export async function getComplianceSettingsForGym(gymId: string) {
     totalPt,
   };
 }
+
+// ── Smart Earn ────────────────────────────────────────────────────────────────
+
+export async function getSmartEarnData() {
+  const ctx = await getAuthContext();
+  if (!ctx?.gymId) return { gymId: null, trainers: [], members: [], plans: [] };
+  const admin = createAdminClient();
+  const [trainersRes, membersRes, plansRes] = await Promise.all([
+    admin.from("pulse_staff")
+      .select("id,full_name,commission_percentage,commission_floor")
+      .eq("gym_id", ctx.gymId)
+      .eq("role", "trainer")
+      .eq("status", "active")
+      .order("full_name"),
+    admin.from("pulse_members")
+      .select("id,assigned_trainer_id,plan_id,monthly_fee,join_date,plan_expiry_date,status,updated_at")
+      .eq("gym_id", ctx.gymId),
+    admin.from("pulse_membership_plans")
+      .select("id,name,price")
+      .eq("gym_id", ctx.gymId)
+      .eq("is_active", true)
+      .order("price"),
+  ]);
+  return {
+    gymId: ctx.gymId,
+    trainers: (trainersRes.data ?? []) as { id: string; full_name: string; commission_percentage: number | null; commission_floor: number | null }[],
+    members:  (membersRes.data  ?? []) as { id: string; assigned_trainer_id: string | null; plan_id: string | null; monthly_fee: number; join_date: string; plan_expiry_date: string | null; status: string; updated_at: string }[],
+    plans:    (plansRes.data    ?? []) as { id: string; name: string; price: number }[],
+  };
+}
+

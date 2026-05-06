@@ -38,6 +38,7 @@ export function SettingsClient() {
   const [gymForm, setGymForm] = useState({
     name: "", address: "", city: "", area: "", phone: "", email: "",
     monthly_revenue_target: "",
+    default_trainer_capacity: "20",
   });
   const [listingForm, setListingForm] = useState({
     listing_enabled: false,
@@ -154,6 +155,7 @@ export function SettingsClient() {
         phone: gym.phone ?? "",
         email: gym.email ?? "",
         monthly_revenue_target: gym.monthly_revenue_target?.toString() ?? "",
+        default_trainer_capacity: ((gym as typeof gym & { default_trainer_capacity?: number }).default_trainer_capacity ?? 20).toString(),
       });
       const cs = (gym as typeof gym & { compliance_settings?: Record<string, unknown> | null }).compliance_settings;
       setDefaulterThreshold(Math.max(1, Math.min(6, (cs?.defaulter_threshold_months as number) ?? 2)));
@@ -191,6 +193,7 @@ export function SettingsClient() {
       phone: gymForm.phone || null,
       email: gymForm.email || null,
       monthly_revenue_target: parseFloat(gymForm.monthly_revenue_target) || 0,
+      default_trainer_capacity: Math.max(1, parseInt(gymForm.default_trainer_capacity) || 20),
     }).eq("id", gymId);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
     else toast({ title: "Gym settings saved" });
@@ -355,6 +358,19 @@ export function SettingsClient() {
               />
               <p className="text-xs text-muted-foreground">
                 Used to show progress bar on dashboard. Leave 0 to hide.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Default Trainer Member Capacity</Label>
+              <Input
+                type="number"
+                placeholder="20"
+                min="1"
+                value={gymForm.default_trainer_capacity}
+                onChange={(e) => setGymForm({ ...gymForm, default_trainer_capacity: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                Default max members per trainer for Profit Insights. Override per trainer in Trainers settings.
               </p>
             </div>
             <Button type="submit" disabled={savingGym} className="gap-2">
