@@ -595,22 +595,17 @@ export async function getCheckIns() {
       .select("id,full_name,member_number,photo_url,status,plan_expiry_date,assigned_trainer_id,trainer:pulse_staff(full_name)")
       .eq("gym_id", gymId)
       .eq("status", "active")
-      .not("assigned_trainer_id", "is", null),
+      .order("full_name")
+      .limit(500),
     supabase.from("pulse_unlinked_punches")
       .select("id,device_user_id,device_serial,punched_at")
       .eq("gym_id", gymId)
       .order("punched_at", { ascending: false }),
   ]);
 
-  // Filter check-ins to PT clients only (drop SELF check-ins from owner view).
-  const ptCheckIns = (checkIns ?? []).filter((c) => {
-    const m = (c as { member?: { assigned_trainer_id?: string | null } | null }).member;
-    return m?.assigned_trainer_id != null;
-  });
-
   return {
     gymId,
-    checkIns: ptCheckIns as CheckIn[],
+    checkIns: (checkIns ?? []) as CheckIn[],
     members: (members ?? []) as Pick<Member, "id" | "full_name" | "member_number" | "photo_url" | "status" | "plan_expiry_date">[],
     unlinked: (unlinked ?? []) as { id: string; device_user_id: string; device_serial: string; punched_at: string }[],
   };

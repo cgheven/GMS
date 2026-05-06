@@ -292,3 +292,44 @@ export async function updateMember(memberId: string, payload: Record<string, unk
   revalidate(ctx.gymId);
   return { success: true };
 }
+
+// ── Link device user to member ─────────────────────────────────────────────────
+
+export async function linkDeviceUser(memberId: string, deviceUserId: string, unlinkedId: string) {
+  const ctx = await requireOwner();
+  if (!ctx) return { error: "Unauthorized" };
+  const admin = createAdminClient();
+
+  const { data: member } = await admin
+    .from("pulse_members")
+    .select("full_name, device_user_id")
+    .eq("id", memberId)
+    .eq("gym_id", ctx.gymId)
+    .single();
+
+  if (!member) return { error: "Member not found" };
+  if (member.device_user_id !== null)
+    return { error: `${member.full_name} is already linked to device user #${member.device_user_id}` };
+
+  const { error: e1 } = await admin.from("pulse_members")
+    .update({ device_user_id: deviceUserId })
+    .eq("id", memberId)
+    .eq("gym_id", ctx.gymId);
+  if (e1) return { error: e1.message };
+
+  const { error: e2 } = await admin.from("pulse_unlinked_punches")
+    .delete()
+    .eq("id", unlinkedId)
+    .eq("gym_id", ctx.gymId);
+  if (e2) return { error: e2.message };
+
+  await writeAuditLog({
+    actor_id: ctx.user.id, actor_email: ctx.user.email ?? "",
+    action: "member.device_linked", entity: "member", entity_id: memberId,
+    meta: { device_user_id: deviceUserId, unlinked_punch_id: unlinkedId },
+  });
+
+  revalidate(ctx.gymId);
+  return { success: true };
+}
+

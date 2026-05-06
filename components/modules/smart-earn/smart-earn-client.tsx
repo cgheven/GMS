@@ -224,7 +224,7 @@ export function SmartEarnClient({ trainers, members, plans, defaultTrainerCapaci
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5 sm:space-y-8">
 
       {/* ── Header ── */}
       <div>
@@ -250,14 +250,14 @@ export function SmartEarnClient({ trainers, members, plans, defaultTrainerCapaci
       )}
 
       {/* ── Simulator ── */}
-      <section className="space-y-4">
-        <div className="rounded-2xl border border-amber-500/25 bg-card p-5 space-y-4">
+      <section className="space-y-3 sm:space-y-4">
+        <div className="rounded-2xl border border-amber-500/25 bg-card p-4 sm:p-5 space-y-3 sm:space-y-4">
           <div>
-            <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-3">
+            <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2 sm:mb-3">
               What will this member pay per month?
             </p>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-muted-foreground">Rs.</span>
+              <span className="text-lg sm:text-2xl font-bold text-muted-foreground">Rs.</span>
               <input
                 type="number"
                 value={simInput}
@@ -266,21 +266,21 @@ export function SmartEarnClient({ trainers, members, plans, defaultTrainerCapaci
                   const v = Number(e.target.value);
                   if (!isNaN(v) && v >= 0) setSimFee(v);
                 }}
-                className="flex-1 bg-transparent text-4xl font-bold text-foreground outline-none tabular-nums min-w-0"
+                className="flex-1 bg-transparent text-3xl sm:text-4xl font-bold text-foreground outline-none tabular-nums min-w-0"
                 placeholder="0"
                 min={0}
                 step={500}
               />
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex gap-2 overflow-x-auto pb-0.5 sm:flex-wrap sm:overflow-visible">
             {[3000, 4000, 5000, 6000, 8000, 10000].map((v) => (
               <button
                 key={v}
                 type="button"
                 onClick={() => { setSimFee(v); setSimInput(String(v)); }}
                 className={cn(
-                  "text-xs px-3 py-1.5 rounded-full border transition-all",
+                  "text-xs px-3 py-1.5 rounded-full border transition-all shrink-0",
                   simFee === v
                     ? "bg-amber-500/15 border-amber-500/40 text-amber-400 font-semibold"
                     : "border-sidebar-border text-muted-foreground hover:border-amber-500/30 hover:text-foreground"
@@ -304,7 +304,7 @@ export function SmartEarnClient({ trainers, members, plans, defaultTrainerCapaci
 
           return (
             <div className="space-y-3">
-              <p className="text-xs text-muted-foreground px-1">
+              <p className="hidden sm:block text-xs text-muted-foreground px-1">
                 {hasLTV ? "Ranked by total you earn over the member's expected stay" : "Ranked by monthly profit — add more members to unlock lifetime value ranking"}
               </p>
 

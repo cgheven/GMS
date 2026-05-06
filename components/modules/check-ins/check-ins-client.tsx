@@ -1,11 +1,12 @@
 "use client";
 import { useState, useMemo } from "react";
-import { LogIn, Search, X, CheckCircle2, Users, RefreshCw, Cpu, UserPlus, ChevronRight } from "lucide-react";
+import { LogIn, Search, X, CheckCircle2, Users, RefreshCw, Cpu, UserPlus, ChevronRight, Link } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { cn, formatDateInput } from "@/lib/utils";
+import { linkDeviceUser } from "@/app/actions/members";
 import type { CheckIn, Member } from "@/types";
 
 type MemberLite = Pick<Member, "id" | "full_name" | "member_number" | "photo_url" | "status" | "plan_expiry_date"> & {
@@ -48,7 +49,9 @@ export function CheckInsClient({ gymId, checkIns: initial, members, unlinked: in
   const [unlinked, setUnlinked] = useState<UnlinkedPunch[]>(initialUnlinked);
   const [search, setSearch] = useState("");
   const [marking, setMarking] = useState<string | null>(null);
-  const [registeringId, setRegisteringId] = useState<string | null>(null);
+  const [linkingId, setLinkingId] = useState<string | null>(null);
+  const [linkSearch, setLinkSearch] = useState("");
+  const [linkingInProgress, setLinkingInProgress] = useState<string | null>(null);
   const checkedInIds = useMemo(() => new Set(checkIns.map((c) => c.member_id)), [checkIns]);
 
   const matches = useMemo(() => {
@@ -58,6 +61,28 @@ export function CheckInsClient({ gymId, checkIns: initial, members, unlinked: in
       .filter((m) => m.full_name.toLowerCase().includes(q) || (m.member_number ?? "").toLowerCase().includes(q))
       .slice(0, 6);
   }, [search, members]);
+
+  const linkMatches = useMemo(() => {
+    if (!linkSearch.trim()) return [] as MemberLite[];
+    const q = linkSearch.toLowerCase();
+    return members
+      .filter((m) => m.full_name.toLowerCase().includes(q) || (m.member_number ?? "").toLowerCase().includes(q))
+      .slice(0, 5);
+  }, [linkSearch, members]);
+
+  async function handleLink(member: MemberLite, unlinkedPunch: UnlinkedPunch) {
+    setLinkingInProgress(unlinkedPunch.id);
+    const result = await linkDeviceUser(member.id, unlinkedPunch.device_user_id, unlinkedPunch.id);
+    setLinkingInProgress(null);
+    if (result.error) {
+      toast({ title: "Error linking member", description: result.error, variant: "destructive" });
+      return;
+    }
+    setUnlinked((prev) => prev.filter((u) => u.id !== unlinkedPunch.id));
+    setLinkingId(null);
+    setLinkSearch("");
+    toast({ title: `${member.full_name} linked`, description: `Device User #${unlinkedPunch.device_user_id} → ${member.full_name}` });
+  }
 
   async function markCheckIn(member: MemberLite) {
     if (!gymId || checkedInIds.has(member.id)) return;
@@ -111,54 +136,117 @@ export function CheckInsClient({ gymId, checkIns: initial, members, unlinked: in
           <h1 className="text-3xl font-serif font-normal tracking-tight">Check-ins</h1>
           <p className="text-muted-foreground text-sm mt-1">
             {new Date(today).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
-            <span className="ml-2 text-xs text-muted-foreground/60">· PT clients only</span>
+            <span className="ml-2 text-xs text-muted-foreground/60">· All members</span>
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => window.location.reload()}
-          className="shrink-0 gap-2"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.location.reload()}
+            className="shrink-0 gap-2"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
-      {/* Unlinked punches — new member registration banner */}
+      {/* Unlinked punches — inline link flow */}
       {unlinked.length > 0 && (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/[0.05] overflow-hidden">
           <div className="px-5 py-3 border-b border-amber-500/20 flex items-center gap-2.5">
             <UserPlus className="w-4 h-4 text-amber-400 shrink-0" />
             <p className="text-sm font-semibold text-amber-400">
-              {unlinked.length} new person{unlinked.length !== 1 ? "s" : ""} scanned — complete their registration
+              {unlinked.length} unlinked device punch{unlinked.length !== 1 ? "es" : ""} — link to a member
             </p>
           </div>
           <div className="divide-y divide-amber-500/10">
             {unlinked.map((u) => (
-              <div key={u.id} className="px-5 py-3 flex items-center gap-4">
-                <div className="w-9 h-9 rounded-full bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0">
-                  <Cpu className="w-4 h-4 text-amber-400" />
+              <div key={u.id} className="px-5 py-3 space-y-3">
+                {/* Row info + button */}
+                <div className="flex items-center gap-4">
+                  <div className="w-9 h-9 rounded-full bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0">
+                    <Cpu className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground">Device User #{u.device_user_id}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Scanned at {new Date(u.punched_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                      {" · "}{u.device_serial}
+                    </p>
+                  </div>
+                  {linkingId === u.id ? (
+                    <Button
+                      size="sm"
+                      className="shrink-0 gap-1.5 bg-amber-500/15 border border-amber-500/30 text-amber-400 hover:bg-amber-500/25 hover:text-amber-300"
+                      variant="outline"
+                      onClick={() => { setLinkingId(null); setLinkSearch(""); }}
+                    >
+                      <X className="w-3.5 h-3.5" /> Cancel
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="shrink-0 gap-1.5 bg-amber-500/15 border border-amber-500/30 text-amber-400 hover:bg-amber-500/25 hover:text-amber-300"
+                      variant="outline"
+                      disabled={linkingInProgress === u.id}
+                      onClick={() => { setLinkingId(u.id); setLinkSearch(""); }}
+                    >
+                      <Link className="w-3.5 h-3.5" /> Link to Member
+                    </Button>
+                  )}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground">Device User #{u.device_user_id}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Scanned at {new Date(u.punched_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
-                    {" · "}{u.device_serial}
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  className="shrink-0 gap-1.5 bg-amber-500/15 border border-amber-500/30 text-amber-400 hover:bg-amber-500/25 hover:text-amber-300"
-                  variant="outline"
-                  disabled={registeringId === u.id}
-                  onClick={() => {
-                    setRegisteringId(u.id);
-                    window.location.href = `/members?register_device_user=${u.device_user_id}&unlinked_id=${u.id}`;
-                  }}
-                >
-                  Register Member <ChevronRight className="w-3.5 h-3.5" />
-                </Button>
+
+                {/* Inline search (expanded when this row is active) */}
+                {linkingId === u.id && (
+                  <div className="ml-13 pl-[52px] space-y-2">
+                    <div className="relative max-w-sm">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-amber-400/60" />
+                      <Input
+                        autoFocus
+                        placeholder="Search member by name or ID…"
+                        value={linkSearch}
+                        onChange={(e) => setLinkSearch(e.target.value)}
+                        className="pl-8 pr-8 h-8 text-sm bg-amber-500/[0.06] border-amber-500/25 placeholder:text-amber-400/40 focus-visible:ring-amber-500/40"
+                      />
+                      {linkSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setLinkSearch("")}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-amber-400/60 hover:text-amber-400"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    {linkSearch.trim() && linkMatches.length === 0 && (
+                      <p className="text-xs text-amber-400/60 pl-0.5">No members found</p>
+                    )}
+                    {linkMatches.length > 0 && (
+                      <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] divide-y divide-amber-500/10 max-w-sm">
+                        {linkMatches.map((m) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            disabled={linkingInProgress === u.id}
+                            onClick={() => handleLink(m, u)}
+                            className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-amber-500/10 transition-colors disabled:opacity-50"
+                          >
+                            <div className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-xs font-bold text-amber-400 shrink-0">
+                              {m.full_name[0]?.toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground truncate">{m.full_name}</p>
+                              <p className="text-xs text-muted-foreground">{m.member_number ? `#${m.member_number}` : "—"}</p>
+                            </div>
+                            <ChevronRight className="w-3.5 h-3.5 text-amber-400/60 shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -184,7 +272,7 @@ export function CheckInsClient({ gymId, checkIns: initial, members, unlinked: in
               <Users className="w-4 h-4 text-foreground" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">PT clients</p>
+              <p className="text-xs text-muted-foreground">Active members</p>
               <p className="text-2xl font-bold text-foreground">{members.length}</p>
             </div>
           </div>
