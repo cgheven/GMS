@@ -3,6 +3,7 @@ import { useState, useMemo } from "react";
 import { Plus, Receipt, Search, Edit2, Trash2, TrendingDown, Filter } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
+import { revalidateDashboard } from "@/app/actions/revalidate";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -158,7 +159,12 @@ export function ExpensesClient({ gymId, expenses: initialExpenses, monthFilter: 
       ? await supabase.from("pulse_expenses").update(payload).eq("id", editing.id)
       : await supabase.from("pulse_expenses").insert(payload);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-    else { toast({ title: editing ? "Updated" : "Added" }); setDialogOpen(false); reload(); }
+    else {
+      toast({ title: editing ? "Updated" : "Added" });
+      setDialogOpen(false);
+      reload();
+      revalidateDashboard().catch(() => {});
+    }
     setSaving(false);
   }
 
@@ -173,7 +179,11 @@ export function ExpensesClient({ gymId, expenses: initialExpenses, monthFilter: 
     const supabase = createClient();
     const { error } = await supabase.from("pulse_expenses").delete().eq("id", id);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-    else { toast({ title: "Deleted" }); reload(); }
+    else {
+      toast({ title: "Deleted" });
+      reload();
+      revalidateDashboard().catch(() => {});
+    }
   }
 
   const total = useMemo(() => filtered.reduce((s, e) => s + Number(e.amount), 0), [filtered]);

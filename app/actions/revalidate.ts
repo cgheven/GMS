@@ -1,14 +1,24 @@
 "use server";
 import { revalidateTag } from "next/cache";
-import { getAuthContext } from "@/lib/data";
+import { getAuthContext, getTrainerContext } from "@/lib/data";
 
 // Cache tags used in lib/data.ts unstable_cache() wrappers.
 // Call the matching helper after a mutation so the next page load returns fresh data
 // instead of waiting for the TTL window to expire.
 
 async function gymTag(prefix: string) {
-  const ctx = await getAuthContext();
-  if (ctx?.gymId) revalidateTag(`${prefix}-${ctx.gymId}`);
+  // Try owner context first (most common path)
+  const ownerCtx = await getAuthContext();
+  if (ownerCtx?.gymId) {
+    revalidateTag(`${prefix}-${ownerCtx.gymId}`);
+    return;
+  }
+  // Fall back to trainer context — trainers can also trigger invalidations
+  // (e.g., recording a payment for one of their members affects owner's dashboard)
+  const trainerCtx = await getTrainerContext();
+  if (trainerCtx?.gymId) {
+    revalidateTag(`${prefix}-${trainerCtx.gymId}`);
+  }
 }
 
 export async function revalidateDashboard() { await gymTag("dashboard"); }

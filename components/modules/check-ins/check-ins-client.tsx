@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { cn, formatDateInput } from "@/lib/utils";
 import { linkDeviceUser } from "@/app/actions/members";
+import { revalidateDashboard } from "@/app/actions/revalidate";
 import type { CheckIn, Member } from "@/types";
 
 type MemberLite = Pick<Member, "id" | "full_name" | "member_number" | "photo_url" | "status" | "plan_expiry_date"> & {
@@ -124,6 +125,7 @@ export function CheckInsClient({ gymId, checkIns: initial, members, unlinked: in
     }
     setCheckIns((prev) => [data as CheckInRow, ...prev.filter((c) => c.id !== optimistic.id)]);
     toast({ title: `${member.full_name} checked in` });
+    revalidateDashboard().catch(() => {});
   }
 
   const today = formatDateInput(new Date());

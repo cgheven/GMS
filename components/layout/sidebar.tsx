@@ -11,72 +11,75 @@ import {
 import { cn } from "@/lib/utils";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 
+// prefetch=true on the 5 most-used routes (kills the 17-link prefetch storm).
+// The rest fall back to Next.js' on-hover prefetch behavior — fast nav still works.
 const navGroups = [
   {
     label: "Overview",
     items: [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, prefetch: true  },
     ],
   },
   {
     label: "Members",
     items: [
-      { href: "/members",   label: "Members",   icon: Users      },
-      { href: "/check-ins", label: "Check-ins", icon: LogIn      },
-      { href: "/plans",     label: "Plans",     icon: Zap        },
-      { href: "/payments",  label: "Payments",  icon: CreditCard },
+      { href: "/members",   label: "Members",   icon: Users,      prefetch: true  },
+      { href: "/check-ins", label: "Check-ins", icon: LogIn,      prefetch: true  },
+      { href: "/plans",     label: "Plans",     icon: Zap,        prefetch: false },
+      { href: "/payments",  label: "Payments",  icon: CreditCard, prefetch: true  },
     ],
   },
   {
     label: "Growth",
     items: [
-      { href: "/leads",        label: "Leads",           icon: Target     },
-      { href: "/smart-earn",   label: "Profit Insights", icon: TrendingUp },
-      { href: "/referrers",    label: "Partners",        icon: HandCoins  },
-      { href: "/social-media", label: "Social Media",    icon: Instagram  },
+      { href: "/leads",        label: "Leads",           icon: Target,     prefetch: true  },
+      { href: "/smart-earn",   label: "Profit Insights", icon: TrendingUp, prefetch: false },
+      { href: "/referrers",    label: "Partners",        icon: HandCoins,  prefetch: false },
+      { href: "/social-media", label: "Social Media",    icon: Instagram,  prefetch: false },
     ],
   },
   {
     label: "Training",
     items: [
-      { href: "/classes",  label: "Classes",  icon: CalendarDays },
-      { href: "/trainers", label: "Trainers", icon: Dumbbell     },
+      { href: "/classes",  label: "Classes",  icon: CalendarDays, prefetch: false },
+      { href: "/trainers", label: "Trainers", icon: Dumbbell,     prefetch: false },
     ],
   },
   {
     label: "Operations",
     items: [
-      { href: "/staff",     label: "Staff",     icon: UserCog  },
-      { href: "/inventory", label: "Inventory", icon: Package  },
-      { href: "/expenses",  label: "Expenses",  icon: Receipt  },
-      { href: "/bills",     label: "Bills",     icon: FileText },
+      { href: "/staff",     label: "Staff",     icon: UserCog,  prefetch: false },
+      { href: "/inventory", label: "Inventory", icon: Package,  prefetch: false },
+      { href: "/expenses",  label: "Expenses",  icon: Receipt,  prefetch: false },
+      { href: "/bills",     label: "Bills",     icon: FileText, prefetch: false },
     ],
   },
   {
     label: "Analytics",
     items: [
-      { href: "/reports",            label: "Reports",     icon: BarChart3 },
-      { href: "/reports/compliance", label: "Compliance",  icon: FileText  },
-      { href: "/leaderboard",        label: "Leaderboard", icon: Trophy    },
+      { href: "/reports",            label: "Reports",     icon: BarChart3, prefetch: false },
+      { href: "/reports/compliance", label: "Compliance",  icon: FileText,  prefetch: false },
+      { href: "/leaderboard",        label: "Leaderboard", icon: Trophy,    prefetch: false },
     ],
   },
   {
     label: "System",
     items: [
-      { href: "/settings", label: "Settings",     icon: Settings },
-      { href: "/find",     label: "Gym Directory", icon: Globe    },
+      { href: "/settings", label: "Settings",      icon: Settings, prefetch: false },
+      { href: "/find",     label: "Gym Directory", icon: Globe,    prefetch: false },
     ],
   },
 ];
 
-interface NavLinkProps { href: string; label: string; icon: typeof LayoutDashboard; pathname: string; onClose: () => void; }
+interface NavLinkProps { href: string; label: string; icon: typeof LayoutDashboard; pathname: string; onClose: () => void; prefetch?: boolean; }
 
-const NavLink = memo(function NavLink({ href, label, icon: Icon, pathname, onClose }: NavLinkProps) {
+const NavLink = memo(function NavLink({ href, label, icon: Icon, pathname, onClose, prefetch = false }: NavLinkProps) {
   const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
   return (
     <Link
       href={href}
       onClick={onClose}
+      prefetch={prefetch}
       className={cn(
         "relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group",
         active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-white/5 hover:text-foreground"

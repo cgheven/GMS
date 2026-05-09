@@ -3,6 +3,7 @@ import { useState, useMemo } from "react";
 import { Plus, FileText, Search, Edit2, Trash2, CheckCircle2, Clock, AlertTriangle, Zap } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
+import { revalidateDashboard } from "@/app/actions/revalidate";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -112,7 +113,12 @@ export function BillsClient({ gymId, bills: initialBills }: Props) {
       ? await supabase.from("pulse_bills").update(payload).eq("id", editing.id)
       : await supabase.from("pulse_bills").insert(payload);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-    else { toast({ title: editing ? "Bill updated" : "Bill added" }); setDialogOpen(false); reload(); }
+    else {
+      toast({ title: editing ? "Bill updated" : "Bill added" });
+      setDialogOpen(false);
+      reload();
+      revalidateDashboard().catch(() => {});
+    }
     setSaving(false);
   }
 
@@ -120,7 +126,11 @@ export function BillsClient({ gymId, bills: initialBills }: Props) {
     const supabase = createClient();
     const { error } = await supabase.from("pulse_bills").update({ status: "paid", paid_date: formatDateInput(new Date()) }).eq("id", bill.id);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-    else { toast({ title: "Marked as paid" }); reload(); }
+    else {
+      toast({ title: "Marked as paid" });
+      reload();
+      revalidateDashboard().catch(() => {});
+    }
   }
 
   async function handleDelete(id: string) {
@@ -128,7 +138,11 @@ export function BillsClient({ gymId, bills: initialBills }: Props) {
     const supabase = createClient();
     const { error } = await supabase.from("pulse_bills").delete().eq("id", id);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-    else { toast({ title: "Deleted" }); reload(); }
+    else {
+      toast({ title: "Deleted" });
+      reload();
+      revalidateDashboard().catch(() => {});
+    }
   }
 
   const totals = useMemo(() => ({

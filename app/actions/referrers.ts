@@ -149,5 +149,6 @@ export async function markReferralPaid(referralId: string) {
     .eq("gym_id", ctx.gymId);
   if (error) return { error: error.message };
   revalidateTag(`referrers-${ctx.gymId}`);
+  revalidateTag(`dashboard-${ctx.gymId}`);
   return { success: true };
 }

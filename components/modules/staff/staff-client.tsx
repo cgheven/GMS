@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { createTrainerLogin, removeTrainerLogin, transferTrainerClients, deleteStaffMember } from "@/app/actions/trainer";
 import { resetStaffPassword } from "@/app/actions/account";
-import { revalidateSmartEarn } from "@/app/actions/revalidate";
+import { revalidateSmartEarn, revalidateDashboard } from "@/app/actions/revalidate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -358,7 +358,12 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
       ? await supabase.from("pulse_staff").update(payload).eq("id", editing.id)
       : await supabase.from("pulse_staff").insert(payload);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-    else { toast({ title: editing ? "Updated" : "Staff added" }); setDialogOpen(false); reloadStaff(); }
+    else {
+      toast({ title: editing ? "Updated" : "Staff added" });
+      setDialogOpen(false);
+      reloadStaff();
+      revalidateDashboard().catch(() => {});
+    }
     setSaving(false);
   }
 
@@ -478,7 +483,12 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
       receipt_number: payForm.receipt,
     }).eq("id", payDialog.id);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-    else { toast({ title: "Salary paid" }); setPayDialog(null); await reloadSalaries(selectedMonth); }
+    else {
+      toast({ title: "Salary paid" });
+      setPayDialog(null);
+      await reloadSalaries(selectedMonth);
+      revalidateDashboard().catch(() => {});
+    }
     setPaying(false);
   }
 

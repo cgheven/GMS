@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { createMemberAsTrainer, updateMemberAsTrainer, checkInMemberAsTrainer, checkMemberByPhone } from "@/app/actions/trainer";
+import { revalidateDashboard } from "@/app/actions/revalidate";
 import { MemberDetailDialog } from "./member-detail-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -376,6 +377,7 @@ export function TrainerClient({ staff, gymId, gymName, reminderTemplate, payment
         setPayments((prev) => prev.map((p) => p.id === payment.id ? payment : p));
       } else {
         toast({ title: "Payment recorded" });
+        revalidateDashboard().catch(() => {});
       }
     } else {
       setPayDialog(null);
@@ -403,6 +405,7 @@ export function TrainerClient({ staff, gymId, gymName, reminderTemplate, payment
       } else {
         toast({ title: "Payment recorded" });
         setPayments((prev) => [newRow as Payment, ...prev]);
+        revalidateDashboard().catch(() => {});
       }
     }
     setSaving(false);

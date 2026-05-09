@@ -331,7 +331,11 @@ export async function getDashboardData() {
   const ctx = await getAuthContext();
   if (!ctx?.gymId) return null;
   const { gymId, gym } = ctx;
-  const data = await _fetchDashboard(gymId, gym);
+  const data = await unstable_cache(
+    () => _fetchDashboard(gymId, gym),
+    ["dashboard", gymId],
+    { revalidate: 60, tags: [`dashboard-${gymId}`] }
+  )();
   return { gymId, ...data };
 }
 

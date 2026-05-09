@@ -436,34 +436,37 @@ export async function createGoal(memberId: string, payload: GoalInput) {
     .select("*")
     .single();
   if (error) return { error: error.message };
+  revalidateTag(`dashboard-${ctx.gymId}`);
   return { success: true, goal: data };
 }
 
 export async function updateGoal(goalId: string, payload: Partial<GoalInput> & { status?: "active" | "achieved" | "paused" | "abandoned" }) {
   const v = await verifyOwnsGoal(goalId);
   if ("error" in v) return { error: v.error };
-  const { admin } = v;
+  const { ctx, admin } = v;
   const { error } = await admin
     .from("pulse_member_goals")
     .update({ ...payload, updated_at: new Date().toISOString() })
     .eq("id", goalId);
   if (error) return { error: error.message };
+  revalidateTag(`dashboard-${ctx.gymId}`);
   return { success: true };
 }
 
 export async function deleteGoal(goalId: string) {
   const v = await verifyOwnsGoal(goalId);
   if ("error" in v) return { error: v.error };
-  const { admin } = v;
+  const { ctx, admin } = v;
   const { error } = await admin.from("pulse_member_goals").delete().eq("id", goalId);
   if (error) return { error: error.message };
+  revalidateTag(`dashboard-${ctx.gymId}`);
   return { success: true };
 }
 
 export async function logGoalProgress(goalId: string, value: number, recordedAt?: string, notes?: string | null) {
   const v = await verifyOwnsGoal(goalId);
   if ("error" in v) return { error: v.error };
-  const { admin, goal } = v;
+  const { ctx, admin, goal } = v;
 
   const { data: entry, error } = await admin
     .from("pulse_goal_progress")
@@ -495,6 +498,7 @@ export async function logGoalProgress(goalId: string, value: number, recordedAt?
     .update({ current_value: value, status: nextStatus, updated_at: new Date().toISOString() })
     .eq("id", goal.id);
 
+  revalidateTag(`dashboard-${ctx.gymId}`);
   return { success: true, entry, achieved: nextStatus === "achieved" };
 }
 

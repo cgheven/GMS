@@ -173,6 +173,7 @@ export async function createSocialLead(payload: {
     .single();
   if (error) return { error: error.message };
   revalidateTag(`social-${manager.gym_id}`);
+  revalidateTag(`dashboard-${manager.gym_id}`);
   return { success: true, id: data.id };
 }
 
@@ -199,6 +200,7 @@ export async function matchSocialLead(leadId: string, memberId: string, commissi
   if (error) return { error: error.message };
   await writeAuditLog({ actor_id: ctx.user.id, actor_email: ctx.user.email ?? "", action: "social_lead.match", entity: "social_lead", entity_id: leadId, meta: { lead_name: lead?.lead_name, matched_by: matchedBy, commission_amount: commissionAmount, new_status: newStatus } });
   revalidateTag(`social-${ctx.gymId}`);
+  revalidateTag(`dashboard-${ctx.gymId}`);
   return { success: true };
 }
 
@@ -217,6 +219,7 @@ export async function approveSocialLead(leadId: string) {
   if (!updated?.length) return { error: "Lead is not in pending_review state" };
   await writeAuditLog({ actor_id: ctx.user.id, actor_email: ctx.user.email ?? "", action: "social_lead.approve", entity: "social_lead", entity_id: leadId, meta: { lead_name: updated[0].lead_name, commission_amount: updated[0].commission_amount } });
   revalidateTag(`social-${ctx.gymId}`);
+  revalidateTag(`dashboard-${ctx.gymId}`);
   return { success: true };
 }
 
@@ -233,6 +236,7 @@ export async function rejectSocialLead(leadId: string, reason: string) {
   if (error) return { error: error.message };
   await writeAuditLog({ actor_id: ctx.user.id, actor_email: ctx.user.email ?? "", action: "social_lead.reject", entity: "social_lead", entity_id: leadId, meta: { lead_name: lead?.lead_name, reason } });
   revalidateTag(`social-${ctx.gymId}`);
+  revalidateTag(`dashboard-${ctx.gymId}`);
   return { success: true };
 }
 
@@ -251,5 +255,6 @@ export async function markSocialLeadPaid(leadId: string) {
   if (!updated?.length) return { error: "Lead is not in pending_payment state" };
   await writeAuditLog({ actor_id: ctx.user.id, actor_email: ctx.user.email ?? "", action: "social_lead.pay", entity: "social_lead", entity_id: leadId, meta: { lead_name: updated[0].lead_name, commission_amount: updated[0].commission_amount } });
   revalidateTag(`social-${ctx.gymId}`);
+  revalidateTag(`dashboard-${ctx.gymId}`);
   return { success: true };
 }
