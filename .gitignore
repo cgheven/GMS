@@ -10,9 +10,15 @@ out/
 # env files — NEVER commit these
 .env
 .env.local
+.env.local.*
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Supabase CLI temp / state (never commit — local dev state only)
+supabase/.temp/
+supabase/.branches/
+.supabase/
 
 # misc
 .DS_Store

@@ -1,12 +1,12 @@
 "use client";
 import { useState, useMemo } from "react";
 import { LogIn, Search, X, CheckCircle2, Users, RefreshCw, Cpu, UserPlus, ChevronRight, Link } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { cn, formatDateInput } from "@/lib/utils";
 import { linkDeviceUser } from "@/app/actions/members";
+import { recordCheckIn } from "@/app/actions/check-ins";
 import { revalidateDashboard } from "@/app/actions/revalidate";
 import type { CheckIn, Member } from "@/types";
 
@@ -110,20 +110,15 @@ export function CheckInsClient({ gymId, checkIns: initial, members, unlinked: in
     setCheckIns((prev) => [optimistic, ...prev]);
     setSearch("");
 
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("pulse_check_ins")
-      .insert({ gym_id: gymId, member_id: member.id, check_in_method: "manual" })
-      .select("*, member:pulse_members(full_name,photo_url,member_number,status,assigned_trainer_id,trainer:pulse_staff(full_name))")
-      .single();
+    const result = await recordCheckIn(member.id);
 
     setMarking(null);
-    if (error) {
+    if (result.error || !result.checkIn) {
       setCheckIns((prev) => prev.filter((c) => c.id !== optimistic.id));
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: result.error ?? "Failed to record check-in", variant: "destructive" });
       return;
     }
-    setCheckIns((prev) => [data as CheckInRow, ...prev.filter((c) => c.id !== optimistic.id)]);
+    setCheckIns((prev) => [result.checkIn as CheckInRow, ...prev.filter((c) => c.id !== optimistic.id)]);
     toast({ title: `${member.full_name} checked in` });
     revalidateDashboard().catch(() => {});
   }

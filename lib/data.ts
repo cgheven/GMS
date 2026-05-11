@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getMonthRange, formatDateInput } from "@/lib/utils";
 import type {
   Profile, Gym, Member, MembershipPlan, Payment, Issue, Announcement,
-  Expense, Bill, Staff, SalaryPayment, CheckIn, GymClass,
+  Expense, Bill, Staff, StaffRole, SalaryPayment, CheckIn, GymClass,
   DashboardStats, DashboardMember, RevenueMonth, AgingBucket, TrainerStat,
   MemberGoal, GoalProgressEntry, BodyMetric, MetricSkip, Lead, LeadActivity,
   Referrer, SocialManager, SocialLead, TrainerReportRow, TrainerFlowRow, MemberReportSummary,
@@ -327,16 +327,45 @@ async function _fetchDashboard(gymId: string, gym: Gym | null) {
   return { stats, upcomingBills: unpaidBills as Bill[], monthlyData, overdueMembers, trainerStats, selfStat, expiringMembers: expiringThisWeek, goalsOverview };
 }
 
+/**
+ * Resolve the active gym id for the current request — works for both
+ * owner sessions (via getAuthContext) and non-owner staff sessions
+ * (via getStaffSession). Used by data fetchers so they keep returning
+ * the gym's data when a staff member is logged in instead of the
+ * owner.
+ *
+ * Returns null if the user is unauthenticated or has no gym binding.
+ */
+export async function resolveActiveGymId(): Promise<string | null> {
+  const owner = await getAuthContext();
+  if (owner?.gymId) return owner.gymId;
+  const staff = await getStaffSession();
+  if (staff?.gymId) return staff.gymId;
+  return null;
+}
+
 export async function getDashboardData() {
-  const ctx = await getAuthContext();
-  if (!ctx?.gymId) return null;
-  const { gymId, gym } = ctx;
+  const owner = await getAuthContext();
+  let gymId: string | null = owner?.gymId ?? null;
+  let gym: Gym | null = owner?.gym ?? null;
+  if (!gymId) {
+    const staff = await getStaffSession();
+    if (staff?.gymId) {
+      gymId = staff.gymId;
+      const { data } = await createAdminClient()
+        .from("pulse_gyms").select("*").eq("id", gymId).single();
+      gym = (data ?? null) as Gym | null;
+    }
+  }
+  if (!gymId) return null;
+  const finalGymId = gymId;
+  const finalGym = gym;
   const data = await unstable_cache(
-    () => _fetchDashboard(gymId, gym),
-    ["dashboard", gymId],
-    { revalidate: 60, tags: [`dashboard-${gymId}`] }
+    () => _fetchDashboard(finalGymId, finalGym),
+    ["dashboard", finalGymId],
+    { revalidate: 60, tags: [`dashboard-${finalGymId}`] }
   )();
-  return { gymId, ...data };
+  return { gymId: finalGymId, ...data };
 }
 
 async function _fetchMembers(gymId: string) {
@@ -383,9 +412,8 @@ async function _fetchMembers(gymId: string) {
 }
 
 export async function getMembers() {
-  const ctx = await getAuthContext();
-  if (!ctx?.gymId) return { gymId: null, active: [], frozen: [], on_hold: [], defaulters: [], expired: [], defaulterThreshold: 2, plans: [], staff: [], referrers: [] };
-  const gymId = ctx.gymId;
+  const gymId = await resolveActiveGymId();
+  if (!gymId) return { gymId: null, active: [], frozen: [], on_hold: [], defaulters: [], expired: [], defaulterThreshold: 2, plans: [], staff: [], referrers: [] };
   const data = await _fetchMembers(gymId);
   return { gymId, ...data };
 }
@@ -397,9 +425,8 @@ async function _fetchMembershipPlans(gymId: string) {
 }
 
 export async function getMembershipPlans() {
-  const ctx = await getAuthContext();
-  if (!ctx?.gymId) return { gymId: null, plans: [] };
-  const gymId = ctx.gymId;
+  const gymId = await resolveActiveGymId();
+  if (!gymId) return { gymId: null, plans: [] };
   const data = await unstable_cache(
     () => _fetchMembershipPlans(gymId),
     ["plans", gymId],
@@ -434,9 +461,8 @@ async function _fetchPayments(gymId: string) {
 }
 
 export async function getPaymentsData() {
-  const ctx = await getAuthContext();
-  if (!ctx?.gymId) return { gymId: null, payments: [], members: [], plans: [] };
-  const gymId = ctx.gymId;
+  const gymId = await resolveActiveGymId();
+  if (!gymId) return { gymId: null, payments: [], members: [], plans: [] };
   const data = await unstable_cache(
     () => _fetchPayments(gymId),
     ["payments", gymId],
@@ -473,6 +499,60 @@ export const getTrainerContext = cache(async () => {
     staff: staff as Staff & { gym?: { name: string } | null },
     gymId: staff.gym_id as string,
     isDemo: !!(profile as { is_demo?: boolean } | null)?.is_demo,
+  };
+});
+
+/**
+ * Resolve a generic staff session for the current user — works for ANY
+ * non-owner, non-trainer role (frontdesk, manager, cleaner, guard,
+ * cook, other). Trainers also resolve here, but trainer-specific
+ * flows should keep using getTrainerContext for back-compat.
+ *
+ * Returns null if the user is not logged in or has no active staff
+ * record. Owners typically have no staff row, so this returns null
+ * for them — owner flows must use getAuthContext / requireOwner.
+ *
+ * The returned `permissions` array is the additive RBAC layer
+ * (see lib/permissions.ts). Empty array means "fall back to legacy
+ * role + can_add_members behavior".
+ */
+export const getStaffSession = cache(async () => {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  // Use admin client to bypass RLS — staff records may not be visible
+  // to the user via owner-scoped policies, but we've already verified
+  // the auth user above so it's safe to look up their own staff row.
+  const admin = createAdminClient();
+  const { data: staff } = await admin
+    .from("pulse_staff")
+    .select("id, gym_id, full_name, role, can_add_members, permissions, status, gym:pulse_gyms(name, owner_id)")
+    .eq("user_id", user.id)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (!staff) return null;
+
+  const s = staff as unknown as {
+    id: string;
+    gym_id: string;
+    full_name: string;
+    role: StaffRole;
+    can_add_members: boolean | null;
+    permissions: string[] | null;
+    gym: { name: string; owner_id: string } | null;
+  };
+
+  return {
+    user,
+    staffId: s.id,
+    gymId: s.gym_id,
+    fullName: s.full_name,
+    role: s.role,
+    canAddMembers: !!s.can_add_members,
+    permissions: (s.permissions ?? []) as string[],
+    gymName: s.gym?.name ?? "",
   };
 });
 
@@ -606,9 +686,11 @@ export async function getTrainerPageData() {
 }
 
 export async function getCheckIns() {
-  const ctx = await getAuthContext();
-  if (!ctx?.gymId) return { gymId: null, checkIns: [], members: [], unlinked: [] };
-  const { supabase, gymId } = ctx;
+  const gymId = await resolveActiveGymId();
+  if (!gymId) return { gymId: null, checkIns: [], members: [], unlinked: [] };
+  // Use admin client so this works for both owner and staff sessions —
+  // staff RLS doesn't grant SELECT on these tables.
+  const supabase = createAdminClient();
 
   const today = formatDateInput(new Date());
   const [{ data: checkIns }, { data: members }, { data: unlinked }] = await Promise.all([
@@ -800,9 +882,9 @@ export async function getUnmatchedSocialLeads(gymId: string) {
 }
 
 export async function getExpenses(monthFilter: string) {
-  const ctx = await getAuthContext();
-  if (!ctx?.gymId) return { gymId: null, expenses: [] };
-  const { supabase, gymId } = ctx;
+  const gymId = await resolveActiveGymId();
+  if (!gymId) return { gymId: null, expenses: [] };
+  const supabase = createAdminClient();
   const [year, month] = monthFilter.split("-");
   const start = `${year}-${month}-01`;
   const end = formatDateInput(new Date(parseInt(year), parseInt(month), 0));
@@ -811,9 +893,9 @@ export async function getExpenses(monthFilter: string) {
 }
 
 export async function getBills() {
-  const ctx = await getAuthContext();
-  if (!ctx?.gymId) return { gymId: null, bills: [] };
-  const { supabase, gymId } = ctx;
+  const gymId = await resolveActiveGymId();
+  if (!gymId) return { gymId: null, bills: [] };
+  const supabase = createAdminClient();
   const { data } = await supabase.from("pulse_bills").select("id,gym_id,title,category,amount,late_fee,due_date,paid_date,status,notes,condition,reminder_days,created_at").eq("gym_id", gymId).order("due_date", { ascending: false });
   return { gymId, bills: (data as Bill[]) ?? [] };
 }
@@ -1105,9 +1187,8 @@ async function _fetchReports(gymId: string) {
 }
 
 export async function getReportsData() {
-  const ctx = await getAuthContext();
-  if (!ctx?.gymId) return null;
-  const gymId = ctx.gymId;
+  const gymId = await resolveActiveGymId();
+  if (!gymId) return null;
   const data = await unstable_cache(
     () => _fetchReports(gymId),
     ["reports", gymId],
@@ -1119,9 +1200,8 @@ export async function getReportsData() {
 // ── Leads / Pipeline ───────────────────────────────────────────────────────
 
 export async function getLeadsData() {
-  const ctx = await getAuthContext();
-  if (!ctx?.gymId) return { gymId: null, leads: [], plans: [], staff: [], activities: [] };
-  const { gymId } = ctx;
+  const gymId = await resolveActiveGymId();
+  if (!gymId) return { gymId: null, leads: [], plans: [], staff: [], activities: [] };
 
   const admin = createAdminClient();
   const [leadsRes, plansRes, staffRes, activitiesRes] = await Promise.all([
@@ -1181,9 +1261,8 @@ export async function getLeadActivities(leadId: string) {
 
 // Lightweight summary used by the dashboard widget — counts only.
 export async function getLeadsSummary() {
-  const ctx = await getAuthContext();
-  if (!ctx?.gymId) return null;
-  const { gymId } = ctx;
+  const gymId = await resolveActiveGymId();
+  if (!gymId) return null;
   const admin = createAdminClient();
   const today = formatDateInput(new Date());
 
@@ -1213,9 +1292,19 @@ export async function getLeadsSummary() {
 // ── Compliance / printable report data ─────────────────────────────────────
 
 export async function getComplianceReportData() {
-  const ctx = await getAuthContext();
-  if (!ctx?.gymId) return null;
-  const { gymId, gym } = ctx;
+  const owner = await getAuthContext();
+  let gymId: string | null = owner?.gymId ?? null;
+  let gym: Gym | null = owner?.gym ?? null;
+  if (!gymId) {
+    const staff = await getStaffSession();
+    if (staff?.gymId) {
+      gymId = staff.gymId;
+      const { data } = await createAdminClient()
+        .from("pulse_gyms").select("*").eq("id", gymId).single();
+      gym = (data ?? null) as Gym | null;
+    }
+  }
+  if (!gymId) return null;
   const admin = createAdminClient();
 
   const [{ data: members }, { data: payments }, { data: trainers }] = await Promise.all([
@@ -1447,14 +1536,14 @@ async function _fetchSmartEarn(gymId: string) {
 }
 
 export async function getSmartEarnData() {
-  const ctx = await getAuthContext();
-  if (!ctx?.gymId) return { gymId: null, trainers: [], members: [], plans: [], defaultTrainerCapacity: 20 };
+  const gymId = await resolveActiveGymId();
+  if (!gymId) return { gymId: null, trainers: [], members: [], plans: [], defaultTrainerCapacity: 20 };
   const data = await unstable_cache(
-    () => _fetchSmartEarn(ctx.gymId as string),
-    ["smart-earn", ctx.gymId],
-    { revalidate: 60, tags: [`smart-earn-${ctx.gymId}`] }
+    () => _fetchSmartEarn(gymId),
+    ["smart-earn", gymId],
+    { revalidate: 60, tags: [`smart-earn-${gymId}`] }
   )();
-  return { gymId: ctx.gymId, ...data };
+  return { gymId, ...data };
 }
 
 // ── Inventory ────────────────────────────────────────────────────────────────

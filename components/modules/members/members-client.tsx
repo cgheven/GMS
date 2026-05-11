@@ -23,8 +23,8 @@ import { formatCurrency, formatDate, formatDateInput, cn } from "@/lib/utils";
 import { validateFullName, validateCNIC, validatePakPhone, validateDOB, validateMoney, runValidators, type ValidationResult } from "@/lib/validation";
 import type { Member, MembershipPlan, MemberStatus, MemberGender, Staff, Payment, PaymentMethod, PaymentStatus, Referrer, SocialManager, SocialLead, TrainerShift } from "@/types";
 import { matchSocialLead } from "@/app/actions/social";
-import { freezeMember, unfreezeMember, putMemberOnHold, resumeMember, markAsDefaulter, clearDefaulter, checkAndClearDefaulter, updateMember } from "@/app/actions/members";
-import { recalcPendingSalary } from "@/app/actions/trainer";
+import { freezeMember, unfreezeMember, putMemberOnHold, resumeMember, markAsDefaulter, clearDefaulter, checkAndClearDefaulter, updateMember, deleteMember as deleteMemberAction, createMember, bulkUpdateMembers, createReferralForMember, consumeUnlinkedPunch, reloadMembersData } from "@/app/actions/members";
+import { createPayment, updatePayment, listPaymentsForGym, listMemberTimeline } from "@/app/actions/payments";
 import { SmartAssignPanel } from "@/components/modules/profit-insights/smart-assign-panel";
 
 // ── Payment helpers ────────────────────────────────────────────────────────────
@@ -330,11 +330,15 @@ export function MembersClient({
 
   async function loadPayments() {
     if (paymentsLoaded || !gymId) return;
-    const supabase = createClient();
-    const { data } = await supabase.from("pulse_payments")
-      .select("*, member:pulse_members(full_name,plan_id)")
-      .eq("gym_id", gymId).order("created_at", { ascending: false }).limit(500);
-    setPayments((data as Payment[]) ?? []);
+    // Use a server action — direct client queries to pulse_payments are
+    // blocked by RLS for non-owner staff (managers/frontdesk).
+    const result = await listPaymentsForGym();
+    if ("error" in result) {
+      setPayments([]);
+      setPaymentsLoaded(true);
+      return;
+    }
+    setPayments(result.payments);
     setPaymentsLoaded(true);
   }
 
@@ -385,14 +389,13 @@ export function MembersClient({
     const discount = parseFloat(payForm.discount) || 0;
     const lateFee = parseFloat(payForm.late_fee) || 0;
     const total = Math.max(0, amount - discount + lateFee);
-    const supabase = createClient();
 
     if (payment) {
-      const update = { status: "paid" as PaymentStatus, payment_method: payForm.method, payment_date: payForm.date, late_fee: lateFee, discount, total_amount: total, receipt_number: payForm.receipt_number, notes: payForm.notes || null };
+      const updatePatch = { status: "paid" as PaymentStatus, payment_method: payForm.method, payment_date: payForm.date, late_fee: lateFee, discount, total_amount: total, receipt_number: payForm.receipt_number, notes: payForm.notes || null };
       setPayDialog(null);
-      setPayments((prev) => prev.map((p) => p.id === payment.id ? { ...p, ...update } : p));
-      const { error } = await supabase.from("pulse_payments").update(update).eq("id", payment.id);
-      if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); setPayments((prev) => prev.map((p) => p.id === payment.id ? payment : p)); }
+      setPayments((prev) => prev.map((p) => p.id === payment.id ? { ...p, ...updatePatch } : p));
+      const result = await updatePayment(payment.id, updatePatch);
+      if ("error" in result) { toast({ title: "Error", description: result.error, variant: "destructive" }); setPayments((prev) => prev.map((p) => p.id === payment.id ? payment : p)); }
       else {
         toast({ title: "Payment recorded" });
         if (member.status === "defaulter") {
@@ -402,13 +405,24 @@ export function MembersClient({
       }
     } else {
       setPayDialog(null);
-      const { data: newRow, error } = await supabase.from("pulse_payments")
-        .insert({ gym_id: gymId, member_id: member.id, plan_id: member.plan_id ?? null, amount, discount, late_fee: lateFee, total_amount: total, payment_method: payForm.method, payment_date: payForm.date, for_period: selectedMonth, status: "paid", receipt_number: payForm.receipt_number, notes: payForm.notes || null })
-        .select("*, member:pulse_members(full_name,plan_id)").single();
-      if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
+      const result = await createPayment({
+        member_id: member.id,
+        plan_id: member.plan_id ?? null,
+        amount,
+        discount,
+        late_fee: lateFee,
+        total_amount: total,
+        payment_method: payForm.method,
+        payment_date: payForm.date,
+        for_period: selectedMonth,
+        status: "paid",
+        receipt_number: payForm.receipt_number,
+        notes: payForm.notes || null,
+      });
+      if ("error" in result) toast({ title: "Error", description: result.error, variant: "destructive" });
       else {
         toast({ title: "Payment recorded" });
-        setPayments((prev) => [newRow as Payment, ...prev]);
+        if (result.payment) setPayments((prev) => [result.payment as Payment, ...prev]);
         if (member.status === "defaulter") {
           const { cleared } = await checkAndClearDefaulter(member.id);
           if (cleared) { toast({ title: `${member.full_name} cleared — dues settled, back to active` }); await reload(); }
@@ -420,18 +434,21 @@ export function MembersClient({
 
   async function reload() {
     if (!gymId) return;
-    const supabase = createClient();
-    const { data: members } = await supabase
-      .from("pulse_members")
-      .select("*, plan:pulse_membership_plans(name,duration_type,price,color), trainer:pulse_staff(full_name)")
-      .eq("gym_id", gymId)
-      .order("created_at", { ascending: false });
-    const all = (members ?? []) as Member[];
-    setActive(all.filter((m) => m.status === "active"));
-    setFrozen(all.filter((m) => m.status === "frozen"));
-    setOnHold(all.filter((m) => m.status === "on_hold"));
-    setDefaulters(all.filter((m) => m.status === "defaulter"));
-    setExpired(all.filter((m) => m.status === "expired" || m.status === "cancelled"));
+    // Use a server action (admin client) instead of querying pulse_members
+    // directly. Direct client queries are blocked by RLS for non-owner
+    // staff (managers/frontdesk), which would wipe the list to [] after
+    // any mutation. The server action returns the same shape as the
+    // initial server render.
+    const result = await reloadMembersData();
+    if ("error" in result) {
+      toast({ title: "Failed to refresh members", description: result.error, variant: "destructive" });
+      return;
+    }
+    setActive(result.data.active);
+    setFrozen(result.data.frozen);
+    setOnHold(result.data.on_hold);
+    setDefaulters(result.data.defaulters);
+    setExpired(result.data.expired);
     void revalidateMembers();
     void revalidateDashboard();
   }
@@ -519,10 +536,9 @@ export function MembersClient({
 
   async function handleDelete(m: Member) {
     if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
-    const supabase = createClient();
-    const { error } = await supabase.from("pulse_members").delete().eq("id", m.id);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    const result = await deleteMemberAction(m.id);
+    if ("error" in result) {
+      toast({ title: "Error", description: result.error, variant: "destructive" });
       return;
     }
     toast({ title: "Member deleted" });
@@ -543,7 +559,6 @@ export function MembersClient({
     const customFee = bulkFee !== "" ? parseFloat(bulkFee) : NaN;
     if (!selectedPlan && isNaN(customFee) && !bulkTrainerId) return;
     setBulkSaving(true);
-    const supabase = createClient();
     const allMembers = [...active, ...frozen, ...onHold, ...defaulters, ...expired];
     const memberById = Object.fromEntries(allMembers.map((m) => [m.id, m]));
 
@@ -575,27 +590,9 @@ export function MembersClient({
       payload.assigned_trainer_id = bulkTrainerId;
     }
     if (!isNaN(customFee)) payload.monthly_fee = customFee;
-    const { error } = await supabase.from("pulse_members")
-      .update(payload)
-      .in("id", targetIds);
-    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
+    const result = await bulkUpdateMembers(targetIds, payload);
+    if (result.error) { toast({ title: "Error", description: result.error, variant: "destructive" }); }
     else {
-      // Recalc pending salary for all affected trainers when trainer assignment changed.
-      if (gymId && typeof payload.assigned_trainer_id !== "undefined") {
-        const newTrainerId = payload.assigned_trainer_id as string | null;
-        // Collect unique old trainer IDs from the affected members.
-        const oldTrainerIds = new Set<string>();
-        for (const id of targetIds) {
-          const t = memberById[id]?.assigned_trainer_id;
-          if (t) oldTrainerIds.add(t);
-        }
-        const recalcTasks: Promise<void>[] = [];
-        if (newTrainerId) recalcTasks.push(recalcPendingSalary(newTrainerId, gymId));
-        for (const oldId of oldTrainerIds) {
-          if (oldId !== newTrainerId) recalcTasks.push(recalcPendingSalary(oldId, gymId));
-        }
-        Promise.all(recalcTasks).catch((err) => console.error("[handleBulkEdit] recalcPendingSalary failed:", err));
-      }
       const msg = skipped > 0 ? ` (${skipped} skipped — no trainer in their plan)` : "";
       toast({ title: `${targetIds.length} member${targetIds.length !== 1 ? "s" : ""} updated${msg}` });
       closeBulkEdit();
@@ -1508,7 +1505,12 @@ function MemberFormDialog({
   // If auto-match found and no manual lead selected, use auto-match
   const activeLead = selectedLead ?? (autoSocialMatch ?? null);
 
-  // Lazy-fetch unmatched social leads only when Add dialog opens (not on page load)
+  // Lazy-fetch unmatched social leads only when Add dialog opens (not on page load).
+  // NOTE: pulse_social_leads has no staff SELECT RLS policy — this query returns []
+  // for non-owner staff (manager/frontdesk). Result: staff don't see social-lead
+  // auto-match suggestions when adding members. They CAN still add members; the
+  // social-match feature is owner-only by current RLS. Move to server action if
+  // staff need this — see "deferred" items in Phase H3 review.
   useEffect(() => {
     if (!open || editing || !gymId) return;
     const supabase = createClient();
@@ -1603,7 +1605,6 @@ function MemberFormDialog({
     }
 
     setSaving(true);
-    const supabase = createClient();
 
     const admissionFee = parseFloat(form.admission_fee) || 0;
     const admissionPaid = !editing && admissionFee > 0 && form.admission_fee_paid;
@@ -1645,20 +1646,16 @@ function MemberFormDialog({
         return;
       }
     } else {
-      const { data: newMember, error } = await supabase
-        .from("pulse_members")
-        .insert(payload)
-        .select("id")
-        .single();
-      if (error || !newMember) {
-        toast({ title: "Error", description: error?.message ?? "Unknown error", variant: "destructive" });
+      const createResult = await createMember(payload);
+      if (createResult.error || !createResult.memberId) {
+        toast({ title: "Error", description: createResult.error ?? "Unknown error", variant: "destructive" });
         setSaving(false);
         return;
       }
+      const newMemberId = createResult.memberId;
       if (admissionPaid) {
-        await supabase.from("pulse_payments").insert({
-          gym_id: gymId,
-          member_id: newMember.id,
+        await createPayment({
+          member_id: newMemberId,
           plan_id: form.plan_id || null,
           amount: admissionFee,
           discount: 0,
@@ -1679,12 +1676,10 @@ function MemberFormDialog({
             referrer.commission_type === "flat"
               ? referrer.commission_value
               : Math.round((monthly * referrer.commission_value) / 100);
-          await supabase.from("pulse_referrals").insert({
-            gym_id: gymId,
+          await createReferralForMember({
+            member_id: newMemberId,
             referrer_id: referrer.id,
-            member_id: newMember.id,
             commission_amount: commission,
-            status: "pending",
           });
         }
       }
@@ -1698,14 +1693,14 @@ function MemberFormDialog({
               : Math.round((monthly * Number(mgr.commission_value)) / 100))
           : 0;
         const matchType = autoSocialMatch?.id === activeLead.id ? "auto" : "manual";
-        await matchSocialLead(activeLead.id, newMember.id, commission, matchType);
+        await matchSocialLead(activeLead.id, newMemberId, commission, matchType);
         setUnmatchedLeads((prev) => prev.filter((l) => l.id !== activeLead.id));
       }
     }
 
     // If this registration came from an unlinked punch, remove it from the queue
     if (!editing && unlinkedPunchId) {
-      await createClient().from("pulse_unlinked_punches").delete().eq("id", unlinkedPunchId);
+      await consumeUnlinkedPunch(unlinkedPunchId);
       toast({ title: "Member registered", description: "Device linked — future scans will check in automatically." });
     } else {
       toast({ title: editing ? "Member updated" : "Member added" });
@@ -2165,17 +2160,22 @@ function MemberTimelineDialog({ member, gymId, onClose }: { member: Member | nul
 
   useEffect(() => {
     if (!member || !gymId) return;
+    const m = member;
     setEvents([]);
     setLoading(true);
-    const supabase = createClient();
-    Promise.all([
-      supabase.from("pulse_audit_log").select("id,action,created_at,meta").eq("entity", "member").eq("entity_id", member.id).order("created_at", { ascending: false }),
-      supabase.from("pulse_payments").select("id,total_amount,payment_method,for_period,status,receipt_number,payment_date,created_at").eq("member_id", member.id).eq("status", "paid").order("payment_date", { ascending: false }),
-    ]).then(([auditRes, payRes]) => {
-      setEvents(buildTimeline(member, (auditRes.data ?? []) as AuditRow[], (payRes.data ?? []) as PaymentRow[]));
+    // Use a server action — pulse_audit_log + pulse_payments are not
+    // SELECT-able by non-owner staff via RLS, so the previous direct
+    // client query returned [] and the timeline was always empty for
+    // managers/frontdesk.
+    listMemberTimeline(m.id).then((res) => {
+      if ("error" in res) {
+        setEvents([]);
+      } else {
+        setEvents(buildTimeline(m, res.audit as AuditRow[], res.payments as PaymentRow[]));
+      }
       setLoading(false);
     });
-  }, [member?.id, gymId]);
+  }, [member, gymId]);
 
   return (
     <Dialog open={!!member} onOpenChange={(o) => !o && onClose()}>

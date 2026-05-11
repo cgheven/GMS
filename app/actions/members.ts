@@ -1,7 +1,8 @@
 "use server";
 import { revalidateTag } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getAuthContext } from "@/lib/data";
+import { getAuthContext, getStaffSession, getMembers } from "@/lib/data";
+import { hasPermission, type PermissionKey } from "@/lib/permissions";
 import { writeAuditLog } from "@/lib/audit";
 import { formatDateInput } from "@/lib/utils";
 import { recalcPendingSalary } from "./trainer";
@@ -10,6 +11,37 @@ async function requireOwner() {
   const ctx = await getAuthContext();
   if (!ctx?.user || !ctx.gymId || ctx.isDemo) return null;
   return ctx as typeof ctx & { gymId: string };
+}
+
+/**
+ * Authorize a mutation that may be performed by either the gym owner
+ * or a non-owner staff member with the given permission. Returns a
+ * normalized context shape (gymId + user) on success, or null on
+ * failure. Demo owners are blocked (existing behavior).
+ *
+ * Owners ALWAYS pass — permissions only gate non-owner staff. The
+ * trainer flow is unaffected (it uses requireTrainer / can_add_members).
+ */
+async function requireOwnerOrPermission(perm: PermissionKey) {
+  const owner = await getAuthContext();
+  if (owner?.user && owner.gymId && !owner.isDemo) {
+    return {
+      gymId: owner.gymId as string,
+      user: owner.user,
+      isOwner: true as const,
+      staffId: null as string | null,
+    };
+  }
+  const staff = await getStaffSession();
+  if (staff && hasPermission(staff.permissions, perm)) {
+    return {
+      gymId: staff.gymId,
+      user: staff.user,
+      isOwner: false as const,
+      staffId: staff.staffId,
+    };
+  }
+  return null;
 }
 
 function revalidate(gymId: string) {
@@ -22,7 +54,7 @@ function revalidate(gymId: string) {
 // ── Freeze ────────────────────────────────────────────────────────────────────
 
 export async function freezeMember(memberId: string) {
-  const ctx = await requireOwner();
+  const ctx = await requireOwnerOrPermission("members.freeze");
   if (!ctx) return { error: "Unauthorized" };
   const admin = createAdminClient();
 
@@ -55,7 +87,7 @@ export async function freezeMember(memberId: string) {
 // ── Unfreeze ──────────────────────────────────────────────────────────────────
 
 export async function unfreezeMember(memberId: string) {
-  const ctx = await requireOwner();
+  const ctx = await requireOwnerOrPermission("members.freeze");
   if (!ctx) return { error: "Unauthorized" };
   const admin = createAdminClient();
 
@@ -106,7 +138,7 @@ export async function unfreezeMember(memberId: string) {
 // ── Hold ──────────────────────────────────────────────────────────────────────
 
 export async function putMemberOnHold(memberId: string) {
-  const ctx = await requireOwner();
+  const ctx = await requireOwnerOrPermission("members.freeze");
   if (!ctx) return { error: "Unauthorized" };
   const admin = createAdminClient();
 
@@ -139,7 +171,7 @@ export async function putMemberOnHold(memberId: string) {
 // ── Resume ────────────────────────────────────────────────────────────────────
 
 export async function resumeMember(memberId: string) {
-  const ctx = await requireOwner();
+  const ctx = await requireOwnerOrPermission("members.freeze");
   if (!ctx) return { error: "Unauthorized" };
   const admin = createAdminClient();
 
@@ -171,7 +203,7 @@ export async function resumeMember(memberId: string) {
 // ── Defaulter ─────────────────────────────────────────────────────────────────
 
 export async function markAsDefaulter(memberId: string) {
-  const ctx = await requireOwner();
+  const ctx = await requireOwnerOrPermission("members.freeze");
   if (!ctx) return { error: "Unauthorized" };
   const admin = createAdminClient();
 
@@ -202,7 +234,7 @@ export async function markAsDefaulter(memberId: string) {
 }
 
 export async function clearDefaulter(memberId: string) {
-  const ctx = await requireOwner();
+  const ctx = await requireOwnerOrPermission("members.freeze");
   if (!ctx) return { error: "Unauthorized" };
   const admin = createAdminClient();
 
@@ -251,7 +283,7 @@ export async function checkAndClearDefaulter(memberId: string) {
 // ── Owner update ──────────────────────────────────────────────────────────────
 
 export async function updateMember(memberId: string, payload: Record<string, unknown>) {
-  const ctx = await requireOwner();
+  const ctx = await requireOwnerOrPermission("members.edit");
   if (!ctx) return { error: "Unauthorized" };
   const admin = createAdminClient();
 
@@ -290,6 +322,41 @@ export async function updateMember(memberId: string, payload: Record<string, unk
     }
   }
 
+  revalidate(ctx.gymId);
+  return { success: true };
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+export async function deleteMember(memberId: string) {
+  const ctx = await requireOwnerOrPermission("members.delete");
+  if (!ctx) return { error: "Unauthorized" };
+  const admin = createAdminClient();
+
+  // Pre-flight: confirm member exists in this gym
+  const { data: member } = await admin
+    .from("pulse_members")
+    .select("id, full_name, gym_id")
+    .eq("id", memberId)
+    .eq("gym_id", ctx.gymId)
+    .single();
+  if (!member) return { error: "Member not found" };
+
+  // Cascade considerations: deletion cascades via FK to payments, check-ins,
+  // goals, etc. Schema verified — deletes are safe (not soft-delete; assume
+  // schema handles cascades).
+  const { error } = await admin
+    .from("pulse_members")
+    .delete()
+    .eq("id", memberId)
+    .eq("gym_id", ctx.gymId);
+  if (error) return { error: error.message };
+
+  await writeAuditLog({
+    actor_id: ctx.user.id, actor_email: ctx.user.email ?? "",
+    action: "member.delete", entity: "member", entity_id: memberId,
+    meta: { full_name: member.full_name, deleted_by_role: ctx.isOwner ? "owner" : "staff" },
+  });
   revalidate(ctx.gymId);
   return { success: true };
 }
@@ -334,3 +401,177 @@ export async function linkDeviceUser(memberId: string, deviceUserId: string, unl
   return { success: true };
 }
 
+// ── Create new member ─────────────────────────────────────────────────────────
+
+/**
+ * Insert a new member row. Routes through admin client so non-owner
+ * staff with `members.add` can bypass RLS. Returns the new member id.
+ */
+export async function createMember(payload: Record<string, unknown>) {
+  const ctx = await requireOwnerOrPermission("members.add");
+  if (!ctx) return { error: "Unauthorized" };
+  const admin = createAdminClient();
+
+  // Force tenant scoping — never trust client-provided gym_id.
+  const insertPayload = { ...payload, gym_id: ctx.gymId };
+
+  const { data, error } = await admin
+    .from("pulse_members")
+    .insert(insertPayload)
+    .select("id")
+    .single();
+  if (error || !data) return { error: error?.message ?? "Failed to create member" };
+
+  await writeAuditLog({
+    actor_id: ctx.user.id, actor_email: ctx.user.email ?? "",
+    action: "member.create", entity: "member", entity_id: data.id,
+    meta: {
+      full_name: (payload as { full_name?: string }).full_name ?? null,
+      by_role: ctx.isOwner ? "owner" : "staff",
+    },
+  });
+  revalidate(ctx.gymId);
+  return { success: true, memberId: data.id };
+}
+
+// ── Bulk update members ───────────────────────────────────────────────────────
+
+/**
+ * Apply the same partial update to a set of members. Staff need
+ * `members.edit`. Recalculates trainer pending salary when assignment
+ * changes.
+ */
+export async function bulkUpdateMembers(
+  memberIds: string[],
+  payload: Record<string, unknown>,
+) {
+  const ctx = await requireOwnerOrPermission("members.edit");
+  if (!ctx) return { error: "Unauthorized" };
+  if (memberIds.length === 0) return { error: "No members selected" };
+  const admin = createAdminClient();
+
+  // Fetch existing trainer assignments so we can recalc both sides.
+  const { data: existing } = await admin
+    .from("pulse_members")
+    .select("id, assigned_trainer_id")
+    .in("id", memberIds)
+    .eq("gym_id", ctx.gymId);
+  const oldTrainerIds = new Set<string>();
+  for (const m of existing ?? []) {
+    if (m.assigned_trainer_id) oldTrainerIds.add(m.assigned_trainer_id);
+  }
+
+  const { error } = await admin
+    .from("pulse_members")
+    .update(payload)
+    .in("id", memberIds)
+    .eq("gym_id", ctx.gymId);
+  if (error) return { error: error.message };
+
+  if (typeof payload.assigned_trainer_id !== "undefined") {
+    const newTrainerId = payload.assigned_trainer_id as string | null;
+    const recalcTasks: Promise<void>[] = [];
+    if (newTrainerId) recalcTasks.push(recalcPendingSalary(newTrainerId, ctx.gymId));
+    for (const oldId of oldTrainerIds) {
+      if (oldId !== newTrainerId) recalcTasks.push(recalcPendingSalary(oldId, ctx.gymId));
+    }
+    try {
+      await Promise.all(recalcTasks);
+    } catch (err) {
+      console.error("[bulkUpdateMembers] recalcPendingSalary failed:", err);
+    }
+  }
+
+  await writeAuditLog({
+    actor_id: ctx.user.id, actor_email: ctx.user.email ?? "",
+    action: "member.bulk_update", entity: "member",
+    meta: {
+      member_ids: memberIds,
+      changes: payload,
+      by_role: ctx.isOwner ? "owner" : "staff",
+    },
+  });
+  revalidate(ctx.gymId);
+  return { success: true };
+}
+
+// ── Create referral on member signup ──────────────────────────────────────────
+
+/**
+ * Insert a pulse_referrals row tied to a newly registered member. Same
+ * permission as creating a member (members.add) since this only fires
+ * during the add-member flow.
+ */
+export async function createReferralForMember(args: {
+  member_id: string;
+  referrer_id: string;
+  commission_amount: number;
+}) {
+  const ctx = await requireOwnerOrPermission("members.add");
+  if (!ctx) return { error: "Unauthorized" };
+  const admin = createAdminClient();
+
+  // Confirm member belongs to gym
+  const { data: member } = await admin
+    .from("pulse_members")
+    .select("id, gym_id")
+    .eq("id", args.member_id)
+    .eq("gym_id", ctx.gymId)
+    .single();
+  if (!member) return { error: "Member not found" };
+
+  const { error } = await admin.from("pulse_referrals").insert({
+    gym_id: ctx.gymId,
+    referrer_id: args.referrer_id,
+    member_id: args.member_id,
+    commission_amount: args.commission_amount,
+    status: "pending",
+  });
+  if (error) return { error: error.message };
+
+  revalidate(ctx.gymId);
+  return { success: true };
+}
+
+// ── Consume an unlinked device punch when registering a new member ────────────
+
+/**
+ * Delete an unlinked device punch row. Called after a new member is
+ * registered from the check-ins "unlinked punch" flow. Staff need
+ * `members.add` (same flow as registration).
+ */
+export async function consumeUnlinkedPunch(unlinkedPunchId: string) {
+  const ctx = await requireOwnerOrPermission("members.add");
+  if (!ctx) return { error: "Unauthorized" };
+  const admin = createAdminClient();
+
+  const { error } = await admin
+    .from("pulse_unlinked_punches")
+    .delete()
+    .eq("id", unlinkedPunchId)
+    .eq("gym_id", ctx.gymId);
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+// ── Re-fetch member buckets after a mutation ─────────────────────────────────
+
+/**
+ * Server-side member re-fetch for use by the client after mutations.
+ *
+ * Why this exists: client-side direct queries to pulse_members via the
+ * supabase JS client are blocked by RLS for non-owner staff (managers,
+ * frontdesk). There is intentionally no broad SELECT policy for
+ * non-owner staff — they get data through server-rendered props and
+ * server actions. Routing reload through this action uses the admin
+ * client (after a permission check) so staff see the updated list.
+ *
+ * Caller must have `members.view_all` (matches the page-level guard
+ * in /members/page.tsx).
+ */
+export async function reloadMembersData() {
+  const ctx = await requireOwnerOrPermission("members.view_all");
+  if (!ctx) return { error: "Unauthorized" };
+  const data = await getMembers();
+  return { success: true as const, data };
+}

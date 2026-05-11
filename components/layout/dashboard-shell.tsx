@@ -6,7 +6,17 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Navbar } from "@/components/layout/navbar";
 import { useGymContext } from "@/contexts/gym-context";
 
-export function DashboardShell({ children }: { children: React.ReactNode }) {
+interface DashboardShellProps {
+  children: React.ReactNode;
+  /**
+   * RBAC permission set for non-owner staff. Pass `null` for owners
+   * (full access). When set, the sidebar filters nav items by
+   * permission and hides the admin section entirely.
+   */
+  permissions?: string[] | null;
+}
+
+export function DashboardShell({ children, permissions = null }: DashboardShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { profile, gym, gyms, isDemo, setActiveGym } = useGymContext();
 
@@ -22,7 +32,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </div>
       )}
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} permissions={permissions} />
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
           <Navbar
             onMenuClick={() => setSidebarOpen(true)}

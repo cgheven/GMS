@@ -4,8 +4,7 @@ import {
   CreditCard, AlertTriangle, Plus, XCircle, Search, MessageCircle,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import { revalidatePayments } from "@/app/actions/payments";
+import { revalidatePayments, createPayment, updatePayment } from "@/app/actions/payments";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -290,10 +289,10 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
   async function updateStatus(p: Payment, status: PaymentStatus) {
     if (isDemo) { toast({ title: "You're in demo mode", description: "Sign up to unlock editing →" }); return; }
     setPayments((prev) => prev.map((pay) => pay.id === p.id ? { ...pay, status } : pay));
-    const supabase = createClient();
-    const { error } = await supabase.from("pulse_payments").update({ status }).eq("id", p.id);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    // Route through server action — RLS would block non-owner staff direct writes.
+    const res = await updatePayment(p.id, { status });
+    if ("error" in res) {
+      toast({ title: "Error", description: res.error, variant: "destructive" });
       setPayments((prev) => prev.map((pay) => pay.id === p.id ? p : pay));
     }
   }
@@ -320,29 +319,34 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
       return;
     }
     setSaving(true);
-    const supabase = createClient();
     const member = members.find((m) => m.id === addForm.member_id);
     const receipt = genReceipt(member?.full_name ?? "M", addForm.for_period);
     const totalAmount = parseFloat(addForm.total_amount) || 0;
     const discount = parseFloat(addForm.discount) || 0;
     const lateFee = parseFloat(addForm.late_fee) || 0;
-    const { data: newRow, error } = await supabase.from("pulse_payments")
-      .insert({
-        gym_id: gymId, member_id: addForm.member_id, plan_id: member?.plan_id ?? null,
-        amount: totalAmount, discount, late_fee: lateFee,
-        total_amount: Math.max(0, totalAmount - discount + lateFee),
-        payment_method: addForm.method, payment_date: addForm.date || null,
-        for_period: addForm.for_period || null,
-        status: addForm.date ? "paid" : "pending",
-        receipt_number: addForm.receipt_number || receipt,
-        notes: addForm.notes || null,
-      })
-      .select("*, member:pulse_members(full_name,plan_id)").single();
-    if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-    else {
+    // Route through server action so RLS doesn't block non-owner staff
+    // (manager/frontdesk with payments.create permission). Server action
+    // uses admin client + verifies permission server-side.
+    const res = await createPayment({
+      member_id: addForm.member_id,
+      plan_id: member?.plan_id ?? null,
+      amount: totalAmount,
+      discount,
+      late_fee: lateFee,
+      total_amount: Math.max(0, totalAmount - discount + lateFee),
+      payment_method: addForm.method,
+      payment_date: addForm.date || formatDateInput(new Date()),
+      for_period: addForm.for_period || "",
+      status: addForm.date ? "paid" : "pending",
+      receipt_number: addForm.receipt_number || receipt,
+      notes: addForm.notes || null,
+    });
+    if ("error" in res) {
+      toast({ title: "Error", description: res.error, variant: "destructive" });
+    } else {
       toast({ title: "Payment recorded" });
       setAddDialog(false);
-      setPayments((prev) => [newRow as Payment, ...prev]);
+      if (res.payment) setPayments((prev) => [res.payment as Payment, ...prev]);
     }
     setSaving(false);
   }

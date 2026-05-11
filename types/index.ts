@@ -328,6 +328,12 @@ export interface Staff {
   user_id: string | null;
   can_add_members: boolean;
   member_capacity: number;
+  /**
+   * Granular RBAC permission keys (e.g. "members.add", "payments.refund").
+   * Empty array means "fall back to legacy role + can_add_members behavior".
+   * See lib/permissions.ts for the catalog.
+   */
+  permissions: string[];
   created_at: string;
   updated_at: string;
 }

@@ -28,6 +28,49 @@ type PlanLite = Pick<MembershipPlan, "id" | "name" | "price">;
 type StaffLite = Pick<Staff, "id" | "full_name" | "role">;
 type ActivityRow = { lead_id: string; type: string; content: string | null; created_at: string };
 
+// "2 min ago", "3 hours ago", "5 days ago" — for lead activity timeline
+function formatRelativeTime(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return "just now";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} min ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} hour${hr === 1 ? "" : "s"} ago`;
+  const d = Math.floor(hr / 24);
+  if (d < 7) return `${d} day${d === 1 ? "" : "s"} ago`;
+  if (d < 30) return `${Math.floor(d / 7)} week${Math.floor(d / 7) === 1 ? "" : "s"} ago`;
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+// Absolute date+time for activity history. Owner needs to know "called him on
+// May 9 at 3pm" not just "2 days ago". Format: "11 May, 7:14 PM" or
+// "11 May 2025, 7:14 PM" (year only when different from current year).
+function formatActivityDate(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const sameYear = d.getFullYear() === now.getFullYear();
+  const dateStr = d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
+  const timeStr = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  return `${dateStr}, ${timeStr}`;
+}
+
+// Map activity type → emoji icon. Covers all known types + status_change.
+function activityIcon(type: string): string {
+  if (type === "call") return "📞";
+  if (type === "message") return "💬";
+  if (type === "visit") return "🚪";
+  if (type === "trial") return "🏋️";
+  if (type === "offer") return "🎁";
+  if (type === "status_change") return "🔄";
+  if (type === "note") return "📝";
+  return "•";
+}
+
 interface Props {
   gymId: string | null;
   leads: Lead[];
@@ -331,6 +374,7 @@ export function LeadsClient({ gymId, leads, plans, staff, activities }: Props) {
           lead={detailLead}
           plans={plans}
           trainers={trainers}
+          activities={activities.filter((a) => a.lead_id === detailLead.id)}
           onClose={() => setDetailLead(null)}
           onChanged={() => { refresh(); setDetailLead(null); }}
         />
@@ -784,10 +828,11 @@ function ClosedCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
 
 // ── Lead detail dialog ────────────────────────────────────────────────────────
 
-function LeadDetailDialog({ lead, plans, trainers, onClose, onChanged }: {
+function LeadDetailDialog({ lead, plans, trainers, activities: initialActivities, onClose, onChanged }: {
   lead: Lead;
   plans: PlanLite[];
   trainers: StaffLite[];
+  activities: ActivityRow[];
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -796,6 +841,8 @@ function LeadDetailDialog({ lead, plans, trainers, onClose, onChanged }: {
   const [activityType, setActivityType] = useState<LeadActivityType>("note");
   const [concern, setConcern] = useState("");
   const [followupDate, setFollowupDate] = useState(lead.next_followup_at ?? "");
+  // Local copy of activities so new logs appear immediately without closing dialog
+  const [history, setHistory] = useState<ActivityRow[]>(() => initialActivities);
 
   const showConcern = activityType === "call" || activityType === "message" || activityType === "visit";
   const [showOffers, setShowOffers] = useState(false);
@@ -832,7 +879,18 @@ function LeadDetailDialog({ lead, plans, trainers, onClose, onChanged }: {
     const res = await logLeadActivity(lead.id, activityType, content);
     setBusy(false);
     if (res.error) toast({ title: "Error", description: res.error, variant: "destructive" });
-    else { toast({ title: "Logged" }); setActivityNote(""); setConcern(""); }
+    else {
+      toast({ title: "Logged" });
+      // Optimistically add to local history so receptionist sees it immediately
+      setHistory((prev) => [{
+        lead_id: lead.id,
+        type: activityType,
+        content,
+        created_at: new Date().toISOString(),
+      }, ...prev]);
+      setActivityNote("");
+      setConcern("");
+    }
   }
 
   async function remove() {
@@ -850,7 +908,14 @@ function LeadDetailDialog({ lead, plans, trainers, onClose, onChanged }: {
     const url = whatsappUrl(lead.phone, msg);
     if (!url) { toast({ title: "Invalid phone number", variant: "destructive" }); return; }
     window.open(url, "_blank");
-    logLeadActivity(lead.id, "offer", `Sent: ${t.label}`);
+    const content = `Sent: ${t.label}`;
+    logLeadActivity(lead.id, "offer", content);
+    setHistory((prev) => [{
+      lead_id: lead.id,
+      type: "offer",
+      content,
+      created_at: new Date().toISOString(),
+    }, ...prev]);
     setShowOffers(false);
   }
 
@@ -1002,6 +1067,51 @@ function LeadDetailDialog({ lead, plans, trainers, onClose, onChanged }: {
                     </SelectContent>
                   </Select>
                 )}
+              </div>
+            )}
+
+            {/* Activity history — shows previous logs so next caller has context */}
+            {history.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    History <span className="text-muted-foreground/60">({history.length})</span>
+                  </p>
+                </div>
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                  {history.slice(0, 20).map((a, i) => (
+                    <div
+                      key={`${a.created_at}-${i}`}
+                      className="flex gap-2.5 items-start rounded-lg border border-sidebar-border/60 bg-card/40 px-3 py-2"
+                    >
+                      <span className="text-base leading-none mt-0.5 shrink-0">
+                        {activityIcon(a.type)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-foreground/90 break-words leading-snug">
+                          {a.content || <span className="text-muted-foreground italic">No note</span>}
+                        </p>
+                        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                          <span className="text-[10px] font-medium text-primary/80 capitalize">
+                            {a.type.replace(/_/g, " ")}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground/40">•</span>
+                          <span className="text-[10px] text-muted-foreground" title={formatRelativeTime(a.created_at)}>
+                            {formatActivityDate(a.created_at)}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground/60">
+                            ({formatRelativeTime(a.created_at)})
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {history.length > 20 && (
+                    <p className="text-[10px] text-muted-foreground text-center pt-1">
+                      Showing latest 20 of {history.length}
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 

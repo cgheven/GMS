@@ -1,6 +1,6 @@
 "use server";
 import { revalidateTag } from "next/cache";
-import { getAuthContext, getTrainerContext } from "@/lib/data";
+import { getAuthContext, getTrainerContext, getStaffSession } from "@/lib/data";
 
 // Cache tags used in lib/data.ts unstable_cache() wrappers.
 // Call the matching helper after a mutation so the next page load returns fresh data
@@ -11,6 +11,15 @@ async function gymTag(prefix: string) {
   const ownerCtx = await getAuthContext();
   if (ownerCtx?.gymId) {
     revalidateTag(`${prefix}-${ownerCtx.gymId}`);
+    return;
+  }
+  // Non-owner staff (manager / frontdesk / etc.) — their mutations also
+  // need to bust caches for the gym they belong to. Without this branch,
+  // staff actions would never invalidate unstable_cache wrappers and
+  // dashboards/reports would stay stale until TTL expired.
+  const staff = await getStaffSession();
+  if (staff?.gymId) {
+    revalidateTag(`${prefix}-${staff.gymId}`);
     return;
   }
   // Fall back to trainer context — trainers can also trigger invalidations

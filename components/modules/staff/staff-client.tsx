@@ -23,6 +23,12 @@ import { toast } from "@/hooks/use-toast";
 import { useGymContext } from "@/contexts/gym-context";
 import { formatCurrency, formatDate, formatDateInput } from "@/lib/utils";
 import { validateFullName, validateCNIC, validatePakPhone, validateMoney, runValidators } from "@/lib/validation";
+import {
+  PERMISSIONS,
+  PERMISSION_GROUPS,
+  permissionsForRole,
+  type PermissionKey,
+} from "@/lib/permissions";
 import type { Staff, StaffRole, StaffStatus, SalaryPayment, PaymentMethod, TrainerShift } from "@/types";
 
 const ROLES: { value: StaffRole; label: string; icon: string }[] = [
@@ -86,6 +92,7 @@ const emptyForm = {
   member_capacity: "20",
   status: "active" as StaffStatus, notes: "",
   can_add_members: false,
+  permissions: [] as PermissionKey[],
 };
 
 function currentMonth() {
@@ -293,12 +300,12 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
   const defaultRole: StaffRole = isTrainersMode ? "trainer" : isStaffMode ? "manager" : "other";
   function openAdd() {
     setEditing(null);
-    setForm({ ...emptyForm, role: defaultRole });
+    setForm({ ...emptyForm, role: defaultRole, permissions: permissionsForRole(defaultRole) });
     setDialogOpen(true);
   }
   function quickStaff(item: { label: string; role: StaffRole }) {
     setEditing(null);
-    setForm({ ...emptyForm, full_name: item.label, role: item.role });
+    setForm({ ...emptyForm, full_name: item.label, role: item.role, permissions: permissionsForRole(item.role) });
     setDialogOpen(true);
   }
   function openEdit(s: Staff) {
@@ -317,8 +324,42 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
       status: s.status,
       notes: s.notes ?? "",
       can_add_members: s.can_add_members ?? false,
+      permissions: ((s.permissions ?? []) as PermissionKey[]),
     });
     setDialogOpen(true);
+  }
+
+  // When the role changes in the dialog, auto-replace the permission set
+  // with that role's defaults. Trainers don't use the permissions array
+  // (they use can_add_members), so we always reset to [] for trainers.
+  function handleRoleChange(nextRole: StaffRole) {
+    setForm((prev) => ({
+      ...prev,
+      role: nextRole,
+      permissions: nextRole === "trainer" ? [] : permissionsForRole(nextRole),
+    }));
+  }
+
+  function togglePermission(key: PermissionKey) {
+    setForm((prev) => {
+      const has = prev.permissions.includes(key);
+      return {
+        ...prev,
+        permissions: has
+          ? prev.permissions.filter((k) => k !== key)
+          : [...prev.permissions, key],
+      };
+    });
+  }
+
+  function setGroupPermissions(keys: PermissionKey[], enabled: boolean) {
+    setForm((prev) => {
+      const remaining = prev.permissions.filter((k) => !keys.includes(k as PermissionKey));
+      return {
+        ...prev,
+        permissions: enabled ? [...remaining, ...keys] : remaining,
+      };
+    });
   }
 
   async function handleSave() {
@@ -353,6 +394,9 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
       status: form.status,
       notes: form.notes || null,
       can_add_members: form.can_add_members,
+      // Trainers don't use the permissions array — they keep can_add_members.
+      // For all other roles, persist the granular RBAC selection.
+      permissions: form.role === "trainer" ? [] : (form.permissions ?? []),
     };
     const { error } = editing
       ? await supabase.from("pulse_staff").update(payload).eq("id", editing.id)
@@ -607,6 +651,9 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
                 {filteredStaff.map((member) => {
                   const rc = roleConfig[member.role];
                   const isTrainer = member.role === "trainer";
+                  // Roles that get a login account (trainer/manager/frontdesk).
+                  // Cleaner/guard/cook/other don't need app access by default.
+                  const canHaveLogin = (["trainer", "manager", "frontdesk"] as const).includes(member.role as "trainer" | "manager" | "frontdesk");
                   return (
                     <div key={member.id} className="flex items-center gap-4 px-4 py-3 hover:bg-white/[0.02] transition-colors">
                       {/* Avatar */}
@@ -654,7 +701,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
                             <span className="hidden sm:inline">Transfer</span>
                           </Button>
                         )}
-                        {isTrainer && (
+                        {canHaveLogin && (
                           <>
                             {/* Single adaptive button: "Add Login" when no account, "Reset PW" when one exists.
                                 Keeps column width identical across rows. */}
@@ -818,7 +865,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
               </div>
               <div className="space-y-1.5">
                 <Label>Role</Label>
-                <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as StaffRole })}>
+                <Select value={form.role} onValueChange={(v) => handleRoleChange(v as StaffRole)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {visibleRoles.map((r) => <SelectItem key={r.value} value={r.value}>{r.icon} {r.label}</SelectItem>)}
@@ -915,18 +962,78 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
             )}
 
             {/* Permissions */}
-            <div className="rounded-lg border border-sidebar-border bg-white/[0.02] p-3 space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Permissions</p>
-              <label className="flex items-start gap-3 cursor-pointer group">
-                <input type="checkbox" checked={form.can_add_members}
-                  onChange={(e) => setForm({ ...form, can_add_members: e.target.checked })}
-                  className="mt-0.5 w-4 h-4 rounded border-sidebar-border bg-card accent-primary cursor-pointer" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">Onboard new members</p>
-                  <p className="text-xs text-muted-foreground">Allow this staff to add new clients from their portal when you're absent.</p>
+            {form.role === "trainer" ? (
+              <div className="rounded-lg border border-sidebar-border bg-white/[0.02] p-3 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Permissions</p>
+                <label className="flex items-start gap-3 cursor-pointer group">
+                  <input type="checkbox" checked={form.can_add_members}
+                    onChange={(e) => setForm({ ...form, can_add_members: e.target.checked })}
+                    className="mt-0.5 w-4 h-4 rounded border-sidebar-border bg-card accent-primary cursor-pointer" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">Onboard new members</p>
+                    <p className="text-xs text-muted-foreground">Allow this trainer to add new clients from their portal when you&apos;re absent.</p>
+                  </div>
+                </label>
+                <p className="text-[11px] text-muted-foreground leading-snug pt-1 border-t border-sidebar-border">
+                  Trainers use the dedicated trainer portal. Granular role permissions only apply to non-trainer staff.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-sidebar-border bg-white/[0.02] p-3 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Permissions</p>
+                  <span className="text-[10px] text-muted-foreground/70">{form.permissions.length} enabled</span>
                 </div>
-              </label>
-            </div>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Auto-set based on role. Uncheck to restrict access. Changes apply on save.
+                </p>
+                {PERMISSION_GROUPS.map((group) => {
+                  const enabledInGroup = group.keys.filter((k) => form.permissions.includes(k)).length;
+                  const allOn = enabledInGroup === group.keys.length;
+                  const noneOn = enabledInGroup === 0;
+                  return (
+                    <div key={group.label} className="space-y-1.5 pt-2 border-t border-sidebar-border first:border-t-0 first:pt-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-foreground/80">{group.label}</p>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setGroupPermissions(group.keys, true)}
+                            disabled={allOn}
+                            className="text-[10px] px-1.5 py-0.5 rounded border border-sidebar-border text-muted-foreground hover:text-foreground hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          >
+                            All
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setGroupPermissions(group.keys, false)}
+                            disabled={noneOn}
+                            className="text-[10px] px-1.5 py-0.5 rounded border border-sidebar-border text-muted-foreground hover:text-foreground hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          >
+                            None
+                          </button>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        {group.keys.map((key) => (
+                          <label key={key} className="flex items-start gap-2.5 cursor-pointer group py-0.5">
+                            <input
+                              type="checkbox"
+                              checked={form.permissions.includes(key)}
+                              onChange={() => togglePermission(key)}
+                              className="mt-0.5 w-3.5 h-3.5 rounded border-sidebar-border bg-card accent-primary cursor-pointer shrink-0"
+                            />
+                            <span className="text-xs text-foreground/90 leading-snug group-hover:text-foreground">
+                              {PERMISSIONS[key]}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <DialogFooter className="px-6 py-4 shrink-0 border-t border-sidebar-border">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
@@ -937,7 +1044,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
         </DialogContent>
       </Dialog>
 
-      {/* ── Create Trainer Login Dialog ──────────────────── */}
+      {/* ── Create Staff Login Dialog (trainers + manager + frontdesk) ── */}
       <Dialog open={!!loginDialog} onOpenChange={(o) => !o && closeLoginDialog()}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
@@ -984,7 +1091,13 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
             /* ── Step 1: Form ── */
             <div className="space-y-4 py-2">
               <div className="rounded-lg bg-primary/5 border border-primary/15 px-3 py-2.5 text-xs text-muted-foreground">
-                This trainer will be able to log in and mark payments for their assigned members only.
+                {loginDialog?.role === "trainer"
+                  ? "This trainer will be able to log in and mark payments for their assigned members only."
+                  : loginDialog?.role === "manager"
+                  ? "This manager will be able to log in. Access is controlled by the permissions you set on their profile."
+                  : loginDialog?.role === "frontdesk"
+                  ? "This receptionist will be able to log in. They can add members, leads, and receive payments based on the permissions you set."
+                  : "This staff member will be able to log in. Access is controlled by their role and permissions."}
               </div>
               <div className="space-y-1.5">
                 <Label>Username *</Label>

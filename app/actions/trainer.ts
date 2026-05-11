@@ -87,6 +87,15 @@ export async function recalcPendingSalary(trainerId: string, gymId: string): Pro
   }
 }
 
+// Roles that map to a valid pulse_profiles.role value when creating a login.
+// Other staff roles (cleaner, guard, cook) get role='other' on profile — no
+// app-level routing for them yet but auth still works.
+const STAFF_ROLE_TO_PROFILE_ROLE: Record<string, string> = {
+  trainer:   "trainer",
+  manager:   "manager",
+  frontdesk: "frontdesk",
+};
+
 export async function createTrainerLogin(staffId: string, email: string, password: string) {
   const ctx = await getAuthContext();
   if (!ctx?.gymId) return { error: "Unauthorized" };
@@ -98,13 +107,17 @@ export async function createTrainerLogin(staffId: string, email: string, passwor
 
   const { data: staff, error: staffErr } = await admin
     .from("pulse_staff")
-    .select("id, full_name, gym_id, user_id")
+    .select("id, full_name, role, gym_id, user_id")
     .eq("id", staffId)
     .eq("gym_id", ctx.gymId)
     .single();
 
   if (staffErr || !staff) return { error: "Staff not found" };
-  if (staff.user_id) return { error: "Login already exists for this trainer" };
+  if (staff.user_id) return { error: "Login already exists for this staff member" };
+
+  // Map staff.role → valid pulse_profiles.role. Falls back to 'trainer' to keep
+  // existing trainer-login behavior unchanged when staff.role === 'trainer'.
+  const profileRole = STAFF_ROLE_TO_PROFILE_ROLE[staff.role] ?? "trainer";
 
   // Check if this email is already registered at another gym — link instead of create
   const { data: existingStaff } = await admin
@@ -117,18 +130,27 @@ export async function createTrainerLogin(staffId: string, email: string, passwor
   let userId: string;
 
   if (existingStaff?.user_id) {
-    // Trainer already has an account — just link to this gym's staff record
+    // Staff already has an account at another gym — link to this gym's staff record
     userId = existingStaff.user_id;
   } else {
     const { data: newUser, error: authErr } = await admin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      user_metadata: { full_name: staff.full_name, role: "trainer" },
+      user_metadata: { full_name: staff.full_name, role: profileRole },
     });
     if (authErr) return { error: authErr.message };
     userId = newUser.user.id;
   }
+
+  // Ensure pulse_profiles row exists with the correct role (some setups auto-create
+  // via trigger with role='owner' default; upsert overrides to the staff role).
+  await admin.from("pulse_profiles").upsert({
+    id: userId,
+    email,
+    full_name: staff.full_name,
+    role: profileRole,
+  }, { onConflict: "id" });
 
   await admin.from("pulse_staff").update({ user_id: userId, email }).eq("id", staffId);
 

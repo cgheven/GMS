@@ -1,6 +1,7 @@
 "use server";
 import { revalidateTag } from "next/cache";
-import { getAuthContext } from "@/lib/data";
+import { getAuthContext, getStaffSession } from "@/lib/data";
+import { hasPermission, type PermissionKey } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { LeadSource, LeadStatus, LeadLostReason, LeadActivityType } from "@/types";
 
@@ -23,6 +24,26 @@ async function requireOwnerCtx() {
   return ctx;
 }
 
+/**
+ * Authorize a lead-related mutation: owner OR non-owner staff with the
+ * given permission. Returns a normalized {gymId, userId} or null.
+ * Owners always pass; demo owners are blocked.
+ */
+async function requireOwnerOrPermission(perm: PermissionKey | PermissionKey[]) {
+  const owner = await getAuthContext();
+  if (owner?.user && owner.gymId && !owner.isDemo) {
+    return { gymId: owner.gymId as string, userId: owner.user.id, isOwner: true as const };
+  }
+  const staff = await getStaffSession();
+  if (staff) {
+    const keys = Array.isArray(perm) ? perm : [perm];
+    if (keys.every((k) => hasPermission(staff.permissions, k))) {
+      return { gymId: staff.gymId, userId: staff.user.id, isOwner: false as const };
+    }
+  }
+  return null;
+}
+
 function bumpDashboard(gymId: string | null | undefined) {
   if (!gymId) return;
   revalidateTag(`dashboard-${gymId}`);
@@ -31,7 +52,7 @@ function bumpDashboard(gymId: string | null | undefined) {
 // ── Create / update / delete ─────────────────────────────────────────────────
 
 export async function createLead(payload: LeadInput) {
-  const ctx = await requireOwnerCtx();
+  const ctx = await requireOwnerOrPermission("leads.add");
   if (!ctx) return { error: "Unauthorized" };
   if (!payload.full_name?.trim()) return { error: "Name is required" };
 
@@ -60,7 +81,7 @@ export async function createLead(payload: LeadInput) {
 }
 
 export async function updateLead(leadId: string, payload: Partial<LeadInput>) {
-  const ctx = await requireOwnerCtx();
+  const ctx = await requireOwnerOrPermission("leads.update");
   if (!ctx) return { error: "Unauthorized" };
 
   const admin = createAdminClient();
@@ -76,6 +97,7 @@ export async function updateLead(leadId: string, payload: Partial<LeadInput>) {
 }
 
 export async function deleteLead(leadId: string) {
+  // Deleting a lead is a destructive action — keep this owner-only.
   const ctx = await requireOwnerCtx();
   if (!ctx) return { error: "Unauthorized" };
 
@@ -90,11 +112,10 @@ export async function deleteLead(leadId: string) {
 // ── Status transitions ───────────────────────────────────────────────────────
 
 export async function setLeadStatus(leadId: string, status: LeadStatus) {
-  const ctx = await requireOwnerCtx();
+  const ctx = await requireOwnerOrPermission("leads.update");
   if (!ctx) return { error: "Unauthorized" };
 
   const admin = createAdminClient();
-  const { data: { user } } = await ctx.supabase.auth.getUser();
 
   const { error } = await admin
     .from("pulse_leads")
@@ -107,7 +128,7 @@ export async function setLeadStatus(leadId: string, status: LeadStatus) {
     lead_id: leadId,
     type: "status_change",
     content: `Status → ${status}`,
-    created_by: user?.id ?? null,
+    created_by: ctx.userId ?? null,
   });
 
   bumpDashboard(ctx.gymId);
@@ -115,7 +136,7 @@ export async function setLeadStatus(leadId: string, status: LeadStatus) {
 }
 
 export async function markLeadLost(leadId: string, reason: LeadLostReason, note?: string) {
-  const ctx = await requireOwnerCtx();
+  const ctx = await requireOwnerOrPermission("leads.update");
   if (!ctx) return { error: "Unauthorized" };
 
   const admin = createAdminClient();
@@ -144,11 +165,10 @@ export async function markLeadLost(leadId: string, reason: LeadLostReason, note?
 // ── Activity log ─────────────────────────────────────────────────────────────
 
 export async function logLeadActivity(leadId: string, type: LeadActivityType, content?: string) {
-  const ctx = await requireOwnerCtx();
+  const ctx = await requireOwnerOrPermission("leads.update");
   if (!ctx) return { error: "Unauthorized" };
 
   const admin = createAdminClient();
-  const { data: { user } } = await ctx.supabase.auth.getUser();
 
   // Verify lead belongs to this gym
   const { data: lead } = await admin
@@ -162,7 +182,7 @@ export async function logLeadActivity(leadId: string, type: LeadActivityType, co
     lead_id: leadId,
     type,
     content: content?.trim() || null,
-    created_by: user?.id ?? null,
+    created_by: ctx.userId ?? null,
   });
   if (error) return { error: error.message };
 
@@ -188,7 +208,8 @@ type ConvertPayload = {
 };
 
 export async function convertLeadToMember(leadId: string, payload: ConvertPayload) {
-  const ctx = await requireOwnerCtx();
+  // Conversion both updates a lead AND adds a member, so require both perms.
+  const ctx = await requireOwnerOrPermission(["leads.update", "members.add"]);
   if (!ctx) return { error: "Unauthorized" };
 
   const admin = createAdminClient();
