@@ -158,7 +158,7 @@ export default function LoginPage() {
         <div className="mt-5 text-center space-y-2">
           <p className="text-xs text-muted-foreground/50">Interested in Pulse for your gym?</p>
           <a
-            href={`https://wa.me/923193454321?text=${encodeURIComponent("Hi, I'm interested in Pulse GMS for my gym. How do I get started?")}`}
+            href={`https://wa.me/923336673553?text=${encodeURIComponent("Hi, I'm interested in Pulse GMS for my gym. How do I get started?")}`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#25D366]/10 border border-[#25D366]/25 text-[#25D366] text-xs font-semibold hover:bg-[#25D366]/20 transition-all"

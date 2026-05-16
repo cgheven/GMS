@@ -4,7 +4,7 @@ import {
   Users, FileText, LayoutDashboard, Sparkles,
 } from "lucide-react";
 
-const WA_NUMBER = "923193454321";
+const WA_NUMBER = "923336673553";
 const WA_MESSAGE = encodeURIComponent(
   "Hi, I filled out the research form and want to talk about what you're building.",
 );

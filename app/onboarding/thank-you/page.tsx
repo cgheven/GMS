@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     "Thank you for your interest in Pulse. Our team will review your application and get back to you within 24 hours.",
 };
 
-const PULSE_WHATSAPP = "923193454321";
+const PULSE_WHATSAPP = "923336673553";
 const PRE_FILLED_MSG = "Hi, I just submitted my gym onboarding form. Looking forward to hearing back!";
 
 export default async function ThankYouPage({

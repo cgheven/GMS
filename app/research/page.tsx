@@ -1,6 +1,6 @@
 import { ResearchForm } from "./research-form";
 
-const WA_NUMBER = "923193454321";
+const WA_NUMBER = "923336673553";
 const WA_MESSAGE = encodeURIComponent(
   "Hi, I run a gym and saw your research page. Happy to share what works and what doesn't.",
 );

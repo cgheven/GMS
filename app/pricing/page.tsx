@@ -84,7 +84,7 @@ const tiers = [
     tagline: "The difference between a gym and a business.",
     highlight: false,
     cta: "Talk to Sales",
-    href: `https://wa.me/923193454321?text=${encodeURIComponent("Hi, I'm interested in the Pro plan for Pulse GMS. How do I get started?")}`,
+    href: `https://wa.me/923336673553?text=${encodeURIComponent("Hi, I'm interested in the Pro plan for Pulse GMS. How do I get started?")}`,
     bullets: [
       "Everything in Growth",
       "Up to 2000 active members",
@@ -396,7 +396,7 @@ export default function PricingPage() {
                   <p className="text-sm text-muted-foreground leading-relaxed">{tier.tagline}</p>
                 </div>
                 <a
-                  href={`https://wa.me/923193454321?text=${encodeURIComponent(`Hi, I'm interested in the ${tier.name} plan for Pulse GMS. How do I get started?`)}`}
+                  href={`https://wa.me/923336673553?text=${encodeURIComponent(`Hi, I'm interested in the ${tier.name} plan for Pulse GMS. How do I get started?`)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className={`flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
@@ -426,7 +426,7 @@ export default function PricingPage() {
           })}
         </div>
         <p className="text-center text-xs text-muted-foreground/60 mt-6">
-          Need more than 7 branches? <a href={`https://wa.me/923193454321?text=${encodeURIComponent("Hi, I need a custom multi-branch plan for Pulse GMS.")}`} target="_blank" rel="noopener noreferrer" className="underline hover:text-muted-foreground transition-colors">Contact us for a custom plan.</a>
+          Need more than 7 branches? <a href={`https://wa.me/923336673553?text=${encodeURIComponent("Hi, I need a custom multi-branch plan for Pulse GMS.")}`} target="_blank" rel="noopener noreferrer" className="underline hover:text-muted-foreground transition-colors">Contact us for a custom plan.</a>
         </p>
       </section>
 
@@ -514,7 +514,7 @@ export default function PricingPage() {
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
-              href={`https://wa.me/923193454321?text=${encodeURIComponent("Hi, I'm interested in Pulse GMS. Can you help me choose the right plan?")}`}
+              href={`https://wa.me/923336673553?text=${encodeURIComponent("Hi, I'm interested in Pulse GMS. Can you help me choose the right plan?")}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-6 py-3 rounded-xl border border-sidebar-border hover:border-primary/40 text-foreground font-semibold transition-colors text-sm"
