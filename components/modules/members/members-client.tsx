@@ -8,7 +8,7 @@ import {
   Snowflake, AlertCircle, CheckCircle,
   ChevronLeft, ChevronRight, CheckCircle2, Wallet, CreditCard,
   PauseCircle, PlayCircle, Ban,
-  Target, Phone, X, Activity, ChevronDown, Check, MessageCircle,
+  Target, Phone, X, Activity, ChevronDown, Check, MessageCircle, Download,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
@@ -31,6 +31,8 @@ import { freezeMember, unfreezeMember, putMemberOnHold, resumeMember, markAsDefa
 import { createPayment, updatePayment, listPaymentsForGym, listMemberTimeline } from "@/app/actions/payments";
 import { SmartAssignPanel } from "@/components/modules/profit-insights/smart-assign-panel";
 import { PhotoPicker } from "@/components/modules/members/photo-picker";
+import { ExportMembersDialog } from "@/components/modules/members/export-members-dialog";
+import type { ListKey } from "@/lib/members-export";
 import { InvoiceDialog, type InvoiceData } from "@/components/modules/payments/invoice-dialog";
 
 // ── Payment helpers ────────────────────────────────────────────────────────────
@@ -317,6 +319,7 @@ export function MembersClient({
   const [defaulterThreshold] = useState(initialThreshold);
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
   const [timelineMember, setTimelineMember] = useState<Member | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
   const [plans] = useState(initialPlans);
   const [staff] = useState(initialStaff);
   const [referrers] = useState(initialReferrers);
@@ -776,12 +779,21 @@ export function MembersClient({
           <h1 className="text-3xl font-serif font-normal tracking-tight">Members</h1>
           <p className="text-muted-foreground text-sm mt-1">Manage gym members and memberships</p>
         </div>
-        <Button
-          onClick={openAdd}
-          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold w-full sm:w-auto"
-        >
-          <Plus className="w-4 h-4" /> Add Member
-        </Button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            onClick={() => setExportOpen(true)}
+            className="gap-2 flex-1 sm:flex-none"
+          >
+            <Download className="w-4 h-4" /> Export
+          </Button>
+          <Button
+            onClick={openAdd}
+            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold flex-1 sm:flex-none"
+          >
+            <Plus className="w-4 h-4" /> Add Member
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -1509,6 +1521,16 @@ export function MembersClient({
         member={timelineMember}
         gymId={gymId}
         onClose={() => setTimelineMember(null)}
+      />
+
+      <ExportMembersDialog
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        lists={{ active, frozen, on_hold: onHold, defaulters, expired }}
+        defaultList={(["frozen", "on_hold", "defaulters", "expired"].includes(tab) ? tab : "active") as ListKey}
+        gymName={gym?.name ?? "Gym"}
+        applyFilters={filterList}
+        filtersActive={search !== "" || trainerFilter !== "all" || shiftFilter !== "all"}
       />
     </div>
   );
@@ -2536,6 +2558,10 @@ function MemberTimelineDialog({ member, gymId, onClose }: { member: Member | nul
   const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
+    // Reset the photo lightbox on every open/close — the dialog component stays
+    // mounted, so a leftover lightbox=true would otherwise reopen the image
+    // instead of the profile next time.
+    setLightbox(false);
     if (!member || !gymId) return;
     const m = member;
     setEvents([]); setPayments([]); setTotalPaid(0); setMetric(null); setGoals([]); setShowAll(false);
