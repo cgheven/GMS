@@ -399,7 +399,7 @@ export async function clearDefaulter(memberId: string) {
 
   const { error } = await admin
     .from("pulse_members")
-    .update({ status: "active", defaulter_since: null, defaulter_exempt: true, updated_at: new Date().toISOString() })
+    .update({ status: "active", defaulter_since: null, last_cleared_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq("id", memberId)
     .eq("gym_id", ctx.gymId);
   if (error) return { error: error.message };
@@ -565,8 +565,10 @@ export async function updateMember(memberId: string, payload: Record<string, unk
   // side-effects atomically in the same update (no second round-trip).
   const oldStatus = existing?.status as string | undefined;
   const newStatus = update.status as string | undefined;
-  const isReactivation = (oldStatus === "expired" || oldStatus === "cancelled") && newStatus === "active";
-  if (isReactivation) {
+  const isFixedPlanReactivation = (oldStatus === "expired" || oldStatus === "cancelled") && newStatus === "active";
+  const isDefaulterReactivation = oldStatus === "defaulter" && newStatus === "active";
+  const isReactivation = isFixedPlanReactivation || isDefaulterReactivation;
+  if (isFixedPlanReactivation) {
     // Reject reactivation with a past expiry — auto_expire_members would
     // immediately re-expire the member on the very next _fetchMembers call.
     const incomingExpiry = (update.plan_expiry_date ?? existing?.plan_expiry_date) as string | null | undefined;
@@ -574,10 +576,11 @@ export async function updateMember(memberId: string, payload: Record<string, unk
     if (!incomingExpiry || incomingExpiry <= today) {
       return { error: "Set a future expiry date before reactivating this member." };
     }
-    // Clear stale defaulter state and exempt from auto-flag so check_defaulters
-    // won't immediately re-flag on the next _fetchMembers reload.
+  }
+  if (isReactivation) {
+    // Stamp last_cleared_at so check_defaulters ignores pre-reactivation history.
     (update as Record<string, unknown>).defaulter_since = null;
-    (update as Record<string, unknown>).defaulter_exempt = true;
+    (update as Record<string, unknown>).last_cleared_at = new Date().toISOString();
   }
 
   const { error } = await admin
