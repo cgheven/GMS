@@ -655,8 +655,11 @@ export function MembersClient({
     setDialogOpen(true);
   }
 
-  function openEdit(m: Member) {
+  const [editingForceStatus, setEditingForceStatus] = useState<MemberStatus | null>(null);
+
+  function openEdit(m: Member, forceStatus?: MemberStatus) {
     setEditing(m);
+    setEditingForceStatus(forceStatus ?? null);
     setDialogOpen(true);
   }
 
@@ -1242,7 +1245,7 @@ export function MembersClient({
                   <>
                     <Button variant="ghost" size="sm" title="Reactivate member"
                       className="h-7 px-2 text-xs text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 gap-1"
-                      onClick={() => openEdit(m)}>
+                      onClick={() => openEdit(m, "active")}>
                       <PlayCircle className="w-3.5 h-3.5" /> Reactivate
                     </Button>
                     <Button variant="ghost" size="icon" title="History" className="h-7 w-7 text-muted-foreground hover:text-foreground"
@@ -1615,6 +1618,7 @@ export function MembersClient({
         open={dialogOpen}
         onOpenChange={(o) => { setDialogOpen(o); if (!o) { setPendingDeviceUserId(null); setPendingUnlinkedId(null); } }}
         editing={editing}
+        forceStatus={editingForceStatus}
         existingMembers={[...active, ...frozen, ...onHold, ...defaulters, ...expired]}
         plans={plans}
         staff={staff}
@@ -1730,6 +1734,7 @@ interface MemberFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editing: Member | null;
+  forceStatus?: MemberStatus | null;
   existingMembers: Member[];
   plans: MembershipPlan[];
   staff: Pick<Staff, "id" | "full_name" | "role" | "commission_percentage" | "commission_floor" | "default_shift_name">[];
@@ -1751,7 +1756,7 @@ function normalizePhone(raw: string | null | undefined): string {
 }
 
 function MemberFormDialog({
-  open, onOpenChange, editing, existingMembers, plans, staff, shifts, referrers, gymId, initialDeviceUserId, unlinkedPunchId, onSaved, onOpenExisting,
+  open, onOpenChange, editing, forceStatus, existingMembers, plans, staff, shifts, referrers, gymId, initialDeviceUserId, unlinkedPunchId, onSaved, onOpenExisting,
 }: MemberFormDialogProps) {
   const { isDemo } = useGymContext();
   const [form, setForm] = useState(() => makeEmptyForm());
@@ -1862,7 +1867,7 @@ function MemberFormDialog({
         medical_notes: editing.medical_notes ?? "",
         notes: editing.notes ?? "",
         device_user_id: editing.device_user_id ?? "",
-        status: editing.status,
+        status: forceStatus ?? editing.status,
       });
     } else {
       setForm(makeEmptyForm(initialDeviceUserId ?? ""));
