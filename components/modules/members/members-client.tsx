@@ -1879,6 +1879,7 @@ function MemberFormDialog({
       const primaryId = nextIds[0] ?? "";
       const primary = primaryId ? planMap[primaryId] : null;
       const sumFee = nextIds.reduce((s, id) => s + Number(planMap[id]?.price ?? 0), 0);
+      const nextIncludesPt = nextIds.some((id) => planMap[id]?.includes_pt);
       return {
         ...f,
         plan_ids: nextIds,
@@ -1886,6 +1887,7 @@ function MemberFormDialog({
         monthly_fee: nextIds.length ? String(sumFee) : f.monthly_fee,
         admission_fee: primary && primary.admission_fee > 0 ? String(primary.admission_fee) : f.admission_fee,
         plan_expiry_date: primary ? calcPlanExpiry(primary, f.plan_start_date || f.join_date) : f.plan_expiry_date,
+        ...(!nextIncludesPt && { assigned_trainer_id: "", assigned_shift_id: "" }),
       };
     });
   }
@@ -2263,15 +2265,17 @@ function MemberFormDialog({
                   </p>
                 )}
               </div>
-                <SmartAssignPanel
-                  trainers={staff}
-                  shifts={shifts}
-                  selectedTrainerId={form.assigned_trainer_id}
-                  selectedShiftId={form.assigned_shift_id}
-                  memberFee={Number(form.monthly_fee) || 0}
-                  onSelectTrainer={(v) => setForm((f) => ({ ...f, assigned_trainer_id: v, assigned_shift_id: "" }))}
-                  onSelectShift={(v) => setForm((f) => ({ ...f, assigned_shift_id: v }))}
-                />
+                {form.plan_ids.some((id) => planMap[id]?.includes_pt) && (
+                  <SmartAssignPanel
+                    trainers={staff}
+                    shifts={shifts}
+                    selectedTrainerId={form.assigned_trainer_id}
+                    selectedShiftId={form.assigned_shift_id}
+                    memberFee={Number(form.monthly_fee) || 0}
+                    onSelectTrainer={(v) => setForm((f) => ({ ...f, assigned_trainer_id: v, assigned_shift_id: "" }))}
+                    onSelectShift={(v) => setForm((f) => ({ ...f, assigned_shift_id: v }))}
+                  />
+                )}
                 {!editing && referrers.length > 0 && (
                   <div className="space-y-1.5">
                     <Label>Referred by <span className="text-muted-foreground text-xs">(optional)</span></Label>
