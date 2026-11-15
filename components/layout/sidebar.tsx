@@ -1,5 +1,6 @@
 "use client";
 import { memo, useMemo } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -169,8 +170,8 @@ export function Sidebar({ open, onClose, permissions }: SidebarProps) {
         {/* Logo */}
         <div className="flex items-center justify-between px-4 h-14 border-b border-sidebar-border">
           <Link href="/dashboard" className="flex items-center gap-2.5 group" onClick={onClose}>
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/15 border border-primary/25 transition-all group-hover:bg-primary/20">
-              <Zap className="w-4 h-4 text-primary" />
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 transition-all group-hover:bg-primary/15 overflow-hidden">
+              <Image src="/logo-mark.jpg" alt="Pulse" width={32} height={32} className="w-full h-full object-cover" />
             </div>
             <div>
               <p className="text-foreground font-bold text-sm tracking-tight leading-none">Pulse</p>
