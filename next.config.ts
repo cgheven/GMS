@@ -1,12 +1,32 @@
 import type { NextConfig } from "next";
 
+// Content-Security-Policy. script/style allow 'unsafe-inline'/'unsafe-eval'
+// because Next.js App Router ships inline bootstrap scripts and Tailwind injects
+// inline styles; there is no user-controlled HTML sink in the app (verified in
+// the 2026-11-15 audit), so this is defense-in-depth. connect-src is locked to
+// our own origin + Supabase (REST + realtime), frames/objects are blocked, and
+// base-uri/form-action are pinned. Tighten script-src to per-request nonces later.
+const csp = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://*.supabase.co",
+  "font-src 'self' data:",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+].join("; ");
+
 const securityHeaders = [
   { key: "X-Content-Type-Options",    value: "nosniff" },
   { key: "X-Frame-Options",           value: "DENY" },
-  { key: "X-XSS-Protection",          value: "1; mode=block" },
+  { key: "X-XSS-Protection",          value: "0" }, // modern guidance: disable the legacy auditor (CSP is the control)
   { key: "Referrer-Policy",           value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy",        value: "camera=(self), microphone=(), geolocation=()" },
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+  { key: "Content-Security-Policy",   value: csp },
 ];
 
 const nextConfig: NextConfig = {

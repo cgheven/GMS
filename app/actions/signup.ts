@@ -2,6 +2,7 @@
 
 import { submitOnboarding } from "./onboarding";
 import { sendSignupConfirmationEmail } from "@/lib/email";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -65,11 +66,22 @@ export async function requestSignup(input: SignupInput): Promise<SignupResult> {
     return { success: false, error: result.error };
   }
 
-  // Best-effort confirmation — never fail the signup if mail is down.
-  await sendSignupConfirmationEmail(email, {
-    ownerName: input.ownerName,
-    gymName: input.gymName,
+  // Anti email-bomb: cap confirmation emails per RECIPIENT, independent of IP
+  // (an attacker can rotate IPs to spam one victim's inbox). Over the cap we
+  // still return success — the prospect was recorded — just skip the mail.
+  const email_l = email.toLowerCase();
+  const { data: emailAllowed } = await createAdminClient().rpc("pulse_rate_hit", {
+    p_bucket: `signup:email:${email_l}`,
+    p_limit: 2,
+    p_window_seconds: 3600,
   });
+  if (emailAllowed !== false) {
+    // Best-effort confirmation — never fail the signup if mail is down.
+    await sendSignupConfirmationEmail(email, {
+      ownerName: input.ownerName,
+      gymName: input.gymName,
+    });
+  }
 
   return { success: true };
 }

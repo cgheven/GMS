@@ -1,7 +1,7 @@
 "use server";
 import { revalidateTag } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getAuthContext, getTrainerContext } from "@/lib/data";
+import { getAuthContext, getTrainerContext, getStaffSession } from "@/lib/data";
 import { writeAuditLog } from "@/lib/audit";
 import { calcCommission, commissionRuleLabel } from "@/lib/commission";
 import { memberPlanLabel } from "@/lib/utils";
@@ -11,6 +11,16 @@ import { memberPlanLabel } from "@/lib/utils";
 // salary record for the current month. Called silently after any member
 // assignment or transfer. Never touches records with status = 'paid'.
 export async function recalcPendingSalary(trainerId: string, gymId: string): Promise<void> {
+  // Exported server actions are directly invokable, so this must authorize. It
+  // only ever acts on the CALLER's own gym: resolve their gym from whatever
+  // session they hold (owner / staff / trainer) and no-op on mismatch, so a
+  // forged (trainerId, gymId) can't recompute another tenant's salaries.
+  const callerGym =
+    (await getAuthContext())?.gymId ??
+    (await getStaffSession())?.gymId ??
+    (await getTrainerContext())?.gymId ??
+    null;
+  if (!callerGym || callerGym !== gymId) return;
   try {
     const now = new Date();
     const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -368,8 +378,10 @@ export async function updateMemberAsTrainer(memberId: string, payload: UpdatePay
       email: payload.email ?? null,
       cnic: payload.cnic ?? null,
       plan_id: payload.plan_id,
-      monthly_fee: payload.monthly_fee,
-      admission_fee: payload.admission_fee,
+      // monthly_fee / admission_fee deliberately NOT settable on a trainer EDIT:
+      // commission is computed from monthly_fee, so letting a trainer raise it on
+      // an existing member is a retroactive self-payout lever (security audit
+      // 2026-11-15). Fees are owner-controlled; set at creation / via the owner.
       join_date: payload.join_date,
       plan_expiry_date: payload.plan_expiry_date,
       notes: payload.notes ?? null,

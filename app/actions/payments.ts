@@ -68,6 +68,10 @@ interface CreatePaymentPayload {
 export async function createPayment(payload: CreatePaymentPayload) {
   const ctx = await requireOwnerOrPermission("payments.create");
   if (!ctx) return { error: "Unauthorized" };
+
+  const neg = negativeMoneyField(payload);
+  if (neg) return { error: `${neg} cannot be negative` };
+
   const admin = createAdminClient();
 
   // Verify member belongs to this gym. Also pull pending_signup_discount so
@@ -213,9 +217,32 @@ export async function listMemberTimeline(memberId: string) {
   };
 }
 
+// Reject negative monetary values (no negative discounts / amounts). Returns the
+// offending field name, or null if clean.
+function negativeMoneyField(p: Partial<CreatePaymentPayload>): string | null {
+  for (const k of ["amount", "discount", "late_fee", "total_amount"] as const) {
+    if (k in p && p[k] != null && Number(p[k]) < 0) return k;
+  }
+  return null;
+}
+
 export async function updatePayment(paymentId: string, payload: Partial<CreatePaymentPayload>) {
   const ctx = await requireOwnerOrPermission("payments.create");
   if (!ctx) return { error: "Unauthorized" };
+
+  // Refund / waive is a privileged transition — gate it on payments.refund
+  // (owners bypass). A plain payments.create staffer must not be able to void
+  // revenue by flipping status to refunded/waived (security audit 2026-11-15).
+  if ((payload.status === "refunded" || payload.status === "waived") && !ctx.isOwner) {
+    const staff = await getStaffSession();
+    if (!staff || !hasPermission(staff.permissions, "payments.refund")) {
+      return { error: "You don't have permission to refund or waive payments." };
+    }
+  }
+
+  const neg = negativeMoneyField(payload);
+  if (neg) return { error: `${neg} cannot be negative` };
+
   const admin = createAdminClient();
 
   const { data: existing } = await admin

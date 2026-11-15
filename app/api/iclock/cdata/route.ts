@@ -84,10 +84,24 @@ export async function POST(req: NextRequest) {
 
   const admin = createAdminClient();
 
+  // Rate limit per serial — a real device pushes a handful of times a minute;
+  // 120/min is generous and caps attendance-forgery / unlinked-punch flooding
+  // from anyone who has (or guesses) a serial. Fail OPEN on limiter error so a
+  // transient DB hiccup never drops a legitimate device's punches.
+  const { data: rlOk } = await admin.rpc("pulse_rate_hit", {
+    p_bucket: `iclock:sn:${sn}`,
+    p_limit: 120,
+    p_window_seconds: 60,
+  });
+  if (rlOk === false) {
+    console.warn("[ADMS] Rate limit exceeded for SN:", sn);
+    return new NextResponse("OK", { status: 200, headers: { "Content-Type": "text/plain" } });
+  }
+
   // Look up gym by device serial number
   const { data: gym } = await admin
     .from("pulse_gyms")
-    .select("id")
+    .select("id, device_push_key")
     .eq("device_serial", sn)
     .maybeSingle();
 
@@ -95,6 +109,18 @@ export async function POST(req: NextRequest) {
     console.warn("[ADMS] Unknown device serial:", sn);
     // Still return OK so device doesn't retry endlessly
     return new NextResponse("OK", { status: 200, headers: { "Content-Type": "text/plain" } });
+  }
+
+  // When the gym has set a device push key, the serial alone is NOT sufficient —
+  // the device must also send ?key=<secret>. Treats the serial as an identifier,
+  // not a credential (CWE-306). Constant-ish compare; mismatch is silently OK'd
+  // so an attacker gets no oracle.
+  if (gym.device_push_key) {
+    const key = req.nextUrl.searchParams.get("key") ?? "";
+    if (key !== gym.device_push_key) {
+      console.warn("[ADMS] Missing/invalid device key for SN:", sn);
+      return new NextResponse("OK", { status: 200, headers: { "Content-Type": "text/plain" } });
+    }
   }
 
   // Fire-and-forget: update device_last_seen without blocking the response

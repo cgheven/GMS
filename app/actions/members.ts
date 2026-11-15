@@ -76,12 +76,21 @@ const MEMBER_UPDATE_ALLOWED = [
   "plan_id", "monthly_fee", "admission_fee", "outstanding_balance",
   "assigned_trainer_id", "assigned_shift_id", "referrer_id",
   "member_number", "join_date", "plan_start_date", "plan_expiry_date",
-  "status", "device_user_id", "shift",
+  "shift",
+  // NOTE: `status` and `device_user_id` are deliberately NOT here. Status
+  // transitions go through the dedicated freeze/hold/defaulter actions (gated on
+  // members.freeze, with audit entries); biometric identity is set only at
+  // creation or via the owner-only linkDeviceUser. Allowing them here let a
+  // members.edit staffer bypass both gates (see security audit 2026-11-15).
 ] as const;
 type MemberUpdateKey = (typeof MEMBER_UPDATE_ALLOWED)[number];
 
 const MEMBER_CREATE_ALLOWED = [
   ...MEMBER_UPDATE_ALLOWED,
+  // Allowed ONLY at creation (register-from-punch). A partial unique index on
+  // (gym_id, device_user_id) prevents claiming an identity already linked to
+  // another member. Updating it later still requires the guarded linkDeviceUser.
+  "device_user_id",
 ] as const;
 type MemberCreateKey = (typeof MEMBER_CREATE_ALLOWED)[number];
 
@@ -527,7 +536,20 @@ export async function updateMember(memberId: string, payload: Record<string, unk
     .single();
 
   // Whitelist allowed fields — see MEMBER_UPDATE_ALLOWED rationale above.
-  const update = pickAllowed(payload, MEMBER_UPDATE_ALLOWED) as Partial<Record<MemberUpdateKey, unknown>> & { updated_at?: string };
+  const update = pickAllowed(payload, MEMBER_UPDATE_ALLOWED) as Partial<Record<MemberUpdateKey, unknown>> & { updated_at?: string; status?: unknown };
+  // `status` is intentionally NOT in the general whitelist. It is a privileged
+  // transition: owners and staff with `members.freeze` may set it via the edit
+  // form (so the reactivation side-effects below keep working), but a plain
+  // `members.edit` staffer must not — that would bypass the gated freeze/hold/
+  // defaulter actions and their audit trail (security audit 2026-11-15).
+  if ("status" in payload) {
+    let maySetStatus = ctx.isOwner;
+    if (!maySetStatus) {
+      const staff = await getStaffSession();
+      maySetStatus = !!staff && hasPermission(staff.permissions, "members.freeze");
+    }
+    if (maySetStatus) update.status = payload.status;
+  }
   const planIds = extractPlanIds(payload);
   // Nothing to do — no field changes and no plan-set change.
   if (Object.keys(update).length === 0 && !planIds) {
@@ -725,7 +747,10 @@ export async function createMember(payload: Record<string, unknown>) {
   const insertPayload: Record<string, unknown> = {
     ...picked,
     gym_id: ctx.gymId, // force — never trust client
-    status: picked.status ?? "active",
+    // status isn't in the create whitelist (it's a privileged field); a new
+    // member defaults to active. Non-active states are reached afterwards via
+    // the dedicated freeze/hold/defaulter actions.
+    status: typeof payload.status === "string" && payload.status ? payload.status : "active",
     join_date: picked.join_date ?? new Date().toISOString().slice(0, 10),
   };
   // Accept pending_signup_discount only on create (NOT via the general update

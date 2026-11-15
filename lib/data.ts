@@ -1,3 +1,4 @@
+import "server-only"; // uses the service-role admin client — must never be imported by a client component
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { cookies } from "next/headers";
@@ -549,6 +550,7 @@ export const getTrainerContext = cache(async () => {
     .from("pulse_staff")
     .select("*, gym:pulse_gyms(name,country,reminder_template,payment_methods)")
     .eq("user_id", user.id)
+    .eq("status", "active") // deactivated/terminated trainers lose portal access immediately
     .single();
 
   if (!staff) return null;

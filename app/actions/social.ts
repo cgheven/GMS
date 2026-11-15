@@ -184,6 +184,9 @@ export async function matchSocialLead(leadId: string, memberId: string, commissi
   if (!ctx) return { error: "Unauthorized" };
   const admin = createAdminClient();
   const { data: lead } = await admin.from("pulse_social_leads").select("lead_name, manager_id").eq("id", leadId).eq("gym_id", ctx.gymId).single();
+  // Verify the matched member belongs to this gym before linking it to the lead.
+  const { data: member } = await admin.from("pulse_members").select("id").eq("id", memberId).eq("gym_id", ctx.gymId).maybeSingle();
+  if (!member) return { error: "Member not found" };
   const newStatus = matchedBy === "auto" ? "pending_payment" : "pending_review";
   const { error } = await admin
     .from("pulse_social_leads")

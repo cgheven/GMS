@@ -138,8 +138,22 @@ export async function submitOnboarding(
     null;
   const userAgent = h.get("user-agent")?.slice(0, 500) || null;
 
-  // ── Insert ────────────────────────────────────────────────────────────────
+  // ── Rate limit (anti-spam / resource exhaustion) ──────────────────────────
+  // Unauthenticated endpoint: cap submissions per IP so a bot can't flood
+  // pulse_prospects. 10/hour per IP is generous for a human filling the form.
   const admin = createAdminClient();
+  if (ip) {
+    const { data: allowed } = await admin.rpc("pulse_rate_hit", {
+      p_bucket: `onboarding:ip:${ip}`,
+      p_limit: 10,
+      p_window_seconds: 3600,
+    });
+    if (allowed === false) {
+      return { error: "Too many requests. Please try again in a little while." };
+    }
+  }
+
+  // ── Insert ────────────────────────────────────────────────────────────────
   const { data, error } = await admin
     .from("pulse_prospects")
     .insert({
@@ -173,7 +187,10 @@ export async function submitOnboarding(
     .single();
 
   if (error) {
-    return { error: error.message };
+    // Don't leak raw Postgres error text (column/constraint names) to an
+    // unauthenticated client; log server-side, return a generic message.
+    console.error("[onboarding] insert failed:", error);
+    return { error: "Could not submit right now. Please try again." };
   }
 
   return { success: true, prospectId: data.id };

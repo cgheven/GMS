@@ -1,3 +1,4 @@
+import "server-only"; // build-time guarantee: the service-role key never reaches a client bundle
 import { createClient } from "@supabase/supabase-js";
 
 // Server-only — NEVER import this in client components
