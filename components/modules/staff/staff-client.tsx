@@ -24,7 +24,8 @@ import { toast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/use-currency";
 import { useGymContext } from "@/contexts/gym-context";
 import { formatDate, formatDateInput, formatTime12h } from "@/lib/utils";
-import { validateFullName, validateCNIC, validatePakPhone, validateMoney, runValidators } from "@/lib/validation";
+import { validateFullName, validateNationalId, validatePhone, nationalIdLabel, nationalIdPlaceholder, validateMoney, runValidators } from "@/lib/validation";
+import { phonePlaceholder } from "@/lib/phone";
 import {
   PERMISSIONS,
   PERMISSION_GROUPS,
@@ -130,7 +131,8 @@ function buildUsername(fullName: string, gymName: string | null | undefined, exi
 }
 
 export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayments: initialPayments, mode = "all" }: Props) {
-  const { isDemo } = useGymContext();
+  const { isDemo, gym } = useGymContext();
+  const country = gym?.country ?? null;
   const { format } = useCurrency();
   const isTrainersMode = mode === "trainers";
   const isStaffMode = mode === "staff";
@@ -416,8 +418,8 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
 
     const check = runValidators(
       validateFullName(form.full_name),
-      validateCNIC(form.cnic),
-      validatePakPhone(form.phone),
+      validateNationalId(form.cnic, country),
+      validatePhone(form.phone, country),
       validateMoney(form.monthly_salary, "Base salary"),
     );
     if (!check.ok) {
@@ -981,8 +983,8 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
               </div>
             )}
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label>Phone</Label><Input placeholder="+92 300 0000000" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
-              <div className="space-y-1.5"><Label>CNIC</Label><Input placeholder="00000-0000000-0" value={form.cnic} onChange={(e) => setForm({ ...form, cnic: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>Phone</Label><Input placeholder={phonePlaceholder(country)} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>{nationalIdLabel(country)}</Label><Input placeholder={nationalIdPlaceholder(country)} value={form.cnic} onChange={(e) => setForm({ ...form, cnic: e.target.value })} /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5"><Label>Base Salary (PKR) *</Label><Input type="number" placeholder="0" value={form.monthly_salary} onChange={(e) => setForm({ ...form, monthly_salary: e.target.value })} /></div>

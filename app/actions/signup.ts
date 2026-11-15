@@ -16,6 +16,7 @@ export type SignupInput = {
   email: string;
   phone: string;
   city: string;
+  country: string;
   heardFrom?: string;
   // Honeypot — real users leave it empty; bots fill it. Deliberately NOT named
   // "website"/"url" so password-manager autofill can't populate it.
@@ -52,6 +53,7 @@ export async function requestSignup(input: SignupInput): Promise<SignupResult> {
     email,
     phone: input.phone?.trim() ?? "",
     city: input.city?.trim() ?? "",
+    country: (input.country ?? "").toUpperCase() || "PK",
     heard_from: heardFrom ?? null,
     plan_choice: "starter",
     billing_cycle: "monthly",

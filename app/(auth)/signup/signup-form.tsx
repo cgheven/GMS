@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { CountrySelect } from "@/components/ui/country-select";
+import { isValidPhone, phonePlaceholder } from "@/lib/phone";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -33,6 +35,7 @@ export function SignupForm() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [city, setCity] = useState("");
+  const [country, setCountry] = useState("PK");
   const [heardFrom, setHeardFrom] = useState("");
   const [contactRef2, setContactRef2] = useState(""); // honeypot
   const [loading, setLoading] = useState(false);
@@ -46,6 +49,7 @@ export function SignupForm() {
     if (!ownerName.trim()) return setError("Enter your name.");
     if (!EMAIL_RE.test(email.trim())) return setError("Enter a valid email address.");
     if (!phone.trim()) return setError("Enter your mobile number.");
+    if (!isValidPhone(phone, country)) return setError("Enter a valid mobile number for the selected country.");
     if (!city.trim()) return setError("Enter your city.");
 
     setLoading(true);
@@ -56,6 +60,7 @@ export function SignupForm() {
         email: email.trim(),
         phone: phone.trim(),
         city: city.trim(),
+        country,
         heardFrom: heardFrom || undefined,
         contactRef2,
       });
@@ -142,9 +147,13 @@ export function SignupForm() {
                     placeholder="you@example.com" required autoComplete="email" disabled={loading} className={inputClass} />
                 </div>
                 <div className="space-y-1.5">
+                  <Label htmlFor="country" className={labelClass}>Country</Label>
+                  <CountrySelect id="country" value={country} onChange={(c) => { setCountry(c); setError(""); }} disabled={loading} />
+                </div>
+                <div className="space-y-1.5">
                   <Label htmlFor="phone" className={labelClass}>Mobile number</Label>
                   <Input id="phone" type="tel" value={phone} onChange={(e) => { setPhone(e.target.value); setError(""); }}
-                    placeholder="03XXXXXXXXX" required autoComplete="tel" disabled={loading} className={inputClass} />
+                    placeholder={phonePlaceholder(country)} required autoComplete="tel" disabled={loading} className={inputClass} />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="city" className={labelClass}>City</Label>

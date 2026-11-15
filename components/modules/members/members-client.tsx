@@ -25,7 +25,8 @@ import { useGymContext } from "@/contexts/gym-context";
 import { useCurrency } from "@/hooks/use-currency";
 import { formatDate, formatDateInput, cn, memberPlanLabel } from "@/lib/utils";
 import { buildReminderMessage, whatsappUrl } from "@/lib/whatsapp-reminder";
-import { validateFullName, validateCNIC, validatePakPhone, validateDOB, validateMoney, runValidators, type ValidationResult } from "@/lib/validation";
+import { validateFullName, validatePhone, validateNationalId, nationalIdLabel, nationalIdPlaceholder, validateDOB, validateMoney, runValidators, type ValidationResult } from "@/lib/validation";
+import { phonePlaceholder } from "@/lib/phone";
 import type { Member, MembershipPlan, MemberStatus, MemberGender, MemberShift, Staff, Payment, PaymentMethod, PaymentStatus, Referrer, SocialManager, SocialLead, TrainerShift } from "@/types";
 import { matchSocialLead } from "@/app/actions/social";
 import { freezeMember, unfreezeMember, putMemberOnHold, resumeMember, markAsDefaulter, clearDefaulter, clearDefaulterWithPayment, checkAndClearDefaulter, updateMember, deleteMember as deleteMemberAction, createMember, bulkUpdateMembers, createReferralForMember, consumeUnlinkedPunch, reloadMembersData } from "@/app/actions/members";
@@ -1761,7 +1762,8 @@ function normalizePhone(raw: string | null | undefined): string {
 function MemberFormDialog({
   open, onOpenChange, editing, forceStatus, existingMembers, plans, staff, shifts, referrers, gymId, initialDeviceUserId, unlinkedPunchId, onSaved, onOpenExisting,
 }: MemberFormDialogProps) {
-  const { isDemo } = useGymContext();
+  const { isDemo, gym } = useGymContext();
+  const country = gym?.country ?? null;
   const { format } = useCurrency();
   const [form, setForm] = useState(() => makeEmptyForm());
   const [saving, setSaving] = useState(false);
@@ -1907,9 +1909,9 @@ function MemberFormDialog({
 
     const check = runValidators(
       validateFullName(form.full_name),
-      validateCNIC(form.cnic),
-      validatePakPhone(form.phone),
-      validatePakPhone(form.emergency_phone),
+      validateNationalId(form.cnic, country),
+      validatePhone(form.phone, country),
+      validatePhone(form.emergency_phone, country),
       validateDOB(form.date_of_birth),
       validateMoney(form.monthly_fee, "Monthly fee"),
     );
@@ -2088,12 +2090,12 @@ function MemberFormDialog({
                 />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
-                <Label>Phone <span className="text-muted-foreground text-xs">(03xx-xxxxxxx)</span></Label>
+                <Label>Phone</Label>
                 <ValidatedInput
-                  placeholder="03001234567"
+                  placeholder={phonePlaceholder(country)}
                   value={form.phone}
                   onChange={(v) => setForm((f) => ({ ...f, phone: v }))}
-                  validator={validatePakPhone}
+                  validator={(v) => validatePhone(v, country)}
                   inputMode="tel"
                 />
                 {phoneMatch && (
@@ -2141,13 +2143,13 @@ function MemberFormDialog({
                 <Input type="email" placeholder="member@email.com" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
-                <Label>CNIC <span className="text-muted-foreground text-xs">(XXXXX-XXXXXXX-X)</span></Label>
+                <Label>{nationalIdLabel(country)}</Label>
                 <ValidatedInput
-                  placeholder="00000-0000000-0"
+                  placeholder={nationalIdPlaceholder(country)}
                   value={form.cnic}
                   onChange={(v) => setForm((f) => ({ ...f, cnic: v }))}
-                  validator={validateCNIC}
-                  inputMode="numeric"
+                  validator={(v) => validateNationalId(v, country)}
+                  inputMode="text"
                 />
               </div>
               <div className="space-y-1.5">
@@ -2466,10 +2468,10 @@ function MemberFormDialog({
               <div className="space-y-1.5">
                 <Label>Emergency Phone</Label>
                 <ValidatedInput
-                  placeholder="03001234567"
+                  placeholder={phonePlaceholder(country)}
                   value={form.emergency_phone}
                   onChange={(v) => setForm((f) => ({ ...f, emergency_phone: v }))}
-                  validator={validatePakPhone}
+                  validator={(v) => validatePhone(v, country)}
                   inputMode="tel"
                 />
               </div>

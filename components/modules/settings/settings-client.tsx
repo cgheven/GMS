@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { CountrySelect } from "@/components/ui/country-select";
 import { toast } from "@/hooks/use-toast";
 import { PaymentRecoverySection } from "./payment-recovery-section";
 import { createComplianceLogin, removeComplianceLogin, updateComplianceSettings, getComplianceSettingsAction } from "@/app/actions/compliance";
@@ -76,6 +77,7 @@ export function SettingsClient() {
 
   const [gymForm, setGymForm] = useState({
     name: "", address: "", city: "", area: "", phone: "", email: "",
+    country: "PK",
     monthly_revenue_target: "",
     default_trainer_capacity: "20",
     device_serial: "",
@@ -194,6 +196,7 @@ export function SettingsClient() {
         area: gym.area ?? "",
         phone: gym.phone ?? "",
         email: gym.email ?? "",
+        country: gym.country ?? "PK",
         monthly_revenue_target: gym.monthly_revenue_target?.toString() ?? "",
         default_trainer_capacity: ((gym as typeof gym & { default_trainer_capacity?: number }).default_trainer_capacity ?? 20).toString(),
         device_serial: gym.device_serial ?? "",
@@ -233,6 +236,7 @@ export function SettingsClient() {
       area: gymForm.area || null,
       phone: gymForm.phone || null,
       email: gymForm.email || null,
+      country: gymForm.country || "PK",
       monthly_revenue_target: parseFloat(gymForm.monthly_revenue_target) || 0,
       default_trainer_capacity: Math.max(1, parseInt(gymForm.default_trainer_capacity) || 20),
       device_serial: gymForm.device_serial.trim() || null,
@@ -348,6 +352,14 @@ export function SettingsClient() {
                 value={gymForm.address}
                 onChange={(e) => setGymForm({ ...gymForm, address: e.target.value })}
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Country</Label>
+              <CountrySelect
+                value={gymForm.country}
+                onChange={(code) => setGymForm({ ...gymForm, country: code })}
+              />
+              <p className="text-[11px] text-muted-foreground">Sets your gym&apos;s currency and phone dial code across the app.</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">

@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isValidPhone, normalizePhone } from "@/lib/phone";
 
 // ── Allowlists (mirror the wizard UI) ─────────────────────────────────────────
 const TRIAL_CHOICES = ["1_month", "2_months", "skip"] as const;
@@ -23,6 +24,9 @@ export type OnboardingPayload = {
   email?: string | null;
   gym_name: string;
   city: string;
+  // ISO country code (uppercase). When present the phone is validated against it
+  // and stored in E.164; absent = legacy PK-only validation (onboarding wizard).
+  country?: string | null;
   area?: string | null;
   gym_type?: typeof GYM_TYPES[number] | null;
   active_members_count?: number | null;
@@ -63,13 +67,20 @@ export async function submitOnboarding(
   if ((payload.area ?? "").length > 120) return { error: "Area too long" };
   if ((payload.email ?? "").length > 160) return { error: "Email too long" };
 
-  // ── Pakistani phone validation ─────────────────────────────────────────────
-  // Accepts: 03001234567, +923001234567, 923001234567, with optional spaces / dashes.
-  const phone = payload.phone.replace(/[\s\-]/g, "");
-  const validPhone = /^(\+92|92|0)?3\d{9}$/.test(phone);
+  // ── Phone validation ───────────────────────────────────────────────────────
+  // Country-aware when a country is supplied (global signup): the number is
+  // validated and stored in E.164 form via libphonenumber. When no country is
+  // given (the existing PK onboarding wizard), the legacy Pakistani rule is kept
+  // exactly, so that flow is unchanged.
+  const rawPhone = payload.phone.trim();
+  const country = (payload.country ?? "").toUpperCase() || null;
+  const validPhone = country
+    ? isValidPhone(rawPhone, country)
+    : /^(\+92|92|0)?3\d{9}$/.test(rawPhone.replace(/[\s\-]/g, ""));
   if (!validPhone) {
-    return { error: "Invalid Pakistani phone number (expected 03XXXXXXXXX)" };
+    return { error: country ? "Please enter a valid phone number." : "Invalid Pakistani phone number (expected 03XXXXXXXXX)" };
   }
+  const phone = country ? (normalizePhone(rawPhone, country) ?? rawPhone) : rawPhone.replace(/[\s\-]/g, "");
 
   // ── Email — only validate if present ───────────────────────────────────────
   const email = payload.email?.trim() || null;

@@ -1,4 +1,9 @@
-// Pakistan-specific validators for shared use across member/staff forms.
+// Validators for shared use across member/staff forms. Pakistan-specific rules
+// (CNIC, 03xx phone) are preserved; country-aware wrappers below generalise them
+// for the global rollout without breaking existing PK behavior.
+
+import { isValidPhone } from "@/lib/phone";
+import { getCountryConfig } from "@/lib/country-config";
 
 export type ValidationResult = { ok: true } | { ok: false; message: string };
 
@@ -20,6 +25,44 @@ export function validatePakPhone(raw: string | null | undefined): ValidationResu
   if (digits.startsWith("0") && digits.length === 11) return { ok: true };
   if (digits.startsWith("92") && digits.length === 12) return { ok: true };
   return { ok: false, message: "Phone must be 03xx-xxxxxxx or +92xxxxxxxxxx" };
+}
+
+// ── Country-aware wrappers (global rollout) ──────────────────────────────────
+
+// Phone, validated against the gym's country. Optional. For PK this accepts the
+// same local "03xx" numbers as before (libphonenumber parses them against PK),
+// so it's a no-op for existing data; for any other country it enforces that
+// country's rules. A "+"-prefixed international number validates on its own.
+export function validatePhone(
+  raw: string | null | undefined,
+  country?: string | null,
+): ValidationResult {
+  if (!raw || !raw.trim()) return { ok: true }; // optional
+  if (isValidPhone(raw, country)) return { ok: true };
+  const dial = getCountryConfig(country).dialCode;
+  return { ok: false, message: `Enter a valid phone number (e.g. +${dial} …) or leave it blank.` };
+}
+
+// National ID, validated by country. PK keeps the strict 13-digit CNIC rule;
+// every other country treats it as an optional free-form ID / passport number
+// (basic length sanity only). Keeps the DB column name `cnic`.
+export function validateNationalId(
+  raw: string | null | undefined,
+  country?: string | null,
+): ValidationResult {
+  if (!raw || !raw.trim()) return { ok: true }; // optional
+  const code = getCountryConfig(country).code;
+  if (code === "PK") return validateCNIC(raw);
+  if (raw.trim().length > 30) return { ok: false, message: "ID number is too long" };
+  return { ok: true };
+}
+
+// Label + placeholder for the national-ID field, by country.
+export function nationalIdLabel(country?: string | null): string {
+  return getCountryConfig(country).code === "PK" ? "CNIC" : "National ID / Passport";
+}
+export function nationalIdPlaceholder(country?: string | null): string {
+  return getCountryConfig(country).code === "PK" ? "42101-1234567-1" : "ID or passport number";
 }
 
 // DOB: must be in past, age between 5 and 100 years.
