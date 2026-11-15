@@ -58,6 +58,45 @@ function baseHtml(title: string, body: string): string {
 }
 
 /**
+ * Email-verification link for self-serve signup. The account is provisioned only
+ * when this link is clicked, so this email IS the signup. Returns ok=false on any
+ * failure so the caller can tell the user mail didn't go out (unlike the
+ * best-effort confirmation below).
+ */
+export async function sendSignupVerificationEmail(
+  to: string,
+  opts: { ownerName?: string | null; gymName?: string | null; link: string },
+): Promise<{ ok: boolean }> {
+  if (!RESEND_KEY) return { ok: false };
+  const name = opts.ownerName?.trim();
+  const gym = opts.gymName?.trim();
+  const greeting = name ? `Hi ${esc(name)},` : "Hi,";
+  const body = `
+    <p style="margin:0 0 16px;font-size:16px;color:#f5f5f5;">${greeting}</p>
+    <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#d4d4d8;">
+      Welcome to <strong style="color:#f5f5f5;">Pulse</strong>${gym ? ` for <strong style="color:#f5f5f5;">${esc(gym)}</strong>` : ""}!
+      Click below to set your password and start your <strong style="color:#f5f5f5;">14-day free trial</strong> — no card required.
+    </p>
+    <a href="${esc(opts.link)}"
+       style="display:inline-block;background:#F5A623;color:#18181b;font-weight:600;font-size:14px;padding:11px 22px;border-radius:8px;text-decoration:none;">
+      Verify &amp; create my account
+    </a>
+    <p style="margin:20px 0 0;font-size:12px;color:#71717a;">This link expires in 60 minutes. If you didn't request this, you can ignore this email.</p>`;
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: "Verify your email to start your Pulse trial",
+      html: baseHtml("Verify your Pulse account", body),
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error("[email] sendSignupVerificationEmail failed:", err);
+    return { ok: false };
+  }
+}
+
+/**
  * Prospect-funnel confirmation. Sent (best-effort) after a public signup lands a
  * pulse_prospects lead. Never throws — a mail failure must not fail the signup.
  */

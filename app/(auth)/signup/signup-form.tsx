@@ -99,23 +99,13 @@ export function SignupForm() {
           {sent ? (
             <div className="text-center py-4 space-y-4">
               <CheckCircle2 className="w-12 h-12 text-success mx-auto" />
-              <h2 className="text-xl font-semibold text-foreground">You&apos;re on the list</h2>
+              <h2 className="text-xl font-semibold text-foreground">Check your inbox</h2>
               <p className="text-sm text-muted-foreground">
-                Thanks{ownerName.trim() ? `, ${ownerName.trim()}` : ""}! We&apos;ve got your details for{" "}
-                <span className="font-medium text-foreground">{gymName.trim() || "your gym"}</span> and
-                sent a confirmation to <span className="font-medium text-foreground">{email.trim()}</span>.
-                Our team will reach out on WhatsApp to get you set up.
+                We&apos;ve sent a verification link to <span className="font-medium text-foreground">{email.trim()}</span>.
+                Click it to set your password and start your <span className="font-medium text-foreground">14-day free trial</span> —
+                no card required.
               </p>
-              <a
-                href={`https://wa.me/923336673553?text=${encodeURIComponent(
-                  `Hi, I just signed up for Pulse for ${gymName.trim() || "my gym"}. How do I get started?`,
-                )}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#25D366]/10 border border-[#25D366]/25 text-[#25D366] text-xs font-semibold hover:bg-[#25D366]/20 transition-all"
-              >
-                Chat on WhatsApp now
-              </a>
+              <p className="text-xs text-muted-foreground">The link expires in 60 minutes. Don&apos;t see it? Check spam.</p>
               <div>
                 <Link href="/login" className="inline-block text-sm text-primary hover:underline">Back to sign in</Link>
               </div>
@@ -126,8 +116,8 @@ export function SignupForm() {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
                   Gym Management System
                 </p>
-                <h2 className="text-xl font-semibold text-foreground mt-2">Create your account</h2>
-                <p className="text-sm text-muted-foreground mt-1">Tell us about your gym — we&apos;ll get you set up.</p>
+                <h2 className="text-xl font-semibold text-foreground mt-2">Start your free trial</h2>
+                <p className="text-sm text-muted-foreground mt-1">14 days free, no card required. We&apos;ll email a link to set your password.</p>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
