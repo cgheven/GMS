@@ -113,6 +113,8 @@ export interface Gym {
   device_serial: string | null;
   device_push_key: string | null;
   device_last_seen: string | null;
+  hik_push_secret: string | null;
+  hik_last_event_at: string | null;
   created_at: string;
   updated_at: string;
 }

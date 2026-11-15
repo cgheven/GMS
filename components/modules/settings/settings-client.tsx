@@ -84,6 +84,7 @@ export function SettingsClient() {
     default_trainer_capacity: "20",
     device_serial: "",
     device_push_key: "",
+    hik_push_secret: "",
   });
   const [listingForm, setListingForm] = useState({
     listing_enabled: false,
@@ -204,6 +205,7 @@ export function SettingsClient() {
         default_trainer_capacity: ((gym as typeof gym & { default_trainer_capacity?: number }).default_trainer_capacity ?? 20).toString(),
         device_serial: gym.device_serial ?? "",
         device_push_key: gym.device_push_key ?? "",
+        hik_push_secret: gym.hik_push_secret ?? "",
       });
       const cs = (gym as typeof gym & { compliance_settings?: Record<string, unknown> | null }).compliance_settings;
       setDefaulterThreshold(Math.max(1, Math.min(6, (cs?.defaulter_threshold_months as number) ?? 2)));
@@ -245,6 +247,7 @@ export function SettingsClient() {
       default_trainer_capacity: Math.max(1, parseInt(gymForm.default_trainer_capacity) || 20),
       device_serial: gymForm.device_serial.trim() || null,
       device_push_key: gymForm.device_push_key.trim() || null,
+      hik_push_secret: gymForm.hik_push_secret.trim() || null,
     }).eq("id", gymId);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
     else toast({ title: "Gym settings saved" });
@@ -457,6 +460,42 @@ export function SettingsClient() {
                 A shared secret the device must send so a leaked serial alone can&apos;t forge check-ins. When set, configure
                 your device&apos;s server URL to include <code>&amp;key=&lt;this value&gt;</code>. Leave blank to accept the serial only.
               </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>HikVision Attendance Device</Label>
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  placeholder="Generate a push URL to connect your HikVision terminal"
+                  value={
+                    gymForm.hik_push_secret
+                      ? `${process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== "undefined" ? window.location.origin : "")}/api/attendance/hik/${gymForm.hik_push_secret}`
+                      : ""
+                  }
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="font-mono text-xs"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const bytes = new Uint8Array(16);
+                    crypto.getRandomValues(bytes);
+                    const hex = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+                    setGymForm({ ...gymForm, hik_push_secret: hex });
+                  }}
+                >
+                  {gymForm.hik_push_secret ? "Regenerate" : "Generate"}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                On your HikVision terminal set <strong>Network → HTTP Listening</strong> (or Event Notification) to this URL, then
+                <strong> Save Gym</strong>. Members are matched by their <strong>Device User ID</strong> (the same ID enrolled on the
+                member). Unmatched scans appear on Check-ins to link. Regenerating invalidates the old URL.
+              </p>
+              {gym?.hik_last_event_at && (
+                <p className="text-[11px] text-muted-foreground">Last scan received: {new Date(gym.hik_last_event_at).toLocaleString()}.</p>
+              )}
             </div>
             <Button type="submit" disabled={savingGym} className="gap-2">
               {savingGym ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
