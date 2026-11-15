@@ -2096,3 +2096,51 @@ export async function getInventoryData() {
   return { gymId: ctx.gymId, isOwner, ...data };
 }
 
+
+// ── Quick Setup (guided onboarding) ──────────────────────────────────────────
+// Ordered checklist a new owner follows to get their branch live. Each step's
+// `done` is derived from real data so it ticks automatically as they go.
+export type QuickSetupStep = {
+  key: "details" | "plans" | "paymethods" | "reminder" | "staff" | "member" | "payment";
+  done: boolean;
+};
+
+export async function getQuickSetupStatus(): Promise<{
+  gymName: string;
+  steps: QuickSetupStep[];
+  doneCount: number;
+  total: number;
+} | null> {
+  const ctx = await getAuthContext();
+  if (!ctx?.gymId || !ctx.gym) return null;
+  const gymId = ctx.gymId;
+  const admin = createAdminClient();
+
+  const [plans, staff, members, payments] = await Promise.all([
+    admin.from("pulse_membership_plans").select("id", { count: "exact", head: true }).eq("gym_id", gymId),
+    admin.from("pulse_staff").select("id", { count: "exact", head: true }).eq("gym_id", gymId).neq("status", "deleted"),
+    admin.from("pulse_members").select("id", { count: "exact", head: true }).eq("gym_id", gymId),
+    admin.from("pulse_payments").select("id", { count: "exact", head: true }).eq("gym_id", gymId),
+  ]);
+
+  const gym = ctx.gym as Gym;
+  const hasPaymentMethods = Array.isArray(gym.payment_methods) && gym.payment_methods.length > 0;
+  const hasTemplate = !!(gym.reminder_template && gym.reminder_template.trim());
+
+  const steps: QuickSetupStep[] = [
+    { key: "details",    done: (gym.total_capacity ?? 0) > 0 },
+    { key: "plans",      done: (plans.count ?? 0) > 0 },
+    { key: "paymethods", done: hasPaymentMethods },
+    { key: "reminder",   done: hasTemplate },
+    { key: "staff",      done: (staff.count ?? 0) > 0 },
+    { key: "member",     done: (members.count ?? 0) > 0 },
+    { key: "payment",    done: (payments.count ?? 0) > 0 },
+  ];
+
+  return {
+    gymName: gym.name,
+    steps,
+    doneCount: steps.filter((s) => s.done).length,
+    total: steps.length,
+  };
+}

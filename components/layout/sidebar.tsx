@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, CreditCard, FileText, Settings, X,
   Shield, Building2, Globe, LogIn, Trophy, Target,
   BarChart3, UserCog, Dumbbell, CalendarDays,
-  Receipt, ClipboardList, Zap, HandCoins, Instagram, TrendingUp, Package,
+  Receipt, ClipboardList, Zap, HandCoins, Instagram, TrendingUp, Package, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsAdmin } from "@/hooks/use-is-admin";
@@ -188,6 +188,25 @@ export function Sidebar({ open, onClose, permissions }: SidebarProps) {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-3 px-2.5 space-y-3 scrollbar-hide">
+          {/* Quick Setup — a permanent shortcut to the guided onboarding hub.
+              Owners only (staff don't configure the branch). */}
+          {permissions == null && (
+            <div className="space-y-0.5">
+              <Link
+                href="/welcome"
+                onClick={onClose}
+                className={cn(
+                  "relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-all duration-150 group",
+                  pathname === "/welcome"
+                    ? "bg-primary/10 text-primary"
+                    : "text-primary/90 bg-primary/[0.06] hover:bg-primary/10",
+                )}
+              >
+                <Sparkles className="w-4 h-4 shrink-0" />
+                <span>Quick Setup</span>
+              </Link>
+            </div>
+          )}
           {visibleGroups.map((group) => (
             <div key={group.label}>
               <p className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest px-3 mb-1 mt-1">{group.label}</p>
