@@ -25,7 +25,7 @@ import { useCurrency } from "@/hooks/use-currency";
 import { useGymContext } from "@/contexts/gym-context";
 import { formatDate, formatDateInput, formatTime12h } from "@/lib/utils";
 import { validateFullName, validateNationalId, validatePhone, nationalIdLabel, nationalIdPlaceholder, validateMoney, runValidators } from "@/lib/validation";
-import { phonePlaceholder } from "@/lib/phone";
+import { phonePlaceholder, phoneForWhatsApp } from "@/lib/phone";
 import {
   PERMISSIONS,
   PERMISSION_GROUPS,
@@ -133,7 +133,7 @@ function buildUsername(fullName: string, gymName: string | null | undefined, exi
 export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayments: initialPayments, mode = "all" }: Props) {
   const { isDemo, gym } = useGymContext();
   const country = gym?.country ?? null;
-  const { format } = useCurrency();
+  const { format, symbol } = useCurrency();
   const isTrainersMode = mode === "trainers";
   const isStaffMode = mode === "staff";
   const pageTitle = isTrainersMode ? "Trainers" : isStaffMode ? "Staff" : "Staff & Trainers";
@@ -987,7 +987,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
               <div className="space-y-1.5"><Label>{nationalIdLabel(country)}</Label><Input placeholder={nationalIdPlaceholder(country)} value={form.cnic} onChange={(e) => setForm({ ...form, cnic: e.target.value })} /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label>Base Salary (PKR) *</Label><Input type="number" placeholder="0" value={form.monthly_salary} onChange={(e) => setForm({ ...form, monthly_salary: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>Base Salary ({symbol}) *</Label><Input type="number" placeholder="0" value={form.monthly_salary} onChange={(e) => setForm({ ...form, monthly_salary: e.target.value })} /></div>
               <div className="space-y-1.5"><Label>Join Date</Label><Input type="date" value={form.join_date} onChange={(e) => setForm({ ...form, join_date: e.target.value })} /></div>
             </div>
             {form.role === "trainer" && (
@@ -1235,8 +1235,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
               <button
                 type="button"
                 onClick={() => {
-                  const digits = loginCreated.phone.replace(/\D/g, "");
-                  const intl = digits.startsWith("0") ? "92" + digits.slice(1) : digits;
+                  const intl = phoneForWhatsApp(loginCreated.phone, country);
                   const msg = `Hi ${loginDialog?.full_name}! 👋\n\nYour login credentials for *Pulse GMS*:\n\n🔗 Login: ${window.location.origin}/login\n📧 Email: ${loginCreated.email}\n🔑 Password: ${loginCreated.password}\n\nPlease save these credentials safely.`;
                   const url = intl
                     ? `https://wa.me/${intl}?text=${encodeURIComponent(msg)}`
@@ -1415,8 +1414,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
                 <button
                   type="button"
                   onClick={() => {
-                    const digits = resetPwDone.phone.replace(/\D/g, "");
-                    const intl = digits.startsWith("0") ? "92" + digits.slice(1) : digits;
+                    const intl = phoneForWhatsApp(resetPwDone.phone, country);
                     const msg = `Hi ${resetTarget?.full_name}! 👋\n\nYour *Pulse GMS* password has been reset:\n\n🔗 Login: ${window.location.origin}/login\n📧 Email: ${resetPwDone.email}\n🔑 New Password: ${resetPwDone.password}\n\nPlease save this safely.`;
                     window.open(`https://wa.me/${intl}?text=${encodeURIComponent(msg)}`, "_blank");
                   }}

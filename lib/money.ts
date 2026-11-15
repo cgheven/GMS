@@ -12,13 +12,6 @@
 
 import { getCountryConfig } from "@/lib/country-config";
 
-// ISO 4217 minor-unit-0 currencies + PKR (Pulse has always shown PKR with no
-// decimals; forcing it here keeps every existing Pakistani gym byte-identical).
-const ZERO_DECIMAL = new Set([
-  "PKR", "JPY", "KRW", "VND", "IDR", "CLP", "PYG", "ISK", "HUF",
-  "XOF", "XAF", "XPF", "BIF", "DJF", "GNF", "KMF", "RWF", "UGX", "VUV",
-]);
-
 // Legacy symbol overrides — where Intl's narrowSymbol differs from what the app
 // has always shown. PK is the critical one: Intl renders PKR as "₨", but Pulse
 // has always shown "Rs." — overriding keeps it a no-op.
@@ -48,8 +41,20 @@ function currencySymbolFor(currency: string, locale: string): string {
   return symbol;
 }
 
+// Minor units straight from the platform's CLDR data: PKR/JPY → 0, USD/INR → 2,
+// KWD/BHD/OMR/TND → 3. Correct for every ISO currency, so no hand-maintained set.
+const _decimalsCache = new Map<string, number>();
 function decimalsFor(currency: string): number {
-  return ZERO_DECIMAL.has(currency) ? 0 : 2;
+  const cached = _decimalsCache.get(currency);
+  if (cached !== undefined) return cached;
+  let d = 2;
+  try {
+    d = new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions().maximumFractionDigits ?? 2;
+  } catch {
+    d = 2;
+  }
+  _decimalsCache.set(currency, d);
+  return d;
 }
 
 // A space sits between symbol and number only when the symbol ends in a letter

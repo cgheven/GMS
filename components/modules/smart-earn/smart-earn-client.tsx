@@ -145,7 +145,7 @@ export function SmartEarnClient({ trainers, members, plans, shifts, defaultTrain
   const [simFee, setSimFee]         = useState(6000);
   const [simInput, setSimInput]     = useState("6000");
   const [oppTab, setOppTab]         = useState<"easy" | "mid">("easy");
-  const { format } = useCurrency();
+  const { format, symbol } = useCurrency();
 
   const activeMembers = useMemo(() => members.filter((m) => m.status === "active"), [members]);
   // shifts keyed by id for fast per-member lookup
@@ -322,7 +322,7 @@ export function SmartEarnClient({ trainers, members, plans, shifts, defaultTrain
               What will this member pay per month?
             </p>
             <div className="flex items-baseline gap-2">
-              <span className="text-lg sm:text-2xl font-bold text-muted-foreground">Rs.</span>
+              <span className="text-lg sm:text-2xl font-bold text-muted-foreground">{symbol}</span>
               <input
                 type="number"
                 value={simInput}

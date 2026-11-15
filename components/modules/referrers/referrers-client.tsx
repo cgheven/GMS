@@ -15,6 +15,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/use-currency";
+import { phoneForWhatsApp } from "@/lib/phone";
 import { formatDate } from "@/lib/utils";
 import type { Referrer, Referral, ReferrerCommissionType } from "@/types";
 
@@ -42,7 +43,7 @@ function buildUsername(name: string, gymName: string | null | undefined): string
 
 export function ReferrersClient({ gymId, gymName, referrers: initial, referrals: initialReferrals }: Props) {
   const router = useRouter();
-  const { format } = useCurrency();
+  const { format, country } = useCurrency();
   const [referrers, setReferrers] = useState(initial);
   const [referrals, setReferrals] = useState(initialReferrals);
 
@@ -372,8 +373,7 @@ export function ReferrersClient({ gymId, gymName, referrers: initial, referrals:
               <button
                 type="button"
                 onClick={() => {
-                  const digits = loginCreated.phone.replace(/\D/g, "");
-                  const intl = digits.startsWith("0") ? "92" + digits.slice(1) : digits;
+                  const intl = phoneForWhatsApp(loginCreated.phone, country);
                   const msg = `Hi ${loginDialog?.full_name}! 👋\n\nYour Partner Portal credentials for *Pulse GMS*:\n\n🔗 Login: ${window.location.origin}/login\n📧 Email: ${loginCreated.email}\n🔑 Password: ${loginCreated.password}\n\nYou can track your referrals and commissions after logging in.\n\nPlease save these credentials safely.`;
                   const url = intl ? `https://wa.me/${intl}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
                   window.open(url, "_blank");
