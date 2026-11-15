@@ -7,7 +7,8 @@ import {
   Clock, Flame, ArrowUpRight, ArrowDownRight, CalendarRange,
   BadgePercent, HandCoins, Gift,
 } from "lucide-react";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
+import { useCurrency } from "@/hooks/use-currency";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import type { RevenueMonth, AgingBucket, TrainerReportRow, TrainerFlowRow, MemberReportSummary, ExpiringMember, DiscountReport } from "@/types";
 
@@ -34,6 +35,7 @@ interface Props {
 type RangePreset = "1" | "3" | "6" | "12" | "custom";
 
 export function ReportsClient({ data }: Props) {
+  const { format } = useCurrency();
   const [preset, setPreset]       = useState<RangePreset>("6");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo,   setCustomTo]   = useState("");
@@ -176,7 +178,7 @@ export function ReportsClient({ data }: Props) {
                   <TrendingUp className="w-4 h-4 text-primary" />
                 </div>
               </div>
-              <p className="text-3xl font-bold leading-none">{formatCurrency(totalCollected)}</p>
+              <p className="text-3xl font-bold leading-none">{format(totalCollected)}</p>
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>Collection rate</span>
@@ -195,11 +197,11 @@ export function ReportsClient({ data }: Props) {
                   <BarChart3 className="w-4 h-4 text-rose-400" />
                 </div>
               </div>
-              <p className="text-3xl font-bold leading-none">{formatCurrency(totalExpenses)}</p>
+              <p className="text-3xl font-bold leading-none">{format(totalExpenses)}</p>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Ops <span className="text-rose-400 font-semibold">{formatCurrency(totalOperating)}</span></span>
+                <span>Ops <span className="text-rose-400 font-semibold">{format(totalOperating)}</span></span>
                 <span>·</span>
-                <span>Sal <span className="text-purple-400 font-semibold">{formatCurrency(totalSalaries)}</span></span>
+                <span>Sal <span className="text-purple-400 font-semibold">{format(totalSalaries)}</span></span>
               </div>
             </div>
 
@@ -213,7 +215,7 @@ export function ReportsClient({ data }: Props) {
                 </div>
               </div>
               <p className={`text-3xl font-bold leading-none ${totalProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                {totalProfit >= 0 ? "+" : ""}{formatCurrency(totalProfit)}
+                {totalProfit >= 0 ? "+" : ""}{format(totalProfit)}
               </p>
               <p className={`text-xs font-semibold ${totalProfit >= 0 ? "text-emerald-400/70" : "text-rose-400/70"}`}>
                 {profitMargin >= 0 ? "+" : ""}{profitMargin}% margin
@@ -227,7 +229,7 @@ export function ReportsClient({ data }: Props) {
                   <Activity className="w-4 h-4 text-purple-400" />
                 </div>
               </div>
-              <p className="text-3xl font-bold leading-none">{formatCurrency(avgMonthly)}</p>
+              <p className="text-3xl font-bold leading-none">{format(avgMonthly)}</p>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 {bestMonth && <span className="text-emerald-400 font-medium">↑ {bestMonth.month}</span>}
                 {worstMonth && worstMonth.monthKey !== bestMonth?.monthKey && (
@@ -297,11 +299,11 @@ export function ReportsClient({ data }: Props) {
                             <div className="hidden sm:block w-20 h-1.5 rounded-full bg-white/10 overflow-hidden">
                               <div className="h-full bg-primary/50 rounded-full" style={{ width: `${barPct}%` }} />
                             </div>
-                            <span className="text-primary font-semibold tabular-nums">{formatCurrency(m.collected)}</span>
+                            <span className="text-primary font-semibold tabular-nums">{format(m.collected)}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-right text-rose-400 tabular-nums hidden md:table-cell">{formatCurrency(Math.max(0, m.expenses - m.salaries))}</td>
-                        <td className="px-4 py-3 text-right text-purple-400 tabular-nums hidden md:table-cell">{formatCurrency(m.salaries)}</td>
+                        <td className="px-4 py-3 text-right text-rose-400 tabular-nums hidden md:table-cell">{format(Math.max(0, m.expenses - m.salaries))}</td>
+                        <td className="px-4 py-3 text-right text-purple-400 tabular-nums hidden md:table-cell">{format(m.salaries)}</td>
                         <td className="px-4 py-3 text-right hidden sm:table-cell">
                           <div className="flex items-center justify-end gap-2 text-xs">
                             {m.newMembers > 0 && <span className="text-emerald-400 font-medium">+{m.newMembers}</span>}
@@ -310,7 +312,7 @@ export function ReportsClient({ data }: Props) {
                           </div>
                         </td>
                         <td className={`px-6 py-3 text-right font-bold tabular-nums ${m.profit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                          {m.profit >= 0 ? "+" : ""}{formatCurrency(m.profit)}
+                          {m.profit >= 0 ? "+" : ""}{format(m.profit)}
                         </td>
                       </tr>
                     );
@@ -319,9 +321,9 @@ export function ReportsClient({ data }: Props) {
                 <tfoot>
                   <tr className="border-t-2 border-sidebar-border">
                     <td className="px-6 py-3 text-sm font-semibold text-muted-foreground">Total</td>
-                    <td className="px-4 py-3 text-right font-bold text-primary tabular-nums">{formatCurrency(totalCollected)}</td>
-                    <td className="px-4 py-3 text-right font-bold text-rose-400 tabular-nums hidden md:table-cell">{formatCurrency(totalOperating)}</td>
-                    <td className="px-4 py-3 text-right font-bold text-purple-400 tabular-nums hidden md:table-cell">{formatCurrency(totalSalaries)}</td>
+                    <td className="px-4 py-3 text-right font-bold text-primary tabular-nums">{format(totalCollected)}</td>
+                    <td className="px-4 py-3 text-right font-bold text-rose-400 tabular-nums hidden md:table-cell">{format(totalOperating)}</td>
+                    <td className="px-4 py-3 text-right font-bold text-purple-400 tabular-nums hidden md:table-cell">{format(totalSalaries)}</td>
                     <td className="px-4 py-3 text-right hidden sm:table-cell">
                       <div className="flex items-center justify-end gap-2 text-xs font-semibold">
                         {totalNewMembers > 0 && <span className="text-emerald-400">+{totalNewMembers}</span>}
@@ -329,7 +331,7 @@ export function ReportsClient({ data }: Props) {
                       </div>
                     </td>
                     <td className={`px-6 py-3 text-right font-bold tabular-nums ${totalProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                      {totalProfit >= 0 ? "+" : ""}{formatCurrency(totalProfit)}
+                      {totalProfit >= 0 ? "+" : ""}{format(totalProfit)}
                     </td>
                   </tr>
                 </tfoot>
@@ -377,7 +379,7 @@ export function ReportsClient({ data }: Props) {
                           </div>
                           <div className="flex items-center gap-3">
                             <span className={`font-semibold ${text}`}>{bucket.count} member{bucket.count !== 1 ? "s" : ""}</span>
-                            <span className="text-foreground font-semibold w-24 text-right tabular-nums">{formatCurrency(bucket.amount)}</span>
+                            <span className="text-foreground font-semibold w-24 text-right tabular-nums">{format(bucket.amount)}</span>
                           </div>
                         </div>
                         <div className="h-2 rounded-full bg-white/5 overflow-hidden">
@@ -390,7 +392,7 @@ export function ReportsClient({ data }: Props) {
                     <span className="text-muted-foreground">Total overdue</span>
                     <div className="flex items-center gap-3">
                       <span className="text-rose-400">{totalAgingCount} members</span>
-                      <span className="text-rose-400 w-24 text-right tabular-nums">{formatCurrency(totalAgingAmount)}</span>
+                      <span className="text-rose-400 w-24 text-right tabular-nums">{format(totalAgingAmount)}</span>
                     </div>
                   </div>
                 </div>
@@ -406,18 +408,18 @@ export function ReportsClient({ data }: Props) {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="rounded-2xl border border-sidebar-border bg-card p-5 space-y-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fee Generated</p>
-              <p className="text-3xl font-bold text-primary">{formatCurrency(totalFeeGenerated)}</p>
+              <p className="text-3xl font-bold text-primary">{format(totalFeeGenerated)}</p>
               <p className="text-xs text-muted-foreground">Sum of all active members&apos; fees across trainers</p>
             </div>
             <div className="rounded-2xl border border-sidebar-border bg-card p-5 space-y-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Trainer Cost</p>
-              <p className="text-3xl font-bold text-purple-400">{formatCurrency(totalTrainerCost)}</p>
+              <p className="text-3xl font-bold text-purple-400">{format(totalTrainerCost)}</p>
               <p className="text-xs text-muted-foreground">Base salaries + commissions this month</p>
             </div>
             <div className={`rounded-2xl border p-5 space-y-2 ${totalNetContrib >= 0 ? "border-emerald-500/25 bg-emerald-500/[0.05]" : "border-rose-500/25 bg-rose-500/[0.05]"}`}>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Net Contribution</p>
               <p className={`text-3xl font-bold ${totalNetContrib >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                {totalNetContrib >= 0 ? "+" : ""}{formatCurrency(totalNetContrib)}
+                {totalNetContrib >= 0 ? "+" : ""}{format(totalNetContrib)}
               </p>
               <p className="text-xs text-muted-foreground">Fee generated minus trainer costs</p>
             </div>
@@ -473,22 +475,22 @@ export function ReportsClient({ data }: Props) {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right text-primary font-semibold tabular-nums">
-                          {t.monthlyFeeGenerated > 0 ? formatCurrency(t.monthlyFeeGenerated) : <span className="text-muted-foreground">—</span>}
+                          {t.monthlyFeeGenerated > 0 ? format(t.monthlyFeeGenerated) : <span className="text-muted-foreground">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-right text-purple-400 tabular-nums hidden md:table-cell">{formatCurrency(t.baseSalary)}</td>
+                        <td className="px-4 py-3 text-right text-purple-400 tabular-nums hidden md:table-cell">{format(t.baseSalary)}</td>
                         <td className="px-4 py-3 text-right tabular-nums hidden md:table-cell">
                           {t.commissionEarned > 0
-                            ? <span className="text-amber-400">{formatCurrency(t.commissionEarned)}</span>
+                            ? <span className="text-amber-400">{format(t.commissionEarned)}</span>
                             : <span className="text-muted-foreground">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-right text-rose-400 font-semibold tabular-nums">{formatCurrency(t.totalCost)}</td>
+                        <td className="px-4 py-3 text-right text-rose-400 font-semibold tabular-nums">{format(t.totalCost)}</td>
                         <td className="px-6 py-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             {t.netContribution >= 0
                               ? <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                               : <ArrowDownRight className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
                             <span className={`font-bold tabular-nums ${t.netContribution >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                              {t.netContribution >= 0 ? "+" : ""}{formatCurrency(t.netContribution)}
+                              {t.netContribution >= 0 ? "+" : ""}{format(t.netContribution)}
                             </span>
                           </div>
                         </td>
@@ -501,16 +503,16 @@ export function ReportsClient({ data }: Props) {
                       <td className="px-4 py-3 text-right font-bold tabular-nums">
                         {trainerRows.reduce((s, t) => s + t.activeMembers, 0)}
                       </td>
-                      <td className="px-4 py-3 text-right font-bold text-primary tabular-nums">{formatCurrency(totalFeeGenerated)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-primary tabular-nums">{format(totalFeeGenerated)}</td>
                       <td className="px-4 py-3 text-right font-bold text-purple-400 tabular-nums hidden md:table-cell">
-                        {formatCurrency(trainerRows.reduce((s, t) => s + t.baseSalary, 0))}
+                        {format(trainerRows.reduce((s, t) => s + t.baseSalary, 0))}
                       </td>
                       <td className="px-4 py-3 text-right font-bold text-amber-400 tabular-nums hidden md:table-cell">
-                        {formatCurrency(trainerRows.reduce((s, t) => s + t.commissionEarned, 0))}
+                        {format(trainerRows.reduce((s, t) => s + t.commissionEarned, 0))}
                       </td>
-                      <td className="px-4 py-3 text-right font-bold text-rose-400 tabular-nums">{formatCurrency(totalTrainerCost)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-rose-400 tabular-nums">{format(totalTrainerCost)}</td>
                       <td className={`px-6 py-3 text-right font-bold tabular-nums ${totalNetContrib >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                        {totalNetContrib >= 0 ? "+" : ""}{formatCurrency(totalNetContrib)}
+                        {totalNetContrib >= 0 ? "+" : ""}{format(totalNetContrib)}
                       </td>
                     </tr>
                   </tfoot>
@@ -690,7 +692,7 @@ export function ReportsClient({ data }: Props) {
                           {d.defaulterSince ? formatDate(d.defaulterSince) : "—"}
                         </td>
                         <td className="px-6 py-3 text-right text-amber-400 font-semibold tabular-nums text-sm">
-                          {formatCurrency(d.monthlyFee)}
+                          {format(d.monthlyFee)}
                         </td>
                       </tr>
                     ))}
@@ -707,7 +709,7 @@ export function ReportsClient({ data }: Props) {
                       <td className="px-6 py-2.5 text-xs font-semibold text-muted-foreground">{memberSummary.defaulterList.length} member{memberSummary.defaulterList.length !== 1 ? "s" : ""}</td>
                       <td className="hidden sm:table-cell" />
                       <td className="px-6 py-2.5 text-right font-bold text-amber-400 tabular-nums text-sm">
-                        {formatCurrency(memberSummary.defaulterList.reduce((s, d) => s + d.monthlyFee, 0))}
+                        {format(memberSummary.defaulterList.reduce((s, d) => s + d.monthlyFee, 0))}
                       </td>
                     </tr>
                   </tfoot>
@@ -784,7 +786,7 @@ export function ReportsClient({ data }: Props) {
                       </div>
                       <div className="flex items-center gap-4 text-xs tabular-nums">
                         <span className="text-muted-foreground">{p.memberCount} member{p.memberCount !== 1 ? "s" : ""}</span>
-                        <span className="text-primary font-semibold w-20 text-right">{formatCurrency(p.monthlyRevenue)}</span>
+                        <span className="text-primary font-semibold w-20 text-right">{format(p.monthlyRevenue)}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -853,6 +855,7 @@ export function ReportsClient({ data }: Props) {
 
 // ── Discounts tab ──────────────────────────────────────────────────────────
 function DiscountsPanel({ discounts }: { discounts: DiscountReport | undefined }) {
+  const { format } = useCurrency();
   const [scope, setScope] = useState<"all" | "month">("all");
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [search, setSearch] = useState("");
@@ -942,7 +945,7 @@ function DiscountsPanel({ discounts }: { discounts: DiscountReport | undefined }
               <HandCoins className="w-4 h-4 text-amber-400" />
             </div>
           </div>
-          <p className="text-3xl font-bold leading-none text-amber-400">{formatCurrency(summary.totalDiscountAmount)}</p>
+          <p className="text-3xl font-bold leading-none text-amber-400">{format(summary.totalDiscountAmount)}</p>
           <p className="text-xs text-muted-foreground">Realized + Promised</p>
         </div>
 
@@ -953,7 +956,7 @@ function DiscountsPanel({ discounts }: { discounts: DiscountReport | undefined }
               <BadgePercent className="w-4 h-4 text-emerald-400" />
             </div>
           </div>
-          <p className="text-3xl font-bold leading-none text-emerald-400">{formatCurrency(summary.realizedDiscountAmount)}</p>
+          <p className="text-3xl font-bold leading-none text-emerald-400">{format(summary.realizedDiscountAmount)}</p>
           <p className="text-xs text-muted-foreground">{summary.paymentsWithDiscount} payments • {scope === "month" ? monthRow?.month ?? "—" : "all time"}</p>
         </div>
 
@@ -964,7 +967,7 @@ function DiscountsPanel({ discounts }: { discounts: DiscountReport | undefined }
               <Gift className="w-4 h-4 text-sky-400" />
             </div>
           </div>
-          <p className="text-3xl font-bold leading-none text-sky-400">{formatCurrency(summary.promisedDiscountAmount)}</p>
+          <p className="text-3xl font-bold leading-none text-sky-400">{format(summary.promisedDiscountAmount)}</p>
           <p className="text-xs text-muted-foreground">{summary.uniqueMembersPromised} member{summary.uniqueMembersPromised === 1 ? "" : "s"} • open pledge</p>
         </div>
 
@@ -1009,7 +1012,7 @@ function DiscountsPanel({ discounts }: { discounts: DiscountReport | undefined }
                             <div className="h-full bg-amber-400/60 rounded-full" style={{ width: `${barPct}%` }} />
                           </div>
                           <span className={`tabular-nums font-semibold ${m.totalDiscount > 0 ? "text-amber-400" : "text-muted-foreground"}`}>
-                            {m.totalDiscount > 0 ? formatCurrency(m.totalDiscount) : "—"}
+                            {m.totalDiscount > 0 ? format(m.totalDiscount) : "—"}
                           </span>
                         </div>
                       </td>
@@ -1085,7 +1088,7 @@ function DiscountsPanel({ discounts }: { discounts: DiscountReport | undefined }
                             <div className="h-full bg-amber-400/60 rounded-full" style={{ width: `${barPct}%` }} />
                           </div>
                           {r.realizedDiscount > 0 ? (
-                            <span className="text-emerald-400 font-semibold tabular-nums">{formatCurrency(r.realizedDiscount)}</span>
+                            <span className="text-emerald-400 font-semibold tabular-nums">{format(r.realizedDiscount)}</span>
                           ) : (
                             <span className="text-muted-foreground tabular-nums">—</span>
                           )}
@@ -1093,7 +1096,7 @@ function DiscountsPanel({ discounts }: { discounts: DiscountReport | undefined }
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">
                         {r.pendingDiscount > 0 ? (
-                          <span className="text-sky-400 font-semibold">{formatCurrency(r.pendingDiscount)}</span>
+                          <span className="text-sky-400 font-semibold">{format(r.pendingDiscount)}</span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
@@ -1105,7 +1108,7 @@ function DiscountsPanel({ discounts }: { discounts: DiscountReport | undefined }
                         )}
                       </td>
                       <td className="px-4 py-3 text-right text-muted-foreground tabular-nums hidden md:table-cell">
-                        {formatCurrency(r.avgDiscount)}
+                        {format(r.avgDiscount)}
                       </td>
                       <td className="px-6 py-3 text-right text-xs text-muted-foreground hidden md:table-cell">
                         {r.lastDiscountDate ? formatDate(r.lastDiscountDate) : "—"}
@@ -1120,10 +1123,10 @@ function DiscountsPanel({ discounts }: { discounts: DiscountReport | undefined }
                     {rows.length} member{rows.length !== 1 ? "s" : ""}{search && ` (filtered)`}
                   </td>
                   <td className="px-4 py-3 text-right font-bold text-emerald-400 tabular-nums">
-                    {formatCurrency(rows.reduce((s, r) => s + r.realizedDiscount, 0))}
+                    {format(rows.reduce((s, r) => s + r.realizedDiscount, 0))}
                   </td>
                   <td className="px-4 py-3 text-right font-bold text-sky-400 tabular-nums">
-                    {formatCurrency(rows.reduce((s, r) => s + r.pendingDiscount, 0))}
+                    {format(rows.reduce((s, r) => s + r.pendingDiscount, 0))}
                   </td>
                   <td className="px-4 py-3 text-right font-bold tabular-nums hidden sm:table-cell">
                     {rows.reduce((s, r) => s + r.discountCount, 0)}

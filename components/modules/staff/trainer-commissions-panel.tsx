@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, Users, Wallet, TrendingUp, Clock, Loader2 } from "lucide-react";
 import { getTrainerCommissions } from "@/app/actions/trainer";
-import { formatCurrency } from "@/lib/utils";
+import { useCurrency } from "@/hooks/use-currency";
 
 interface CommissionMember {
   memberId: string;
@@ -46,6 +46,7 @@ function monthOptions() {
 }
 
 export function TrainerCommissionsPanel() {
+  const { format } = useCurrency();
   const months = useMemo(monthOptions, []);
   const [month, setMonth] = useState(currentMonthKey());
   const [rows, setRows] = useState<TrainerCommission[]>([]);
@@ -105,8 +106,8 @@ export function TrainerCommissionsPanel() {
         {!loading && rows.length > 0 && (
           <div className="flex items-center gap-4 text-sm">
             <span className="text-muted-foreground">{totals.members} members</span>
-            <span className="text-emerald-400 font-medium">{formatCurrency(totals.earned)} earned</span>
-            <span className="text-amber-400 font-medium">{formatCurrency(totals.pending)} pending</span>
+            <span className="text-emerald-400 font-medium">{format(totals.earned)} earned</span>
+            <span className="text-amber-400 font-medium">{format(totals.pending)} pending</span>
           </div>
         )}
       </div>
@@ -146,15 +147,15 @@ export function TrainerCommissionsPanel() {
                   <div className="hidden sm:flex items-center gap-5 text-right shrink-0">
                     <div>
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Earned</p>
-                      <p className="text-sm font-bold text-emerald-400">{formatCurrency(t.earned)}</p>
+                      <p className="text-sm font-bold text-emerald-400">{format(t.earned)}</p>
                     </div>
                     <div>
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Pending</p>
-                      <p className="text-sm font-bold text-amber-400">{formatCurrency(t.pending)}</p>
+                      <p className="text-sm font-bold text-amber-400">{format(t.pending)}</p>
                     </div>
                     <div>
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Comp</p>
-                      <p className="text-sm font-bold text-foreground">{formatCurrency(t.totalComp)}</p>
+                      <p className="text-sm font-bold text-foreground">{format(t.totalComp)}</p>
                     </div>
                   </div>
                   <ChevronDown className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
@@ -162,9 +163,9 @@ export function TrainerCommissionsPanel() {
 
                 {/* Mobile totals */}
                 <div className="sm:hidden flex items-center justify-between px-4 pb-3 text-xs">
-                  <span className="text-emerald-400 font-medium">{formatCurrency(t.earned)} earned</span>
-                  <span className="text-amber-400 font-medium">{formatCurrency(t.pending)} pending</span>
-                  <span className="text-foreground font-medium">{formatCurrency(t.totalComp)} total</span>
+                  <span className="text-emerald-400 font-medium">{format(t.earned)} earned</span>
+                  <span className="text-amber-400 font-medium">{format(t.pending)} pending</span>
+                  <span className="text-foreground font-medium">{format(t.totalComp)} total</span>
                 </div>
 
                 {/* Expanded member breakdown */}
@@ -176,14 +177,14 @@ export function TrainerCommissionsPanel() {
                         <Wallet className="w-3.5 h-3.5 text-muted-foreground" />
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Base Salary</p>
-                          <p className="text-sm font-medium text-foreground">{formatCurrency(t.baseSalary)}</p>
+                          <p className="text-sm font-medium text-foreground">{format(t.baseSalary)}</p>
                         </div>
                       </div>
                       <div className="px-4 py-2.5 flex items-center gap-2">
                         <TrendingUp className="w-3.5 h-3.5 text-muted-foreground" />
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Fee Generated</p>
-                          <p className="text-sm font-medium text-foreground">{formatCurrency(t.feeGenerated)}</p>
+                          <p className="text-sm font-medium text-foreground">{format(t.feeGenerated)}</p>
                         </div>
                       </div>
                       <div className="px-4 py-2.5 flex items-center gap-2">
@@ -216,9 +217,9 @@ export function TrainerCommissionsPanel() {
                               <tr key={m.memberId} className="hover:bg-white/[0.02]">
                                 <td className="px-4 py-2.5 font-medium text-foreground">{m.memberName}</td>
                                 <td className="px-4 py-2.5 text-left text-muted-foreground hidden sm:table-cell">{m.plan}</td>
-                                <td className="px-4 py-2.5 text-right text-muted-foreground">{formatCurrency(m.monthlyFee)}</td>
+                                <td className="px-4 py-2.5 text-right text-muted-foreground">{format(m.monthlyFee)}</td>
                                 <td className="px-4 py-2.5 text-left text-xs text-muted-foreground hidden md:table-cell">{m.rule}</td>
-                                <td className="px-4 py-2.5 text-right font-semibold text-foreground">{formatCurrency(m.commission)}</td>
+                                <td className="px-4 py-2.5 text-right font-semibold text-foreground">{format(m.commission)}</td>
                                 <td className="px-4 py-2.5 text-center">
                                   {m.paid ? (
                                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Earned</span>

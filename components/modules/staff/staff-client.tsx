@@ -21,8 +21,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { TrainerCommissionsPanel } from "@/components/modules/staff/trainer-commissions-panel";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
+import { useCurrency } from "@/hooks/use-currency";
 import { useGymContext } from "@/contexts/gym-context";
-import { formatCurrency, formatDate, formatDateInput, formatTime12h } from "@/lib/utils";
+import { formatDate, formatDateInput, formatTime12h } from "@/lib/utils";
 import { validateFullName, validateCNIC, validatePakPhone, validateMoney, runValidators } from "@/lib/validation";
 import {
   PERMISSIONS,
@@ -130,6 +131,7 @@ function buildUsername(fullName: string, gymName: string | null | undefined, exi
 
 export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayments: initialPayments, mode = "all" }: Props) {
   const { isDemo } = useGymContext();
+  const { format } = useCurrency();
   const isTrainersMode = mode === "trainers";
   const isStaffMode = mode === "staff";
   const pageTitle = isTrainersMode ? "Trainers" : isStaffMode ? "Staff" : "Staff & Trainers";
@@ -671,9 +673,9 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: totalLabel,        value: stats.total,                  icon: Users,        color: "text-blue-400",   bg: "bg-blue-500/10 border border-blue-500/20" },
-          { label: "Monthly Payroll", value: formatCurrency(stats.payroll), icon: TrendingDown, color: "text-primary",    bg: "bg-primary/10 border border-primary/20" },
-          { label: "Paid This Month", value: formatCurrency(stats.paid),    icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
-          { label: "Pending",         value: formatCurrency(stats.pending), icon: Clock,        color: "text-rose-400",   bg: "bg-rose-500/10 border border-rose-500/20" },
+          { label: "Monthly Payroll", value: format(stats.payroll), icon: TrendingDown, color: "text-primary",    bg: "bg-primary/10 border border-primary/20" },
+          { label: "Paid This Month", value: format(stats.paid),    icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
+          { label: "Pending",         value: format(stats.pending), icon: Clock,        color: "text-rose-400",   bg: "bg-rose-500/10 border border-rose-500/20" },
         ].map(({ label, value, icon: Icon, color, bg }) => (
           <Card key={label}>
             <CardContent className="p-4 flex items-center gap-3">
@@ -764,7 +766,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
                       </div>
                       {/* Salary */}
                       <div className="text-right shrink-0 hidden sm:block">
-                        <p className="text-sm font-semibold">{formatCurrency(member.monthly_salary)}</p>
+                        <p className="text-sm font-semibold">{format(member.monthly_salary)}</p>
                         <p className="text-xs text-muted-foreground">/month</p>
                         {isTrainer && member.commission_percentage > 0 && (
                           <p className="text-xs text-primary/70">{member.commission_percentage}% commission</p>
@@ -891,15 +893,15 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
                           <Badge variant="secondary" className={`text-xs ${rc.color}`}>{rc.label}</Badge>
                         </div>
                         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs text-muted-foreground">
-                          {Number(p.commission_amount) > 0 && <span>Commission: {formatCurrency(p.commission_amount)}</span>}
-                          {Number(p.pt_earnings) > 0 && <span>PT: {formatCurrency(p.pt_earnings)}</span>}
+                          {Number(p.commission_amount) > 0 && <span>Commission: {format(p.commission_amount)}</span>}
+                          {Number(p.pt_earnings) > 0 && <span>PT: {format(p.pt_earnings)}</span>}
                         </div>
                         {isPaid && p.payment_date && (
                           <p className="text-xs text-muted-foreground mt-0.5">Paid {formatDate(p.payment_date)} · {p.receipt_number}</p>
                         )}
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-sm font-semibold">{formatCurrency(p.total_amount)}</p>
+                        <p className="text-sm font-semibold">{format(p.total_amount)}</p>
                         <p className={`text-xs font-medium ${isPaid ? "text-emerald-400" : "text-primary"}`}>
                           {isPaid ? "Paid" : "Pending"}
                         </p>
@@ -1349,23 +1351,23 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
             <div className="rounded-lg bg-muted/30 border border-sidebar-border px-4 py-3 space-y-1.5 text-sm">
               <div className="flex justify-between text-muted-foreground">
                 <span>Base Salary</span>
-                <span>{formatCurrency(payDialog?.base_salary ?? 0)}</span>
+                <span>{format(payDialog?.base_salary ?? 0)}</span>
               </div>
               {Number(payDialog?.commission_amount) > 0 && (
                 <div className="flex justify-between text-muted-foreground">
                   <span>Commission</span>
-                  <span>{formatCurrency(payDialog?.commission_amount ?? 0)}</span>
+                  <span>{format(payDialog?.commission_amount ?? 0)}</span>
                 </div>
               )}
               {Number(payDialog?.pt_earnings) > 0 && (
                 <div className="flex justify-between text-muted-foreground">
                   <span>PT Earnings</span>
-                  <span>{formatCurrency(payDialog?.pt_earnings ?? 0)}</span>
+                  <span>{format(payDialog?.pt_earnings ?? 0)}</span>
                 </div>
               )}
               <div className="flex justify-between font-bold text-foreground border-t border-sidebar-border pt-1.5">
                 <span>Total</span>
-                <span className="text-emerald-400">{formatCurrency(payDialog?.total_amount ?? 0)}</span>
+                <span className="text-emerald-400">{format(payDialog?.total_amount ?? 0)}</span>
               </div>
             </div>
             <div className="space-y-1.5">

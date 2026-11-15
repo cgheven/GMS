@@ -13,7 +13,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "@/hooks/use-toast";
-import { formatDate, formatDateInput, formatCurrency } from "@/lib/utils";
+import { useCurrency } from "@/hooks/use-currency";
+import { formatDate, formatDateInput } from "@/lib/utils";
 import { whatsappUrl } from "@/lib/whatsapp-reminder";
 import {
   createLead, updateLead, deleteLead, setLeadStatus, markLeadLost,
@@ -1232,6 +1233,7 @@ function CreateLeadDialog({ plans, staff, defaultStatus, onClose, onSaved }: {
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { format } = useCurrency();
   const trainers = staff.filter((s) => s.role === "trainer");
   const NO_TRAINER = "__none__";
   const [form, setForm] = useState({
@@ -1356,7 +1358,7 @@ function CreateLeadDialog({ plans, staff, defaultStatus, onClose, onSaved }: {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">— None —</SelectItem>
-                      {plans.map((p) => <SelectItem key={p.id} value={p.id}>{p.name} · {formatCurrency(p.price)}</SelectItem>)}
+                      {plans.map((p) => <SelectItem key={p.id} value={p.id}>{p.name} · {format(p.price)}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1436,6 +1438,7 @@ function LostReasonDialog({ onConfirm, onClose }: {
 function ConvertDialog({ lead, plans, trainers, onClose, onSaved }: {
   lead: Lead; plans: PlanLite[]; trainers: StaffLite[]; onClose: () => void; onSaved: () => void;
 }) {
+  const { format } = useCurrency();
   const NO_TRAINER = "__none__";
   const today = formatDateInput(new Date());
   const targetDate = new Date(); targetDate.setMonth(targetDate.getMonth() + 1);
@@ -1501,7 +1504,7 @@ function ConvertDialog({ lead, plans, trainers, onClose, onSaved }: {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">— None —</SelectItem>
-                  {plans.map((p) => <SelectItem key={p.id} value={p.id}>{p.name} · {formatCurrency(p.price)}</SelectItem>)}
+                  {plans.map((p) => <SelectItem key={p.id} value={p.id}>{p.name} · {format(p.price)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -1566,7 +1569,7 @@ function ConvertDialog({ lead, plans, trainers, onClose, onSaved }: {
                 const d = parseFloat(form.discount) || 0;
                 const fee = parseFloat(form.admission_fee) || 0;
                 if (d > fee) {
-                  return <p className="text-xs text-rose-400">Discount cannot exceed admission fee. It will be clamped to {formatCurrency(fee)}.</p>;
+                  return <p className="text-xs text-rose-400">Discount cannot exceed admission fee. It will be clamped to {format(fee)}.</p>;
                 }
                 if (d < 0) {
                   return <p className="text-xs text-rose-400">Discount cannot be negative. It will be clamped to 0.</p>;

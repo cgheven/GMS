@@ -1,7 +1,8 @@
 "use client";
 import { useState, useMemo } from "react";
 import { TrendingUp, Award, AlertTriangle, Users, Clock, ChevronRight, Sparkles, CalendarClock } from "lucide-react";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { useCurrency } from "@/hooks/use-currency";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Trainer {
@@ -144,6 +145,7 @@ export function SmartEarnClient({ trainers, members, plans, shifts, defaultTrain
   const [simFee, setSimFee]         = useState(6000);
   const [simInput, setSimInput]     = useState("6000");
   const [oppTab, setOppTab]         = useState<"easy" | "mid">("easy");
+  const { format } = useCurrency();
 
   const activeMembers = useMemo(() => members.filter((m) => m.status === "active"), [members]);
   // shifts keyed by id for fast per-member lookup
@@ -306,7 +308,7 @@ export function SmartEarnClient({ trainers, members, plans, shifts, defaultTrain
           <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
           <p className="text-sm text-rose-300">
             You can earn{" "}
-            <span className="font-bold text-rose-400">+{formatCurrency(opportunityGain)}/month</span>{" "}
+            <span className="font-bold text-rose-400">+{format(opportunityGain)}/month</span>{" "}
             extra just by reassigning some members to your best-value trainer.
           </p>
         </div>
@@ -348,7 +350,7 @@ export function SmartEarnClient({ trainers, members, plans, shifts, defaultTrain
                     ? "bg-amber-500/15 border-amber-500/40 text-amber-400 font-semibold"
                     : "border-sidebar-border text-muted-foreground hover:border-amber-500/30 hover:text-foreground"
                 )}
-              >{formatCurrency(v)}</button>
+              >{format(v)}</button>
             ))}
           </div>
         </div>
@@ -408,7 +410,7 @@ export function SmartEarnClient({ trainers, members, plans, shifts, defaultTrain
                       <div className="flex-1 min-w-0">
                         <p className="font-black text-xl sm:text-2xl text-foreground tracking-tight">{winner.t.full_name}</p>
                         <p className="text-sm text-muted-foreground mt-1">
-                          {winner.t.pct}% commission{winner.t.floor > 0 ? ` · ${formatCurrency(winner.t.floor)} floor` : ""}
+                          {winner.t.pct}% commission{winner.t.floor > 0 ? ` · ${format(winner.t.floor)} floor` : ""}
                         </p>
                         {winner.t.ret !== null && (
                           <p className="text-xs text-blue-400 mt-2 flex items-center gap-1.5">
@@ -422,10 +424,10 @@ export function SmartEarnClient({ trainers, members, plans, shifts, defaultTrain
                           </p>
                           <div className="text-right">
                             <p className={cn("text-2xl font-black tabular-nums leading-none whitespace-nowrap", hasWinner ? "text-amber-300" : "text-emerald-300")}>
-                              {formatCurrency(winner.ltv ?? winner.k)}
+                              {format(winner.ltv ?? winner.k)}
                             </p>
                             {winner.ltv !== null && (
-                              <p className="text-xs text-muted-foreground mt-1 whitespace-nowrap">{formatCurrency(winner.k)}/mo × {winner.t.ret}mo</p>
+                              <p className="text-xs text-muted-foreground mt-1 whitespace-nowrap">{format(winner.k)}/mo × {winner.t.ret}mo</p>
                             )}
                           </div>
                         </div>
@@ -436,10 +438,10 @@ export function SmartEarnClient({ trainers, members, plans, shifts, defaultTrain
                           {winner.ltv !== null ? `You earn over ${winner.t.ret} months` : "You keep/month"}
                         </p>
                         <p className={cn("text-5xl font-black tabular-nums leading-none", hasWinner ? "text-amber-300" : "text-emerald-300")}>
-                          {formatCurrency(winner.ltv ?? winner.k)}
+                          {format(winner.ltv ?? winner.k)}
                         </p>
                         {winner.ltv !== null && (
-                          <p className="text-sm text-muted-foreground mt-1.5">{formatCurrency(winner.k)}/mo × {winner.t.ret} months</p>
+                          <p className="text-sm text-muted-foreground mt-1.5">{format(winner.k)}/mo × {winner.t.ret} months</p>
                         )}
                       </div>
                     </div>
@@ -470,8 +472,8 @@ export function SmartEarnClient({ trainers, members, plans, shifts, defaultTrain
                           </div>
                         </div>
                         <div>
-                          <p className="text-xl font-bold tabular-nums">{formatCurrency(ltv ?? k)}</p>
-                          {ltv !== null && <p className="text-[10px] text-muted-foreground mt-0.5">{formatCurrency(k)}/mo</p>}
+                          <p className="text-xl font-bold tabular-nums">{format(ltv ?? k)}</p>
+                          {ltv !== null && <p className="text-[10px] text-muted-foreground mt-0.5">{format(k)}/mo</p>}
                         </div>
                         <div className="space-y-1.5">
                           <div className="h-1.5 rounded-full bg-white/8 overflow-hidden">
@@ -479,10 +481,10 @@ export function SmartEarnClient({ trainers, members, plans, shifts, defaultTrain
                           </div>
                           <div className="flex items-center justify-between">
                             <p className="text-[10px] text-muted-foreground">
-                              {t.pct}% comm{t.floor > 0 ? ` · ${formatCurrency(t.floor)} floor` : ""}
+                              {t.pct}% comm{t.floor > 0 ? ` · ${format(t.floor)} floor` : ""}
                               {t.ret !== null ? ` · ${t.ret} mo avg` : ""}
                             </p>
-                            {gap > 0 && <span className="text-[10px] text-rose-400 font-semibold tabular-nums">−{formatCurrency(gap)}</span>}
+                            {gap > 0 && <span className="text-[10px] text-rose-400 font-semibold tabular-nums">−{format(gap)}</span>}
                           </div>
                         </div>
                       </div>
@@ -521,7 +523,7 @@ export function SmartEarnClient({ trainers, members, plans, shifts, defaultTrain
                 <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                 <span className="text-xs font-semibold text-emerald-400">Easy Wins</span>
               </div>
-              <p className="text-xl sm:text-2xl font-bold tabular-nums text-emerald-400 whitespace-nowrap">+{formatCurrency(easyGain)}</p>
+              <p className="text-xl sm:text-2xl font-bold tabular-nums text-emerald-400 whitespace-nowrap">+{format(easyGain)}</p>
               <p className="text-xs text-muted-foreground mt-1">{easyItems.length} member{easyItems.length !== 1 ? "s" : ""} · act now</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">New joiners + expiring plans</p>
             </button>
@@ -540,7 +542,7 @@ export function SmartEarnClient({ trainers, members, plans, shifts, defaultTrain
                 <CalendarClock className="w-3.5 h-3.5 text-amber-400" />
                 <span className="text-xs font-semibold text-amber-400">Worth Planning</span>
               </div>
-              <p className="text-xl sm:text-2xl font-bold tabular-nums text-amber-400 whitespace-nowrap">+{formatCurrency(midGain)}</p>
+              <p className="text-xl sm:text-2xl font-bold tabular-nums text-amber-400 whitespace-nowrap">+{format(midGain)}</p>
               <p className="text-xs text-muted-foreground mt-1">{midItems.length} member{midItems.length !== 1 ? "s" : ""} · at renewal</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">Mid-plan, lower churn risk</p>
             </button>
@@ -643,7 +645,7 @@ export function SmartEarnClient({ trainers, members, plans, shifts, defaultTrain
                         {/* Gain */}
                         <div className="shrink-0 text-right pl-2">
                           <p className={cn("text-sm font-bold tabular-nums", oppTab === "easy" ? "text-emerald-400" : "text-amber-400")}>
-                            +{formatCurrency(Math.round(item.weightedGain))}/mo
+                            +{format(Math.round(item.weightedGain))}/mo
                           </p>
                           {item.riskWeight < 1 && (
                             <p className="text-[10px] text-muted-foreground">{Math.round(item.riskWeight * 100)}% confidence</p>
@@ -666,7 +668,7 @@ export function SmartEarnClient({ trainers, members, plans, shifts, defaultTrain
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-2xl border border-sidebar-border bg-card p-4 text-center">
               <p className="text-xs text-muted-foreground mb-1">You Keep</p>
-              <p className="text-lg font-bold text-emerald-400 tabular-nums">{formatCurrency(totalKeeps)}</p>
+              <p className="text-lg font-bold text-emerald-400 tabular-nums">{format(totalKeeps)}</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">from trainers</p>
             </div>
             <div className="rounded-2xl border border-sidebar-border bg-card p-4 text-center">
@@ -677,7 +679,7 @@ export function SmartEarnClient({ trainers, members, plans, shifts, defaultTrain
             <div className={cn("rounded-2xl border bg-card p-4 text-center", opportunityGain > 0 ? "border-rose-500/20" : "border-sidebar-border")}>
               <p className="text-xs text-muted-foreground mb-1">You Could Gain</p>
               <p className={cn("text-lg font-bold tabular-nums", opportunityGain > 0 ? "text-rose-400" : "text-muted-foreground")}>
-                {opportunityGain > 0 ? `+${formatCurrency(opportunityGain)}` : "Optimal"}
+                {opportunityGain > 0 ? `+${format(opportunityGain)}` : "Optimal"}
               </p>
               <p className="text-[10px] text-muted-foreground mt-0.5">per month extra</p>
             </div>
@@ -698,7 +700,7 @@ export function SmartEarnClient({ trainers, members, plans, shifts, defaultTrain
                     {t.ret !== null && <div className="hidden sm:block"><p className="text-xs text-blue-400">{t.ret} mo avg stay</p></div>}
                     <div><p className="text-xs text-muted-foreground"><span className="flex items-center gap-1"><Users className="w-3 h-3" />{t.activeCount}</span></p></div>
                     <div>
-                      <p className="text-sm font-bold text-emerald-400 tabular-nums">{formatCurrency(t.monthlyKeeps)}</p>
+                      <p className="text-sm font-bold text-emerald-400 tabular-nums">{format(t.monthlyKeeps)}</p>
                       <p className="text-[10px] text-muted-foreground">you keep/mo</p>
                     </div>
                   </div>

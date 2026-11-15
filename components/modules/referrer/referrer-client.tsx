@@ -3,15 +3,19 @@ import { useMemo } from "react";
 import { Users, Clock, CheckCircle2, TrendingUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
+import { formatMoney } from "@/lib/money";
 import type { Referrer, Referral } from "@/types";
 
 interface Props {
-  referrer: Referrer & { gym?: { name: string } | null };
+  referrer: Referrer & { gym?: { name: string; country?: string | null } | null };
   referrals: (Referral & { member?: { full_name: string; phone: string | null; join_date: string } | null })[];
 }
 
 export function ReferrerClient({ referrer, referrals }: Props) {
+  // Portal renders outside the dashboard provider — currency from the gym record.
+  const country = referrer.gym?.country ?? null;
+  const fmt = (n: number) => formatMoney(n, country);
   const stats = useMemo(() => {
     const total = referrals.length;
     const pending = referrals.filter((r) => r.status === "pending").reduce((s, r) => s + r.commission_amount, 0);
@@ -20,7 +24,7 @@ export function ReferrerClient({ referrer, referrals }: Props) {
   }, [referrals]);
 
   const commissionLabel = referrer.commission_type === "flat"
-    ? `${formatCurrency(referrer.commission_value)} flat per referral`
+    ? `${fmt(referrer.commission_value)} flat per referral`
     : `${referrer.commission_value}% of monthly fee`;
 
   return (
@@ -34,9 +38,9 @@ export function ReferrerClient({ referrer, referrals }: Props) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: "Total Referrals", value: stats.total, icon: Users, raw: true },
-          { label: "Total Earned", value: formatCurrency(stats.totalEarned), icon: TrendingUp, raw: false },
-          { label: "Pending Payout", value: formatCurrency(stats.pending), icon: Clock, raw: false },
-          { label: "Paid Out", value: formatCurrency(stats.paid), icon: CheckCircle2, raw: false },
+          { label: "Total Earned", value: fmt(stats.totalEarned), icon: TrendingUp, raw: false },
+          { label: "Pending Payout", value: fmt(stats.pending), icon: Clock, raw: false },
+          { label: "Paid Out", value: fmt(stats.paid), icon: CheckCircle2, raw: false },
         ].map((s) => (
           <Card key={s.label} className="border-sidebar-border bg-card">
             <CardContent className="p-4">
@@ -72,7 +76,7 @@ export function ReferrerClient({ referrer, referrals }: Props) {
                   </div>
                   <div className="text-right flex items-center gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-foreground">{formatCurrency(r.commission_amount)}</p>
+                      <p className="text-sm font-semibold text-foreground">{fmt(r.commission_amount)}</p>
                       <p className="text-xs text-muted-foreground">{formatDate(r.created_at)}</p>
                     </div>
                     <Badge variant={r.status === "paid" ? "default" : "secondary"} className={r.status === "paid" ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"}>

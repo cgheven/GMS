@@ -14,13 +14,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
+import { formatMoney } from "@/lib/money";
 import { createClient } from "@/lib/supabase/client";
 import { createSocialLead } from "@/app/actions/social";
 import type { SocialManager, SocialLead, SocialLeadStatus, SocialPlatform } from "@/types";
 
 interface Props {
-  manager: SocialManager & { gym?: { name: string } | null };
+  manager: SocialManager & { gym?: { name: string; country?: string | null } | null };
   leads: SocialLead[];
 }
 
@@ -50,6 +51,9 @@ const emptyForm = {
 };
 
 export function SocialManagerClient({ manager, leads: initialLeads }: Props) {
+  // Portal renders outside the dashboard provider — currency from the gym record.
+  const country = manager.gym?.country ?? null;
+  const fmt = (n: number) => formatMoney(n, country);
   const [leads, setLeads] = useState(initialLeads);
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -157,7 +161,7 @@ export function SocialManagerClient({ manager, leads: initialLeads }: Props) {
   }, [leads]);
 
   const commissionLabel = manager.commission_type === "flat"
-    ? `${formatCurrency(manager.commission_value)} flat per confirmed lead`
+    ? `${fmt(manager.commission_value)} flat per confirmed lead`
     : `${manager.commission_value}% of member's monthly fee`;
 
   return (
@@ -177,8 +181,8 @@ export function SocialManagerClient({ manager, leads: initialLeads }: Props) {
         {[
           { label: "Total Leads", value: stats.total, icon: Users, raw: true },
           { label: "In Progress", value: stats.pending, icon: Clock, raw: true },
-          { label: "Pending Payout", value: formatCurrency(stats.pendingPayout), icon: TrendingUp, raw: false },
-          { label: "Total Earned", value: formatCurrency(stats.totalEarned), icon: CheckCircle2, raw: false },
+          { label: "Pending Payout", value: fmt(stats.pendingPayout), icon: TrendingUp, raw: false },
+          { label: "Total Earned", value: fmt(stats.totalEarned), icon: CheckCircle2, raw: false },
         ].map((s) => (
           <Card key={s.label} className="border-sidebar-border bg-card">
             <CardContent className="p-4">
@@ -249,7 +253,7 @@ export function SocialManagerClient({ manager, leads: initialLeads }: Props) {
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {lead.commission_amount != null && (
-                          <p className="text-sm font-semibold text-foreground">{formatCurrency(Number(lead.commission_amount))}</p>
+                          <p className="text-sm font-semibold text-foreground">{fmt(Number(lead.commission_amount))}</p>
                         )}
                         {lead.evidence_url && (
                           <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEvidenceDialog(lead)}>

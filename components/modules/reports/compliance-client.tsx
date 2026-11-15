@@ -10,7 +10,9 @@ import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "@/hooks/use-toast";
-import { formatCurrency, formatDate, formatDateInput, memberPlanLabel } from "@/lib/utils";
+import { formatDate, formatDateInput, memberPlanLabel } from "@/lib/utils";
+import { useCurrency } from "@/hooks/use-currency";
+import { moneyConfig } from "@/lib/money";
 import { saveComplianceSettings, logComplianceReport } from "@/app/actions/compliance";
 import type { Gym } from "@/types";
 
@@ -73,6 +75,10 @@ function formatPeriod(startISO: string, endISO: string): string {
 }
 
 export function ComplianceClient({ gym, members, payments, trainers }: Props) {
+  const { format } = useCurrency();
+  // Country-aware money for the PDF/CSV export (keeps the report's 2-decimal
+  // style, swaps the hardcoded "Rs" for the gym country's symbol).
+  const mc = moneyConfig(gym?.country);
   // Defaults from saved settings, with sensible fallbacks
   const savedFields = gym?.report_settings?.fields;
   const initialFields = new Set(savedFields ?? ALL_FIELDS.filter((f) => f.default).map((f) => f.key));
@@ -252,7 +258,7 @@ export function ComplianceClient({ gym, members, payments, trainers }: Props) {
         if (digits.length === 13) return `${digits.slice(0,5)}-${digits.slice(5,12)}-${digits.slice(12)}`;
         return raw;
       };
-      const fmtMoney = (n: number) => `Rs ${n.toLocaleString("en-PK", { maximumFractionDigits: 2 })}`;
+      const fmtMoney = (n: number) => `${mc.symbol}${mc.space ? " " : ""}${n.toLocaleString(mc.numberLocale, { maximumFractionDigits: 2 })}`;
 
       const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
       const pageW = pdf.internal.pageSize.getWidth();
@@ -478,8 +484,8 @@ export function ComplianceClient({ gym, members, payments, trainers }: Props) {
     if (selectedFields.has("cnic"))        header.push("CNIC");
     if (selectedFields.has("phone"))       header.push("Phone");
     if (selectedFields.has("plan"))        header.push("Plan");
-    if (selectedFields.has("monthly_fee")) header.push("Monthly Fee (Rs.)");
-    if (selectedFields.has("total_paid"))  header.push("Total Paid (Rs.)");
+    if (selectedFields.has("monthly_fee")) header.push(`Monthly Fee (${mc.symbol})`);
+    if (selectedFields.has("total_paid"))  header.push(`Total Paid (${mc.symbol})`);
     if (selectedFields.has("join_date"))   header.push("Join Date");
     lines.push(row(header));
 
@@ -667,7 +673,7 @@ export function ComplianceClient({ gym, members, payments, trainers }: Props) {
               <p className="text-xs text-muted-foreground">
                 {selectedIds.size} of {members.length} selected
                 <span className="opacity-50"> · </span>
-                Total: <span className="text-emerald-400 font-medium">{formatCurrency(totalRevenue)}</span>
+                Total: <span className="text-emerald-400 font-medium">{format(totalRevenue)}</span>
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -738,8 +744,8 @@ export function ComplianceClient({ gym, members, payments, trainers }: Props) {
                         {selectedFields.has("cnic")        && <td className="px-3 py-2 font-mono text-xs text-muted-foreground whitespace-nowrap">{m.cnic ?? <span className="italic opacity-60">—</span>}</td>}
                         {selectedFields.has("phone")       && <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{m.phone ?? "—"}</td>}
                         {selectedFields.has("plan")        && <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{memberPlanLabel(m)}</td>}
-                        {selectedFields.has("monthly_fee") && <td className="px-3 py-2 text-right text-xs text-foreground whitespace-nowrap">{formatCurrency(m.monthly_fee)}</td>}
-                        {selectedFields.has("total_paid")  && <td className={`px-3 py-2 text-right text-sm font-semibold tabular-nums whitespace-nowrap ${paid > 0 ? "text-emerald-400" : "text-muted-foreground"}`}>{formatCurrency(paid)}</td>}
+                        {selectedFields.has("monthly_fee") && <td className="px-3 py-2 text-right text-xs text-foreground whitespace-nowrap">{format(m.monthly_fee)}</td>}
+                        {selectedFields.has("total_paid")  && <td className={`px-3 py-2 text-right text-sm font-semibold tabular-nums whitespace-nowrap ${paid > 0 ? "text-emerald-400" : "text-muted-foreground"}`}>{format(paid)}</td>}
                         {selectedFields.has("join_date")   && <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{m.join_date ? formatDate(m.join_date) : "—"}</td>}
                       </tr>
                     );
@@ -762,7 +768,7 @@ export function ComplianceClient({ gym, members, payments, trainers }: Props) {
             <span className="opacity-50">·</span>
             <span>{reportRows.length} member{reportRows.length !== 1 ? "s" : ""}</span>
             <span className="opacity-50">·</span>
-            <span>Total <span className="text-emerald-400 font-medium">{formatCurrency(totalRevenue)}</span></span>
+            <span>Total <span className="text-emerald-400 font-medium">{format(totalRevenue)}</span></span>
           </div>
         </div>
       </div>
@@ -804,6 +810,7 @@ function PrintReport({ gym, ntn, headerTitle, notes, startDate, endDate, rows, t
   taxInclusive: boolean;
   taxLabel: string;
 }) {
+  const { format } = useCurrency();
   const has = (k: string) => fields.has(k);
 
   // Tax calc — inclusive: extract tax FROM gross. Exclusive: add tax ON TOP.
@@ -861,8 +868,8 @@ function PrintReport({ gym, ntn, headerTitle, notes, startDate, endDate, rows, t
                 {has("phone")       && <td className="py-1.5 px-2 text-xs">{r.phone ?? "—"}</td>}
                 {has("email")       && <td className="py-1.5 px-2 text-xs">{r.email ?? "—"}</td>}
                 {has("plan")        && <td className="py-1.5 px-2">{memberPlanLabel(r)}</td>}
-                {has("monthly_fee") && <td className="py-1.5 px-2 text-right">{formatCurrency(r.monthly_fee)}</td>}
-                {has("total_paid")  && <td className="py-1.5 px-2 text-right font-medium">{formatCurrency(r.total_paid)}</td>}
+                {has("monthly_fee") && <td className="py-1.5 px-2 text-right">{format(r.monthly_fee)}</td>}
+                {has("total_paid")  && <td className="py-1.5 px-2 text-right font-medium">{format(r.total_paid)}</td>}
                 {has("join_date")   && <td className="py-1.5 px-2 text-xs">{r.join_date ? formatDate(r.join_date) : "—"}</td>}
                 {has("trainer")     && <td className="py-1.5 px-2 text-xs">{r.trainer?.full_name ?? "—"}</td>}
                 {has("status")      && <td className="py-1.5 px-2 text-xs capitalize">{r.status}</td>}
@@ -879,19 +886,19 @@ function PrintReport({ gym, ntn, headerTitle, notes, startDate, endDate, rows, t
                   <td colSpan={Math.max(1, Array.from(fields).length - 2)} className="py-2 px-2 text-right uppercase text-xs">
                     {taxInclusive ? "Subtotal (excl. tax):" : "Subtotal:"}
                   </td>
-                  <td className="py-2 px-2 text-right">{formatCurrency(subtotal)}</td>
+                  <td className="py-2 px-2 text-right">{format(subtotal)}</td>
                 </tr>
                 <tr>
                   <td colSpan={Math.max(1, Array.from(fields).length - 2)} className="py-1 px-2 text-right uppercase text-xs">
                     {taxLabel || "Tax"} ({taxRate}%):
                   </td>
-                  <td className="py-1 px-2 text-right">{formatCurrency(taxAmount)}</td>
+                  <td className="py-1 px-2 text-right">{format(taxAmount)}</td>
                 </tr>
                 <tr className="border-t border-black">
                   <td colSpan={Math.max(1, Array.from(fields).length - 2)} className="py-2 px-2 text-right font-bold uppercase text-xs">
                     Grand Total:
                   </td>
-                  <td className="py-2 px-2 text-right font-bold">{formatCurrency(grandTotal)}</td>
+                  <td className="py-2 px-2 text-right font-bold">{format(grandTotal)}</td>
                 </tr>
               </>
             ) : (
@@ -902,7 +909,7 @@ function PrintReport({ gym, ntn, headerTitle, notes, startDate, endDate, rows, t
                 <td colSpan={Math.max(1, Array.from(fields).length - 2)} className="py-2 px-2 text-right font-bold uppercase text-xs">
                   Total Revenue:
                 </td>
-                <td className="py-2 px-2 text-right font-bold">{formatCurrency(totalRevenue)}</td>
+                <td className="py-2 px-2 text-right font-bold">{format(totalRevenue)}</td>
               </tr>
             )}
           </tfoot>

@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { formatCurrency } from "@/lib/utils";
+import { useCurrency } from "@/hooks/use-currency";
 import { useGymContext } from "@/contexts/gym-context";
 import type { GymClass, Staff, ClassScheduleType } from "@/types";
 
@@ -71,6 +71,7 @@ type FormState = typeof emptyForm;
 
 export function ClassesClient({ gymId: initialGymId, classes: initialClasses, staff }: Props) {
   const { gymId: ctxGymId, isDemo } = useGymContext();
+  const { format } = useCurrency();
   const gymId = ctxGymId ?? initialGymId;
 
   const [classes, setClasses] = useState<GymClass[]>(initialClasses);
@@ -314,7 +315,7 @@ export function ClassesClient({ gymId: initialGymId, classes: initialClasses, st
                           Included
                         </span>
                       ) : (
-                        <span className="text-xs font-medium text-foreground">{formatCurrency(c.price)}</span>
+                        <span className="text-xs font-medium text-foreground">{format(c.price)}</span>
                       )}
                     </div>
                   </div>

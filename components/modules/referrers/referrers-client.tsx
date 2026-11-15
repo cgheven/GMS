@@ -14,7 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { useCurrency } from "@/hooks/use-currency";
+import { formatDate } from "@/lib/utils";
 import type { Referrer, Referral, ReferrerCommissionType } from "@/types";
 
 interface Props {
@@ -41,6 +42,7 @@ function buildUsername(name: string, gymName: string | null | undefined): string
 
 export function ReferrersClient({ gymId, gymName, referrers: initial, referrals: initialReferrals }: Props) {
   const router = useRouter();
+  const { format } = useCurrency();
   const [referrers, setReferrers] = useState(initial);
   const [referrals, setReferrals] = useState(initialReferrals);
 
@@ -180,8 +182,8 @@ export function ReferrersClient({ gymId, gymName, referrers: initial, referrals:
         {[
           { label: "Total Partners", value: stats.total, icon: Users },
           { label: "Total Referrals", value: stats.totalReferrals, icon: TrendingUp },
-          { label: "Pending Payout", value: formatCurrency(stats.pending), icon: Clock },
-          { label: "Paid Out", value: formatCurrency(stats.paid), icon: CheckCircle2 },
+          { label: "Pending Payout", value: format(stats.pending), icon: Clock },
+          { label: "Paid Out", value: format(stats.paid), icon: CheckCircle2 },
         ].map((s) => (
           <Card key={s.label} className="border-sidebar-border bg-card">
             <CardContent className="p-4">
@@ -223,9 +225,9 @@ export function ReferrersClient({ gymId, gymName, referrers: initial, referrals:
                             {r.user_id && <Badge variant="outline" className="text-primary border-primary/30 bg-primary/10 text-xs">Has Login</Badge>}
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            {r.phone ?? "—"} · {r.commission_type === "flat" ? formatCurrency(r.commission_value) : `${r.commission_value}%`} per referral
+                            {r.phone ?? "—"} · {r.commission_type === "flat" ? format(r.commission_value) : `${r.commission_value}%`} per referral
                             {" · "}{myReferrals.length} referral(s)
-                            {pendingAmt > 0 ? <span className="text-yellow-400"> · {formatCurrency(pendingAmt)} pending</span> : null}
+                            {pendingAmt > 0 ? <span className="text-yellow-400"> · {format(pendingAmt)} pending</span> : null}
                           </p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
@@ -274,7 +276,7 @@ export function ReferrersClient({ gymId, gymName, referrers: initial, referrals:
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
                           <div className="text-right">
-                            <p className="text-sm font-semibold text-foreground">{formatCurrency(ref.commission_amount)}</p>
+                            <p className="text-sm font-semibold text-foreground">{format(ref.commission_amount)}</p>
                             <p className="text-xs text-muted-foreground">{formatDate(ref.created_at)}</p>
                           </div>
                           {ref.status === "pending" ? (

@@ -6,7 +6,7 @@ import {
   AlertTriangle, Clock, CheckCircle2,
   TrendingUp, TrendingDown, FileWarning, Zap, Trophy, Target, HandCoins, Instagram,
 } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { useCurrency } from "@/hooks/use-currency";
 import type { DashboardStats, DashboardMember, Bill, TrainerStat, GoalsOverview } from "@/types";
 
 const ExpenseChart = dynamic(
@@ -51,6 +51,7 @@ interface Props {
 }
 
 export function DashboardClient({ data, leadsSummary }: Props) {
+  const { format } = useCurrency();
   if (!data) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-3 text-muted-foreground">
@@ -85,7 +86,7 @@ export function DashboardClient({ data, leadsSummary }: Props) {
       icon: Clock,
       color: "text-rose-400",
       bg: "bg-rose-500/10 border-rose-500/20",
-      text: `${m.name} owes ${formatCurrency(m.amount)}`,
+      text: `${m.name} owes ${format(m.amount)}`,
       action: "Collect",
       href: "/payments",
       urgency: 100,
@@ -104,7 +105,7 @@ export function DashboardClient({ data, leadsSummary }: Props) {
             icon: FileWarning,
             color: "text-rose-400",
             bg: "bg-rose-500/10 border-rose-500/20",
-            text: `${b.title} bill overdue — ${formatCurrency(Number(b.amount) + Number(b.late_fee))}${b.late_fee > 0 ? ` (incl. ${formatCurrency(b.late_fee)} late fee)` : ""}`,
+            text: `${b.title} bill overdue — ${format(Number(b.amount) + Number(b.late_fee))}${b.late_fee > 0 ? ` (incl. ${format(b.late_fee)} late fee)` : ""}`,
             action: "View",
             href: "/bills",
             urgency: 90,
@@ -117,7 +118,7 @@ export function DashboardClient({ data, leadsSummary }: Props) {
               icon: FileWarning,
               color: "text-amber-400",
               bg: "bg-amber-500/10 border-amber-500/20",
-              text: `${b.title} due ${daysUntil === 0 ? "today" : `in ${daysUntil} day${daysUntil !== 1 ? "s" : ""}`} — ${formatCurrency(b.amount)}`,
+              text: `${b.title} due ${daysUntil === 0 ? "today" : `in ${daysUntil} day${daysUntil !== 1 ? "s" : ""}`} — ${format(b.amount)}`,
               action: "View",
               href: "/bills",
               urgency: 50 + daysUntil,
@@ -153,14 +154,14 @@ export function DashboardClient({ data, leadsSummary }: Props) {
               <Wallet className="w-4 h-4 text-emerald-400" />
             </div>
           </div>
-          <p className="text-3xl font-bold text-emerald-400 leading-none">{formatCurrency(stats.monthly_collected)}</p>
+          <p className="text-3xl font-bold text-emerald-400 leading-none">{format(stats.monthly_collected)}</p>
           {stats.revenue_target > 0 ? (
             <div className="space-y-1.5">
               <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
                 <div className="h-full bg-emerald-400 rounded-full transition-all duration-700" style={{ width: `${targetProgress}%` }} />
               </div>
               <p className="text-xs text-muted-foreground">
-                <span className="text-emerald-400 font-semibold">{targetProgress}%</span> of {formatCurrency(stats.revenue_target)} target
+                <span className="text-emerald-400 font-semibold">{targetProgress}%</span> of {format(stats.revenue_target)} target
               </p>
             </div>
           ) : (
@@ -177,7 +178,7 @@ export function DashboardClient({ data, leadsSummary }: Props) {
             </div>
           </div>
           <p className={`text-3xl font-bold leading-none ${stats.monthly_outstanding > 0 ? "text-rose-400" : "text-muted-foreground"}`}>
-            {formatCurrency(stats.monthly_outstanding)}
+            {format(stats.monthly_outstanding)}
           </p>
           {overdueMembers.length > 0 ? (
             <Link href="/payments" className="flex items-center justify-between group">
@@ -204,30 +205,30 @@ export function DashboardClient({ data, leadsSummary }: Props) {
             </div>
           </div>
           <p className={`text-3xl font-bold leading-none ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>
-            {isProfit ? "+" : ""}{formatCurrency(stats.net_profit)}
+            {isProfit ? "+" : ""}{format(stats.net_profit)}
           </p>
           <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
-            <span>Rev <span className="text-foreground font-medium">{formatCurrency(stats.monthly_collected)}</span></span>
+            <span>Rev <span className="text-foreground font-medium">{format(stats.monthly_collected)}</span></span>
             <span>·</span>
-            <span>Exp <span className="text-rose-400 font-medium">{formatCurrency(stats.monthly_expenses)}</span></span>
+            <span>Exp <span className="text-rose-400 font-medium">{format(stats.monthly_expenses)}</span></span>
             <span>·</span>
-            <span>Sal <span className="text-purple-400 font-medium">{formatCurrency(stats.monthly_salaries)}</span></span>
+            <span>Sal <span className="text-purple-400 font-medium">{format(stats.monthly_salaries)}</span></span>
             {stats.monthly_paid_bills > 0 && (
               <>
                 <span>·</span>
-                <span>Bills <span className="text-orange-400 font-medium">{formatCurrency(stats.monthly_paid_bills)}</span></span>
+                <span>Bills <span className="text-orange-400 font-medium">{format(stats.monthly_paid_bills)}</span></span>
               </>
             )}
             {stats.paid_commissions_this_month > 0 && (
               <>
                 <span>·</span>
-                <span>Partner <span className="text-amber-400 font-medium">{formatCurrency(stats.paid_commissions_this_month)}</span></span>
+                <span>Partner <span className="text-amber-400 font-medium">{format(stats.paid_commissions_this_month)}</span></span>
               </>
             )}
             {stats.paid_social_commissions_this_month > 0 && (
               <>
                 <span>·</span>
-                <span>Social <span className="text-pink-400 font-medium">{formatCurrency(stats.paid_social_commissions_this_month)}</span></span>
+                <span>Social <span className="text-pink-400 font-medium">{format(stats.paid_social_commissions_this_month)}</span></span>
               </>
             )}
           </div>
@@ -243,7 +244,7 @@ export function DashboardClient({ data, leadsSummary }: Props) {
                     <HandCoins className="w-4 h-4 text-amber-400" />
                   </div>
                 </div>
-                <p className="text-3xl font-bold text-amber-400 leading-none">{formatCurrency(stats.pending_commissions_amount)}</p>
+                <p className="text-3xl font-bold text-amber-400 leading-none">{format(stats.pending_commissions_amount)}</p>
                 <p className="text-xs text-muted-foreground">
                   <span className="text-amber-400 font-semibold">{stats.pending_commissions_count}</span> pending payout{stats.pending_commissions_count !== 1 ? "s" : ""}
                 </p>
@@ -257,7 +258,7 @@ export function DashboardClient({ data, leadsSummary }: Props) {
                     <Instagram className="w-4 h-4 text-pink-400" />
                   </div>
                 </div>
-                <p className="text-3xl font-bold text-pink-400 leading-none">{formatCurrency(stats.pending_social_commissions_amount)}</p>
+                <p className="text-3xl font-bold text-pink-400 leading-none">{format(stats.pending_social_commissions_amount)}</p>
                 <p className="text-xs text-muted-foreground">
                   <span className="text-pink-400 font-semibold">{stats.pending_social_commissions_count}</span> pending payout{stats.pending_social_commissions_count !== 1 ? "s" : ""}
                 </p>
@@ -383,11 +384,11 @@ export function DashboardClient({ data, leadsSummary }: Props) {
                   <div className="flex items-center justify-between pt-1 border-t border-sidebar-border/60">
                     <div>
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Collected</p>
-                      <p className="text-sm font-bold text-emerald-400">{formatCurrency(t.collected)}</p>
+                      <p className="text-sm font-bold text-emerald-400">{format(t.collected)}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Due</p>
-                      <p className="text-sm font-bold text-foreground">{formatCurrency(t.totalDue)}</p>
+                      <p className="text-sm font-bold text-foreground">{format(t.totalDue)}</p>
                     </div>
                   </div>
                   {t.unpaid > 0 && (

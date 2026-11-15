@@ -1,9 +1,10 @@
 "use client";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { formatCurrency } from "@/lib/utils";
+import { useCurrency } from "@/hooks/use-currency";
 import type { RevenueMonth } from "@/types";
 
 function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; fill: string }[]; label?: string }) {
+  const { format } = useCurrency();
   if (!active || !payload?.length) return null;
   const total = payload.reduce((s, p) => s + p.value, 0);
   return (
@@ -13,12 +14,12 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
         <div key={p.name} className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.fill }} />
           <span className="text-muted-foreground">{p.name}:</span>
-          <span className="font-medium text-foreground">{formatCurrency(p.value)}</span>
+          <span className="font-medium text-foreground">{format(p.value)}</span>
         </div>
       ))}
       <div className="border-t border-sidebar-border mt-1.5 pt-1.5 flex justify-between">
         <span className="text-muted-foreground">Total:</span>
-        <span className="font-bold text-foreground">{formatCurrency(total)}</span>
+        <span className="font-bold text-foreground">{format(total)}</span>
       </div>
     </div>
   );

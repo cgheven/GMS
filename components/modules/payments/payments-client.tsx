@@ -11,7 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { formatCurrency, formatDate, formatDateInput, memberPlanLabel } from "@/lib/utils";
+import { useCurrency } from "@/hooks/use-currency";
+import { formatDate, formatDateInput, memberPlanLabel } from "@/lib/utils";
 import { useGymContext } from "@/contexts/gym-context";
 import { buildReminderMessage, whatsappUrl } from "@/lib/whatsapp-reminder";
 import { validateMoney } from "@/lib/validation";
@@ -76,6 +77,7 @@ function MemberPicker({ members, value, onChange }: {
   value: string;
   onChange: (id: string, member: MemberRow | null) => void;
 }) {
+  const { format } = useCurrency();
   const [query, setQuery] = useState("");
   const [trainerFilter, setTrainerFilter] = useState<string>("all");
 
@@ -161,7 +163,7 @@ function MemberPicker({ members, value, onChange }: {
                   {m.full_name}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {formatCurrency(Number(m.monthly_fee))} · {memberPlanLabel(m, "No plan")}
+                  {format(Number(m.monthly_fee))} · {memberPlanLabel(m, "No plan")}
                   {m.trainer?.full_name && <span className="ml-1 text-muted-foreground/60">· {m.trainer.full_name}</span>}
                 </p>
               </div>
@@ -177,6 +179,7 @@ function MemberPicker({ members, value, onChange }: {
 // ─── Main component ───────────────────────────────────────────────────────────
 export function PaymentsClient({ gymId, payments: initialPayments, members }: Props) {
   const { gym, isDemo } = useGymContext();
+  const { format } = useCurrency();
   const [payments, setPayments] = useState<Payment[]>(initialPayments);
   const [view, setView] = useState<"members" | "history">("members");
 
@@ -470,12 +473,12 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
               }`}>
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Total</p>
               <p className={`text-xl font-bold ${collectionStats.totalDue > 0 ? "text-rose-400" : "text-foreground"}`}>
-                {formatCurrency(collectionStats.totalDue)}
+                {format(collectionStats.totalDue)}
               </p>
               <p className="text-[11px] text-muted-foreground">
                 <span className="text-rose-400/80">due</span>
                 {" · "}
-                <span className="text-emerald-400/80">{formatCurrency(collectionStats.totalCollected)} collected</span>
+                <span className="text-emerald-400/80">{format(collectionStats.totalCollected)} collected</span>
               </p>
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-emerald-400">{collectionStats.totalPaid} paid</span>
@@ -500,12 +503,12 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
                   {g.id === "none" ? "Gym Only" : g.label}
                 </p>
                 <p className={`text-xl font-bold ${g.due > 0 ? "text-rose-400" : "text-foreground"}`}>
-                  {formatCurrency(g.due)}
+                  {format(g.due)}
                 </p>
                 <p className="text-[11px] text-muted-foreground">
                   <span className="text-rose-400/80">due</span>
                   {" · "}
-                  <span className="text-emerald-400/80">{formatCurrency(g.collected)}</span>
+                  <span className="text-emerald-400/80">{format(g.collected)}</span>
                 </p>
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-emerald-400">{g.paid}/{g.total} paid</span>
@@ -569,7 +572,7 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
                             <span className="text-sm text-muted-foreground">{memberPlanLabel(m)}</span>
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <span className="font-medium text-foreground">{formatCurrency(Number(m.monthly_fee))}</span>
+                            <span className="font-medium text-foreground">{format(Number(m.monthly_fee))}</span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             {payment ? (
@@ -700,9 +703,9 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
                             <span className="text-xs text-muted-foreground font-mono">{p.receipt_number ?? "—"}</span>
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <p className="font-semibold text-foreground">{formatCurrency(Number(p.total_amount))}</p>
-                            {Number(p.discount) > 0 && <p className="text-xs text-emerald-400">-{formatCurrency(p.discount)} disc</p>}
-                            {Number(p.late_fee) > 0 && <p className="text-xs text-rose-400">+{formatCurrency(p.late_fee)} late</p>}
+                            <p className="font-semibold text-foreground">{format(Number(p.total_amount))}</p>
+                            {Number(p.discount) > 0 && <p className="text-xs text-emerald-400">-{format(p.discount)} disc</p>}
+                            {Number(p.late_fee) > 0 && <p className="text-xs text-rose-400">+{format(p.late_fee)} late</p>}
                           </td>
                           <td className="px-4 py-3 text-center"><StatusBadge status={p.status} /></td>
                           <td className="px-4 py-3">

@@ -16,7 +16,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { formatCurrency, formatDate, formatDateInput, formatTime12h, memberPlanLabel } from "@/lib/utils";
+import { formatDate, formatDateInput, formatTime12h, memberPlanLabel } from "@/lib/utils";
+import { formatMoney } from "@/lib/money";
 import { buildReminderMessage, whatsappUrl } from "@/lib/whatsapp-reminder";
 import type { Payment, PaymentMethod, PaymentStatus, Member, MembershipPlan, Staff, MemberGoal, BodyMetric, MetricSkip, TrainerShift, PaymentMethodAccount } from "@/types";
 
@@ -46,7 +47,7 @@ function computeExpiry(joinDate: string, durationType: string | undefined): stri
 }
 
 interface Props {
-  staff: Staff & { gym?: { name: string } | null };
+  staff: Staff & { gym?: { name: string; country?: string | null } | null };
   gymId: string;
   gymName: string;
   reminderTemplate: string | null;
@@ -97,6 +98,10 @@ function genReceipt(name: string, period: string) {
 
 export function TrainerClient({ staff, gymId, gymName, reminderTemplate, paymentMethods, members, selfMembers, payments: initialPayments, plans, trainers, checkedInToday: initialCheckedIn, goals, bodyMetrics, metricSkips }: Props) {
   const router = useRouter();
+  // Portals render outside the dashboard GymProvider, so currency resolves from
+  // the gym country carried on the trainer's own gym record.
+  const country = staff.gym?.country ?? null;
+  const fmt = (n: number) => formatMoney(n, country);
   const [payments, setPayments] = useState<Payment[]>(initialPayments);
   const [selectedMonth, setSelectedMonth] = useState(CURRENT_MONTH);
   const [shiftMap, setShiftMap] = useState<Record<string, TrainerShift>>({});
@@ -469,7 +474,7 @@ export function TrainerClient({ staff, gymId, gymName, reminderTemplate, payment
           { label: "In Today",    value: checkedInToday.size,            icon: LogIn,        color: "text-sky-400",     bg: "bg-sky-500/10 border border-sky-500/20" },
           { label: "Paid",        value: stats.paid,                     icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
           { label: "Unpaid",      value: stats.unpaid,                   icon: Clock,        color: "text-primary",     bg: "bg-primary/10 border border-primary/20" },
-          { label: "Gym Collected", value: formatCurrency(stats.collected), icon: Wallet,     color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
+          { label: "Gym Collected", value: fmt(stats.collected), icon: Wallet,     color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
         ].map(({ label, value, icon: Icon, color, bg }) => (
           <div key={label} className="rounded-2xl border border-sidebar-border bg-card p-4">
             <div className="flex items-center gap-3">
@@ -491,15 +496,15 @@ export function TrainerClient({ staff, gymId, gymName, reminderTemplate, payment
           <TrendingUp className="w-4 h-4 text-primary" />
           <p className="text-sm font-semibold text-primary">My Earnings — {monthLabel(selectedMonth)}</p>
           <span className="ml-auto text-xs text-muted-foreground">
-            {earnings.pct}% commission{earnings.floor > 0 ? ` after ${formatCurrency(earnings.floor)} gym cost` : ""}
+            {earnings.pct}% commission{earnings.floor > 0 ? ` after ${fmt(earnings.floor)} gym cost` : ""}
           </span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-primary/10">
           {[
-            { label: "Base Salary",      value: formatCurrency(staff.monthly_salary),    sub: "fixed",                    dim: false },
-            { label: "Earned Commission", value: formatCurrency(earnings.earnedCommission), sub: `${stats.paid} paid members`, dim: false },
-            { label: "Still Pending",    value: formatCurrency(earnings.pendingCommission), sub: `${stats.unpaid} unpaid`,  dim: true  },
-            { label: "Total This Month", value: formatCurrency(earnings.totalEarned),    sub: `of ${formatCurrency(staff.monthly_salary + earnings.totalPotential)} potential`, dim: false },
+            { label: "Base Salary",      value: fmt(staff.monthly_salary),    sub: "fixed",                    dim: false },
+            { label: "Earned Commission", value: fmt(earnings.earnedCommission), sub: `${stats.paid} paid members`, dim: false },
+            { label: "Still Pending",    value: fmt(earnings.pendingCommission), sub: `${stats.unpaid} unpaid`,  dim: true  },
+            { label: "Total This Month", value: fmt(earnings.totalEarned),    sub: `of ${fmt(staff.monthly_salary + earnings.totalPotential)} potential`, dim: false },
           ].map(({ label, value, sub, dim }) => (
             <div key={label} className="px-4 py-3">
               <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</p>
@@ -608,12 +613,12 @@ export function TrainerClient({ staff, gymId, gymName, reminderTemplate, payment
                         <span className="text-sm text-muted-foreground">{memberPlanLabel(member)}</span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <span className="font-medium text-foreground">{formatCurrency(Number(member.monthly_fee))}</span>
+                        <span className="font-medium text-foreground">{fmt(Number(member.monthly_fee))}</span>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-col items-end gap-0.5">
                           <span className={`text-sm font-semibold ${isPaid ? "text-primary" : "text-muted-foreground"}`}>
-                            {formatCurrency(earnings.cutForMember(member))}
+                            {fmt(earnings.cutForMember(member))}
                           </span>
                           {(() => {
                             const shift = member.assigned_shift_id ? shiftMap[member.assigned_shift_id] : null;
@@ -742,7 +747,7 @@ export function TrainerClient({ staff, gymId, gymName, reminderTemplate, payment
                             <span className="text-sm text-muted-foreground">{memberPlanLabel(member)}</span>
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <span className="font-medium text-foreground">{formatCurrency(Number(member.monthly_fee))}</span>
+                            <span className="font-medium text-foreground">{fmt(Number(member.monthly_fee))}</span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             {(() => { const { label, cls } = paymentBadge(payment, selectedMonth); return (
@@ -932,7 +937,7 @@ export function TrainerClient({ staff, gymId, gymName, reminderTemplate, payment
                   <SelectContent>
                     {plans.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
-                        {p.name} · {formatCurrency(p.price)}
+                        {p.name} · {fmt(p.price)}
                       </SelectItem>
                     ))}
                   </SelectContent>

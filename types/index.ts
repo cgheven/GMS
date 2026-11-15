@@ -76,6 +76,9 @@ export interface Gym {
   id: string;
   owner_id: string;
   name: string;
+  /** ISO 3166-1 alpha-2 country code (uppercase). Drives currency + phone via
+   *  lib/country-config. Defaults to "PK"; see migration 2026-11-15-gym-country. */
+  country: string;
   address: string | null;
   city: string | null;
   area: string | null;

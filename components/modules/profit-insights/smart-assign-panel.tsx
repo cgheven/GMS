@@ -1,6 +1,7 @@
 "use client";
 import { TrendingUp, Check } from "lucide-react";
-import { cn, formatCurrency, formatTime12h } from "@/lib/utils";
+import { cn, formatTime12h } from "@/lib/utils";
+import { useCurrency } from "@/hooks/use-currency";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import type { Staff, TrainerShift } from "@/types";
@@ -39,6 +40,7 @@ export function SmartAssignPanel({
   onSelectTrainer,
   onSelectShift,
 }: SmartAssignPanelProps) {
+  const { format } = useCurrency();
   const hasFee = memberFee > 0;
 
   // Sort trainers by gym keeps descending when fee is known
@@ -126,17 +128,17 @@ export function SmartAssignPanel({
 
               <p className="text-xs font-semibold leading-tight text-foreground truncate">{t.full_name}</p>
               <p className="text-[10px] text-amber-400 mt-0.5">{pct}% commission</p>
-              {floor > 0 && <p className="text-[9px] text-muted-foreground">after {formatCurrency(floor)} floor</p>}
+              {floor > 0 && <p className="text-[9px] text-muted-foreground">after {format(floor)} floor</p>}
 
               {hasFee && gymKeeps !== null && trainerGets !== null ? (
                 <div className="mt-2 pt-2 border-t border-sidebar-border/60 space-y-0.5">
                   <div>
                     <p className="text-[9px] text-muted-foreground uppercase tracking-wide">You Keep</p>
-                    <p className="text-base font-bold text-emerald-400 tabular-nums leading-tight">{formatCurrency(gymKeeps)}</p>
+                    <p className="text-base font-bold text-emerald-400 tabular-nums leading-tight">{format(gymKeeps)}</p>
                   </div>
                   <div>
                     <p className="text-[9px] text-muted-foreground">Trainer gets</p>
-                    <p className="text-[11px] font-semibold text-amber-400/80 tabular-nums">{formatCurrency(trainerGets)}</p>
+                    <p className="text-[11px] font-semibold text-amber-400/80 tabular-nums">{format(trainerGets)}</p>
                   </div>
                 </div>
               ) : (
@@ -180,7 +182,7 @@ export function SmartAssignPanel({
               {trainerShifts.map((sh) => (
                 <SelectItem key={sh.id} value={sh.id}>
                   {sh.name} · {formatTime12h(sh.start_time)}–{formatTime12h(sh.end_time)} ·{" "}
-                  {sh.commission_type === "flat" ? `PKR ${sh.commission_value} flat` : `${sh.commission_value}%`}
+                  {sh.commission_type === "flat" ? `${format(sh.commission_value)} flat` : `${sh.commission_value}%`}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { useGymContext } from "@/contexts/gym-context";
-import { formatCurrency } from "@/lib/utils";
+import { useCurrency } from "@/hooks/use-currency";
 import type { MembershipPlan, PlanDurationType } from "@/types";
 
 const DURATION_LABELS: Record<PlanDurationType, string> = {
@@ -78,6 +78,7 @@ interface Props {
 
 export function PlansClient({ gymId, plans: initialPlans }: Props) {
   const { isDemo } = useGymContext();
+  const { format } = useCurrency();
   const [plans, setPlans] = useState<PlanWithCount[]>(initialPlans);
   const [filtered, setFiltered] = useState<PlanWithCount[]>(initialPlans);
   const [search, setSearch] = useState("");
@@ -313,14 +314,14 @@ export function PlansClient({ gymId, plans: initialPlans }: Props) {
                 {/* Price */}
                 <div className="space-y-1">
                   <div className="flex items-baseline gap-1">
-                    <span className="text-2xl font-bold text-foreground">{formatCurrency(plan.price)}</span>
+                    <span className="text-2xl font-bold text-foreground">{format(plan.price)}</span>
                     <span className="text-xs text-muted-foreground">
                       /{plan.duration_type === "monthly" ? "mo" : plan.duration_type === "annual" ? "yr" : "plan"}
                     </span>
                   </div>
                   {plan.admission_fee > 0 && (
                     <p className="text-xs text-muted-foreground">
-                      + {formatCurrency(plan.admission_fee)} admission fee
+                      + {format(plan.admission_fee)} admission fee
                     </p>
                   )}
                 </div>

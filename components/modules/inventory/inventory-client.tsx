@@ -15,7 +15,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { cn, formatCurrency } from "@/lib/utils";
+import { useCurrency } from "@/hooks/use-currency";
+import { cn } from "@/lib/utils";
 import {
   addItem, archiveItem, addStockBatch, recordSale, adjustStock,
 } from "@/app/actions/inventory";
@@ -342,6 +343,7 @@ export function InventoryClient(props: Props) {
 // ── Item card ────────────────────────────────────────────────────────────────
 
 function ItemCard({ item, onClick }: { item: InventoryItem; onClick: () => void }) {
+  const { format } = useCurrency();
   const stock = item.total_stock ?? 0;
   const isLow = stock <= item.low_stock_threshold;
   const isOut = stock === 0;
@@ -376,7 +378,7 @@ function ItemCard({ item, onClick }: { item: InventoryItem; onClick: () => void 
       </div>
 
       <div className="flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">{formatCurrency(item.sale_price)}</span>
+        <span className="text-muted-foreground">{format(item.sale_price)}</span>
         <div className="flex items-center gap-1">
           {isOut && <span className="text-[10px] font-semibold text-rose-400 bg-rose-500/15 rounded px-1.5 py-0.5">OUT</span>}
           {!isOut && isLow && <span className="text-[10px] font-semibold text-amber-400 bg-amber-500/15 rounded px-1.5 py-0.5">LOW</span>}
@@ -390,6 +392,7 @@ function ItemCard({ item, onClick }: { item: InventoryItem; onClick: () => void 
 // ── Sales list ───────────────────────────────────────────────────────────────
 
 function SalesList({ sales }: { sales: InventorySale[] }) {
+  const { format } = useCurrency();
   if (sales.length === 0) {
     return (
       <EmptyState icon={History} title="No sales yet" description="Sales recorded this year will appear here." />
@@ -416,8 +419,8 @@ function SalesList({ sales }: { sales: InventorySale[] }) {
               </p>
             </div>
             <div className="text-right shrink-0">
-              <p className="text-sm font-bold tabular-nums">{formatCurrency(Number(s.total_amount))}</p>
-              <p className="text-[10px] text-emerald-400 tabular-nums">+{formatCurrency(Number(s.profit))}</p>
+              <p className="text-sm font-bold tabular-nums">{format(Number(s.total_amount))}</p>
+              <p className="text-[10px] text-emerald-400 tabular-nums">+{format(Number(s.profit))}</p>
             </div>
           </div>
         ))}
@@ -437,6 +440,7 @@ function ReportsView({
   lowStockItems: InventoryItem[];
   expiringBatches: InventoryExpiringBatch[];
 }) {
+  const { format } = useCurrency();
   return (
     <div className="space-y-6">
 
@@ -535,10 +539,10 @@ function ReportsView({
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{t.name}</p>
-                    <p className="text-xs text-muted-foreground">{t.units_sold} units · {formatCurrency(t.total_revenue)} revenue</p>
+                    <p className="text-xs text-muted-foreground">{t.units_sold} units · {format(t.total_revenue)} revenue</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-sm font-bold text-emerald-400 tabular-nums">+{formatCurrency(t.total_profit)}</p>
+                    <p className="text-sm font-bold text-emerald-400 tabular-nums">+{format(t.total_profit)}</p>
                     <p className="text-[10px] text-muted-foreground">profit</p>
                   </div>
                 </div>
@@ -563,7 +567,7 @@ function ReportsView({
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{d.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {d.total_stock} units · worth {formatCurrency(d.stock_value)}
+                      {d.total_stock} units · worth {format(d.stock_value)}
                       {d.last_sold_at ? ` · last sold ${d.days_since_sale}d ago` : " · never sold"}
                     </p>
                   </div>
@@ -582,14 +586,15 @@ function ReportsView({
 }
 
 function ProfitCard({ label, data, highlight }: { label: string; data: { revenue: number; cost: number; profit: number; sales_count: number }; highlight?: boolean }) {
+  const { format } = useCurrency();
   return (
     <div className={cn("rounded-2xl border p-4", highlight ? "border-emerald-500/25 bg-emerald-500/[0.04]" : "border-sidebar-border bg-card")}>
       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{label}</p>
       <p className={cn("text-2xl font-bold tabular-nums", data.profit >= 0 ? "text-emerald-400" : "text-rose-400")}>
-        {data.profit >= 0 ? "+" : ""}{formatCurrency(data.profit)}
+        {data.profit >= 0 ? "+" : ""}{format(data.profit)}
       </p>
       <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-2 tabular-nums">
-        <span>Revenue: {formatCurrency(data.revenue)}</span>
+        <span>Revenue: {format(data.revenue)}</span>
         <span>{data.sales_count} sales</span>
       </div>
     </div>
@@ -630,6 +635,7 @@ function RecordSaleDialog({
   items: InventoryItem[];
   members: { id: string; full_name: string; status: string }[];
 }) {
+  const { format } = useCurrency();
   const [pending, startTransition] = useTransition();
   const [itemId, setItemId] = useState<string>("");
   const [quantity, setQuantity] = useState(1);
@@ -799,7 +805,7 @@ function RecordSaleDialog({
           {/* Total */}
           <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.05] px-4 py-3 flex items-center justify-between">
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total</span>
-            <span className="text-2xl font-bold text-emerald-400 tabular-nums">{formatCurrency(total)}</span>
+            <span className="text-2xl font-bold text-emerald-400 tabular-nums">{format(total)}</span>
           </div>
         </div>
 
@@ -823,6 +829,7 @@ function StockInDialog({
   onClose: () => void;
   items: InventoryItem[];
 }) {
+  const { format } = useCurrency();
   const [pending, startTransition] = useTransition();
   const [itemId, setItemId] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -946,7 +953,7 @@ function StockInDialog({
           {quantity > 0 && costPerUnit > 0 && (
             <div className="rounded-xl border border-sky-500/25 bg-sky-500/[0.05] px-4 py-3 flex items-center justify-between">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total cost</span>
-              <span className="text-2xl font-bold text-sky-400 tabular-nums">{formatCurrency(quantity * costPerUnit)}</span>
+              <span className="text-2xl font-bold text-sky-400 tabular-nums">{format(quantity * costPerUnit)}</span>
             </div>
           )}
         </div>
@@ -1086,6 +1093,7 @@ function ItemDetailDialog({
   onAdjust: (b: InventoryBatch) => void;
   isOwner: boolean;
 }) {
+  const { format } = useCurrency();
   const [pending, startTransition] = useTransition();
 
   function handleArchive() {
@@ -1114,7 +1122,7 @@ function ItemDetailDialog({
             <span className={cn("inline-block text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border mr-2", CAT_COLORS[item.category])}>
               {CATEGORIES.find((c) => c.value === item.category)?.label}
             </span>
-            Sale price: {formatCurrency(item.sale_price)} · Threshold: {item.low_stock_threshold}
+            Sale price: {format(item.sale_price)} · Threshold: {item.low_stock_threshold}
           </DialogDescription>
         </DialogHeader>
 
@@ -1147,7 +1155,7 @@ function ItemDetailDialog({
                           {b.quantity_remaining}<span className="text-muted-foreground"> / {b.quantity_purchased}</span> units
                         </p>
                         <p className="text-xs text-muted-foreground tabular-nums">
-                          @ {formatCurrency(Number(b.purchase_cost_per_unit))}
+                          @ {format(Number(b.purchase_cost_per_unit))}
                         </p>
                       </div>
                       <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">

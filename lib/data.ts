@@ -547,7 +547,7 @@ export const getTrainerContext = cache(async () => {
 
   const { data: staff } = await supabase
     .from("pulse_staff")
-    .select("*, gym:pulse_gyms(name,reminder_template,payment_methods)")
+    .select("*, gym:pulse_gyms(name,country,reminder_template,payment_methods)")
     .eq("user_id", user.id)
     .single();
 
@@ -853,7 +853,7 @@ export const getReferrerContext = cache(async () => {
   if (profile?.role !== "referrer") return null;
   const { data: referrer } = await supabase
     .from("pulse_referrers")
-    .select("*, gym:pulse_gyms(name)")
+    .select("*, gym:pulse_gyms(name,country)")
     .eq("user_id", user.id)
     .single();
   if (!referrer) return null;
@@ -908,7 +908,7 @@ export const getSocialManagerContext = cache(async () => {
   const admin = createAdminClient();
   const { data: manager } = await admin
     .from("pulse_social_managers")
-    .select("*, gym:pulse_gyms(name)")
+    .select("*, gym:pulse_gyms(name,country)")
     .eq("user_id", user.id)
     .single();
   if (!manager) return null;

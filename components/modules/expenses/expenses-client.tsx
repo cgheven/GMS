@@ -14,7 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { useGymContext } from "@/contexts/gym-context";
-import { formatCurrency, formatDate, formatDateInput } from "@/lib/utils";
+import { useCurrency } from "@/hooks/use-currency";
+import { formatDate, formatDateInput } from "@/lib/utils";
 import type { Expense, ExpenseCategory } from "@/types";
 
 const categories: ExpenseCategory[] = [
@@ -96,6 +97,7 @@ interface Props {
 
 export function ExpensesClient({ gymId, expenses: initialExpenses, monthFilter: defaultMonth }: Props) {
   const { isDemo } = useGymContext();
+  const { format } = useCurrency();
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState("all");
@@ -202,9 +204,9 @@ export function ExpensesClient({ gymId, expenses: initialExpenses, monthFilter: 
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { label: "Total This Month", value: formatCurrency(total),                                        icon: TrendingDown, color: "text-rose-400",   bg: "bg-rose-500/10 border border-rose-500/20" },
+          { label: "Total This Month", value: format(total),                                        icon: TrendingDown, color: "text-rose-400",   bg: "bg-rose-500/10 border border-rose-500/20" },
           { label: "Total Entries",    value: filtered.length,                                              icon: Receipt,      color: "text-blue-400",   bg: "bg-blue-500/10 border border-blue-500/20" },
-          { label: "Average",          value: filtered.length ? formatCurrency(total / filtered.length) : "—", icon: Filter,  color: "text-purple-400", bg: "bg-purple-500/10 border border-purple-500/20" },
+          { label: "Average",          value: filtered.length ? format(total / filtered.length) : "—", icon: Filter,  color: "text-purple-400", bg: "bg-purple-500/10 border border-purple-500/20" },
         ].map(({ label, value, icon: Icon, color, bg }) => (
           <Card key={label}>
             <CardContent className="p-4 flex items-center gap-3">
@@ -282,7 +284,7 @@ export function ExpensesClient({ gymId, expenses: initialExpenses, monthFilter: 
                         <Badge variant={categoryColors[exp.category]} className="capitalize text-xs">{exp.category}</Badge>
                       </td>
                       <td className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">{formatDate(exp.date)}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-sm">{formatCurrency(exp.amount)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-sm">{format(exp.amount)}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditing(exp); setForm({ title: exp.title, amount: exp.amount.toString(), category: exp.category, date: exp.date, notes: exp.notes ?? "" }); setDialogOpen(true); }}>
@@ -299,7 +301,7 @@ export function ExpensesClient({ gymId, expenses: initialExpenses, monthFilter: 
                 <tfoot>
                   <tr className="border-t bg-muted/30">
                     <td colSpan={3} className="px-4 py-3 text-sm font-semibold">Total</td>
-                    <td className="px-4 py-3 text-right font-bold">{formatCurrency(total)}</td>
+                    <td className="px-4 py-3 text-right font-bold">{format(total)}</td>
                     <td />
                   </tr>
                 </tfoot>

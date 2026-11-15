@@ -17,7 +17,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { toast } from "@/hooks/use-toast";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { useCurrency } from "@/hooks/use-currency";
+import { formatDate } from "@/lib/utils";
 import {
   createSocialManager, updateSocialManager, deleteSocialManager,
   createSocialManagerLogin, removeSocialManagerLogin,
@@ -53,6 +54,7 @@ const emptyForm = {
 
 export function SocialMediaClient({ gymId, gymName, managers: initial, leads: initialLeads }: Props) {
   const router = useRouter();
+  const { format } = useCurrency();
   const [managers, setManagers] = useState(initial);
   const [leads, setLeads] = useState(initialLeads);
   const [search, setSearch] = useState("");
@@ -229,8 +231,8 @@ export function SocialMediaClient({ gymId, gymName, managers: initial, leads: in
         {[
           { label: "Total Leads", value: stats.totalLeads, icon: Users, raw: true, color: "text-primary" },
           { label: "Needs Review", value: stats.review, icon: Clock, raw: true, color: "text-orange-400" },
-          { label: "Pending Payout", value: formatCurrency(stats.pendingPayment), icon: Wallet, raw: false, color: "text-yellow-400" },
-          { label: "Total Paid", value: formatCurrency(stats.paid), icon: TrendingUp, raw: false, color: "text-green-400" },
+          { label: "Pending Payout", value: format(stats.pendingPayment), icon: Wallet, raw: false, color: "text-yellow-400" },
+          { label: "Total Paid", value: format(stats.paid), icon: TrendingUp, raw: false, color: "text-green-400" },
         ].map((s) => (
           <Card key={s.label} className="border-sidebar-border bg-card">
             <CardContent className="p-4">
@@ -306,7 +308,7 @@ export function SocialMediaClient({ gymId, gymName, managers: initial, leads: in
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             {lead.commission_amount != null && (
-                              <span className="text-sm font-semibold text-foreground">{formatCurrency(Number(lead.commission_amount))}</span>
+                              <span className="text-sm font-semibold text-foreground">{format(Number(lead.commission_amount))}</span>
                             )}
                             {lead.evidence_url && (
                               <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEvidenceDialog(lead)}>
@@ -373,7 +375,7 @@ export function SocialMediaClient({ gymId, gymName, managers: initial, leads: in
                           {m.phone && <p className="text-xs text-muted-foreground">{m.phone}</p>}
                           {m.email && <p className="text-xs text-muted-foreground">{m.email}</p>}
                           <p className="text-xs text-muted-foreground">
-                            Commission: {m.commission_type === "flat" ? formatCurrency(m.commission_value) + " flat" : `${m.commission_value}% of fee`}
+                            Commission: {m.commission_type === "flat" ? format(m.commission_value) + " flat" : `${m.commission_value}% of fee`}
                           </p>
                           <p className="text-xs text-muted-foreground">{myLeads.length} leads{pendingCount > 0 ? ` · ${pendingCount} pending` : ""}</p>
                         </div>

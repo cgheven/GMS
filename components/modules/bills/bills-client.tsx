@@ -13,7 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { useGymContext } from "@/contexts/gym-context";
-import { formatCurrency, formatDate, formatDateInput, capitalize } from "@/lib/utils";
+import { useCurrency } from "@/hooks/use-currency";
+import { formatDate, formatDateInput, capitalize } from "@/lib/utils";
 import type { Bill, BillCategory, BillCondition, BillStatus } from "@/types";
 
 const categories: BillCategory[] = ["electricity", "water", "internet", "gas", "maintenance", "rent", "equipment", "other"];
@@ -61,6 +62,7 @@ interface Props {
 
 export function BillsClient({ gymId, bills: initialBills }: Props) {
   const { isDemo } = useGymContext();
+  const { format } = useCurrency();
   const [bills, setBills] = useState<Bill[]>(initialBills);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -185,8 +187,8 @@ export function BillsClient({ gymId, bills: initialBills }: Props) {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { label: "Pending Amount",   value: formatCurrency(totals.unpaid), icon: Clock,        color: "text-primary",    bg: "bg-primary/10 border border-primary/20" },
-          { label: "Paid This Period", value: formatCurrency(totals.paid),   icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
+          { label: "Pending Amount",   value: format(totals.unpaid), icon: Clock,        color: "text-primary",    bg: "bg-primary/10 border border-primary/20" },
+          { label: "Paid This Period", value: format(totals.paid),   icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
           { label: "Overdue Bills",    value: totals.overdue,                icon: AlertTriangle, color: "text-rose-400",  bg: "bg-rose-500/10 border border-rose-500/20" },
         ].map(({ label, value, icon: Icon, color, bg }) => (
           <Card key={label}>
@@ -310,11 +312,11 @@ export function BillsClient({ gymId, bills: initialBills }: Props) {
                       <td className="px-4 py-3 text-right">
                         {bill.late_fee > 0 ? (
                           <div className="flex flex-col items-end gap-0.5">
-                            <span className="font-semibold text-foreground">{formatCurrency(bill.amount + bill.late_fee)}</span>
-                            <span className="text-[10px] text-rose-400/80">{formatCurrency(bill.amount)} + {formatCurrency(bill.late_fee)} late fee</span>
+                            <span className="font-semibold text-foreground">{format(bill.amount + bill.late_fee)}</span>
+                            <span className="text-[10px] text-rose-400/80">{format(bill.amount)} + {format(bill.late_fee)} late fee</span>
                           </div>
                         ) : (
-                          <span className="font-semibold text-foreground">{formatCurrency(bill.amount)}</span>
+                          <span className="font-semibold text-foreground">{format(bill.amount)}</span>
                         )}
                       </td>
                       {/* Actions — always visible (hover-only is broken on touch) */}
@@ -394,8 +396,8 @@ export function BillsClient({ gymId, bills: initialBills }: Props) {
                 <Input type="number" min="0" placeholder="0" value={form.late_fee} onChange={(e) => setForm({ ...form, late_fee: e.target.value })} className="w-36" />
                 {parseInt(form.late_fee) > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    Total payable: <span className="font-semibold text-foreground">{formatCurrency((parseFloat(form.amount) || 0) + (parseInt(form.late_fee) || 0))}</span>
-                    <span className="text-rose-400/80 ml-1">(+{formatCurrency(parseInt(form.late_fee))} penalty)</span>
+                    Total payable: <span className="font-semibold text-foreground">{format((parseFloat(form.amount) || 0) + (parseInt(form.late_fee) || 0))}</span>
+                    <span className="text-rose-400/80 ml-1">(+{format(parseInt(form.late_fee))} penalty)</span>
                   </p>
                 )}
               </div>

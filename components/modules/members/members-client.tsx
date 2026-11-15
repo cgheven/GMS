@@ -22,7 +22,8 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { useGymContext } from "@/contexts/gym-context";
-import { formatCurrency, formatDate, formatDateInput, cn, memberPlanLabel } from "@/lib/utils";
+import { useCurrency } from "@/hooks/use-currency";
+import { formatDate, formatDateInput, cn, memberPlanLabel } from "@/lib/utils";
 import { buildReminderMessage, whatsappUrl } from "@/lib/whatsapp-reminder";
 import { validateFullName, validateCNIC, validatePakPhone, validateDOB, validateMoney, runValidators, type ValidationResult } from "@/lib/validation";
 import type { Member, MembershipPlan, MemberStatus, MemberGender, MemberShift, Staff, Payment, PaymentMethod, PaymentStatus, Referrer, SocialManager, SocialLead, TrainerShift } from "@/types";
@@ -163,6 +164,7 @@ interface MemberTableProps {
 }
 
 const MemberTable = memo(function MemberTable({ list, showExpired, planMap, onEdit, onDelete, onView, selectedIds, onToggle, onSelectAll, extraActions }: MemberTableProps) {
+  const { format } = useCurrency();
   if (list.length === 0) return null;
   const allSelected = list.length > 0 && list.every((m) => selectedIds.has(m.id));
   const someSelected = !allSelected && list.some((m) => selectedIds.has(m.id));
@@ -271,9 +273,9 @@ const MemberTable = memo(function MemberTable({ list, showExpired, planMap, onEd
                   </span>
                 </td>
                 <td className="px-3 sm:px-4 py-3 text-right">
-                  <p className="font-semibold text-foreground whitespace-nowrap">{formatCurrency(Number(m.monthly_fee))}<span className="text-muted-foreground">/mo</span></p>
-                  {m.admission_fee > 0 && <p className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap">+{formatCurrency(m.admission_fee)} <span className="hidden sm:inline">admission</span><span className="sm:hidden">adm</span></p>}
-                  {m.outstanding_balance > 0 && <p className="text-[10px] sm:text-xs text-rose-400 whitespace-nowrap">Due: {formatCurrency(m.outstanding_balance)}</p>}
+                  <p className="font-semibold text-foreground whitespace-nowrap">{format(Number(m.monthly_fee))}<span className="text-muted-foreground">/mo</span></p>
+                  {m.admission_fee > 0 && <p className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap">+{format(m.admission_fee)} <span className="hidden sm:inline">admission</span><span className="sm:hidden">adm</span></p>}
+                  {m.outstanding_balance > 0 && <p className="text-[10px] sm:text-xs text-rose-400 whitespace-nowrap">Due: {format(m.outstanding_balance)}</p>}
                 </td>
                 <td className="px-4 py-3 text-center hidden sm:table-cell">
                   <StatusBadge status={m.status} />
@@ -313,6 +315,7 @@ export function MembersClient({
   referrers: initialReferrers,
 }: Props) {
   const { isDemo, gym } = useGymContext();
+  const { format } = useCurrency();
   const [active, setActive] = useState(initialActive);
   const [frozen, setFrozen] = useState(initialFrozen);
   const [onHold, setOnHold] = useState(initialOnHold);
@@ -1109,7 +1112,7 @@ export function MembersClient({
                             <span className="text-sm text-muted-foreground">{m.hold_since ? formatDate(m.hold_since) : "—"}</span>
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <p className="font-semibold text-foreground whitespace-nowrap">{formatCurrency(Number(m.monthly_fee))}<span className="text-muted-foreground">/mo</span></p>
+                            <p className="font-semibold text-foreground whitespace-nowrap">{format(Number(m.monthly_fee))}<span className="text-muted-foreground">/mo</span></p>
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-1">
@@ -1196,8 +1199,8 @@ export function MembersClient({
                             </div>
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <p className="font-semibold text-foreground whitespace-nowrap">{formatCurrency(Number(m.monthly_fee))}<span className="text-muted-foreground">/mo</span></p>
-                            {m.outstanding_balance > 0 && <p className="text-[10px] text-rose-400">Due: {formatCurrency(m.outstanding_balance)}</p>}
+                            <p className="font-semibold text-foreground whitespace-nowrap">{format(Number(m.monthly_fee))}<span className="text-muted-foreground">/mo</span></p>
+                            {m.outstanding_balance > 0 && <p className="text-[10px] text-rose-400">Due: {format(m.outstanding_balance)}</p>}
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-1">
@@ -1282,7 +1285,7 @@ export function MembersClient({
               { label: "Total Members", value: collectStats.total,                    icon: Users,        color: "text-foreground",  bg: "bg-white/5 border border-white/10" },
               { label: "Paid",          value: collectStats.paid,                     icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
               { label: "Unpaid",        value: collectStats.unpaid,                   icon: Clock,        color: "text-primary",     bg: "bg-primary/10 border border-primary/20" },
-              { label: "Collected",     value: formatCurrency(collectStats.collected), icon: Wallet,      color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
+              { label: "Collected",     value: format(collectStats.collected), icon: Wallet,      color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
             ].map(({ label, value, icon: Icon, color, bg }) => (
               <div key={label} className="rounded-2xl border border-sidebar-border bg-card p-5">
                 <div className="flex items-center gap-3">
@@ -1343,7 +1346,7 @@ export function MembersClient({
                             </span>
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <span className="font-medium text-foreground">{formatCurrency(Number(member.monthly_fee))}</span>
+                            <span className="font-medium text-foreground">{format(Number(member.monthly_fee))}</span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             {payment ? (
@@ -1475,7 +1478,7 @@ export function MembersClient({
               <div className="space-y-4 py-1">
                 {outstanding > 0 && (
                   <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3 text-sm text-amber-400">
-                    Outstanding balance: <span className="font-semibold">{formatCurrency(outstanding)}</span>
+                    Outstanding balance: <span className="font-semibold">{format(outstanding)}</span>
                   </div>
                 )}
                 <div className="space-y-1.5">
@@ -1567,7 +1570,7 @@ export function MembersClient({
                     <SelectItem key={p.id} value={p.id}>
                       <span className="flex items-center gap-2">
                         <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
-                        {p.name} · {formatCurrency(p.price)}
+                        {p.name} · {format(p.price)}
                       </span>
                     </SelectItem>
                   ))}
@@ -1759,6 +1762,7 @@ function MemberFormDialog({
   open, onOpenChange, editing, forceStatus, existingMembers, plans, staff, shifts, referrers, gymId, initialDeviceUserId, unlinkedPunchId, onSaved, onOpenExisting,
 }: MemberFormDialogProps) {
   const { isDemo } = useGymContext();
+  const { format } = useCurrency();
   const [form, setForm] = useState(() => makeEmptyForm());
   const [saving, setSaving] = useState(false);
   const [allowDuplicate, setAllowDuplicate] = useState(false);
@@ -2253,7 +2257,7 @@ function MemberFormDialog({
                             <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
                             <span className="flex-1 min-w-0 truncate text-sm">
                               <span className="font-medium text-foreground">{p.name}</span>
-                              <span className="text-muted-foreground"> · {DURATION_LABELS[p.duration_type] ?? p.duration_type} · {formatCurrency(p.price)}</span>
+                              <span className="text-muted-foreground"> · {DURATION_LABELS[p.duration_type] ?? p.duration_type} · {format(p.price)}</span>
                             </span>
                             {isPrimary && (
                               <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide text-primary">Primary</span>
@@ -2402,7 +2406,7 @@ function MemberFormDialog({
                       const d = parseFloat(form.discount) || 0;
                       const fee = parseFloat(form.admission_fee) || 0;
                       if (d > fee) {
-                        return <p className="text-xs text-rose-400">Discount cannot exceed admission fee. It will be clamped to {formatCurrency(fee)}.</p>;
+                        return <p className="text-xs text-rose-400">Discount cannot exceed admission fee. It will be clamped to {format(fee)}.</p>;
                       }
                       if (d < 0) {
                         return <p className="text-xs text-rose-400">Discount cannot be negative. It will be clamped to 0.</p>;
@@ -2563,7 +2567,7 @@ const TIMELINE_ICONS: Record<TimelineEvent["type"], { icon: React.ElementType; c
   status:            { icon: AlertCircle, color: "text-muted-foreground", bg: "bg-white/5 border-white/10" },
 };
 
-function buildTimeline(member: Member, audits: AuditRow[], payments: TimelinePayment[]): TimelineEvent[] {
+function buildTimeline(member: Member, audits: AuditRow[], payments: TimelinePayment[], fmt: (n: number) => string): TimelineEvent[] {
   const events: TimelineEvent[] = [];
 
   events.push({
@@ -2612,7 +2616,7 @@ function buildTimeline(member: Member, audits: AuditRow[], payments: TimelinePay
       : p.plan?.name;
     const trainerName = p.trainer?.full_name;
     const lines = [
-      `${formatCurrency(p.total_amount)}${method ? ` (${method})` : ""}`,
+      `${fmt(p.total_amount)}${method ? ` (${method})` : ""}`,
       planName ? `Plan:  ${planName}` : null,
       trainerName ? `Trainer:  ${trainerName}` : null,
     ].filter(Boolean) as string[];
@@ -2692,6 +2696,7 @@ function StatCard({ icon: Icon, label, value, accent }: { icon: React.ElementTyp
 
 function MemberTimelineDialog({ member, gymId, onClose }: { member: Member | null; gymId: string | null; onClose: () => void }) {
   const { gym } = useGymContext();
+  const { format } = useCurrency();
   const [loading, setLoading] = useState(false);
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [payments, setPayments] = useState<TimelinePayment[]>([]);
@@ -2717,7 +2722,7 @@ function MemberTimelineDialog({ member, gymId, onClose }: { member: Member | nul
       } else {
         const pays = res.payments as TimelinePayment[];
         setPayments(pays);
-        setEvents(buildTimeline(m, res.audit as AuditRow[], pays));
+        setEvents(buildTimeline(m, res.audit as AuditRow[], pays, format));
         setTotalPaid(pays.reduce((s, p) => s + Number(p.total_amount), 0));
         setMetric((res as { latestMetric?: MetricRow | null }).latestMetric ?? null);
         setGoals(((res as { goals?: GoalRow[] }).goals ?? []));
@@ -2794,10 +2799,10 @@ function MemberTimelineDialog({ member, gymId, onClose }: { member: Member | nul
         {/* ── Summary stats ── */}
         <div className="grid grid-cols-2 gap-2.5 mt-2">
           <StatCard icon={Clock} label="Member Since" value={member.join_date ? formatDate(member.join_date) : "—"} />
-          <StatCard icon={Wallet} label="Outstanding" value={formatCurrency(outstanding)} accent={outstanding > 0 ? "text-rose-400" : "text-emerald-400"} />
+          <StatCard icon={Wallet} label="Outstanding" value={format(outstanding)} accent={outstanding > 0 ? "text-rose-400" : "text-emerald-400"} />
           <StatCard icon={CreditCard} label={memberPlans.length > 1 ? "Plans" : "Plan"} value={planLabel} />
           <StatCard icon={CalendarX} label="Expires" value={member.plan_expiry_date ? formatDate(member.plan_expiry_date) : "—"} />
-          <StatCard icon={CheckCircle2} label="Total Paid" value={formatCurrency(totalPaid)} accent="text-emerald-400" />
+          <StatCard icon={CheckCircle2} label="Total Paid" value={format(totalPaid)} accent="text-emerald-400" />
           {member.shift && (
             <StatCard icon={Clock} label="Gym Shift" value={SHIFT_LABELS[member.shift]} />
           )}
