@@ -154,10 +154,8 @@ export default function LoginPage() {
             </button>
           </div>
 
-          <p className="text-center text-xs text-muted-foreground/60 mt-4 leading-relaxed">
-            Access restricted to authorized users only.
-            <br />
-            Contact your administrator for access.
+          <p className="text-center text-sm text-muted-foreground mt-6">
+            New to Pulse? <Link href="/signup" className="text-primary hover:underline">Create an account</Link>
           </p>
         </div>
 
