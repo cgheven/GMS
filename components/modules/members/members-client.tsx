@@ -643,8 +643,9 @@ export function MembersClient({
       month: new Date().toLocaleString("default", { month: "long", year: "numeric" }),
       gymName: gym?.name ?? "Your Gym",
       accounts: gym?.payment_methods ?? [],
+      country: gym?.country ?? null,
     });
-    const url = whatsappUrl(m.phone, message);
+    const url = whatsappUrl(m.phone, message, gym?.country);
     if (!url) {
       toast({ title: "Phone format invalid", description: "Couldn't build a WhatsApp link for this number.", variant: "destructive" });
       return;

@@ -349,8 +349,9 @@ export function TrainerClient({ staff, gymId, gymName, reminderTemplate, payment
       month: monthLabel(selectedMonth),
       gymName,
       accounts: paymentMethods,
+      country,
     });
-    const url = whatsappUrl(member.phone, msg);
+    const url = whatsappUrl(member.phone, msg, country);
     if (url) window.open(url, "_blank");
   }
 

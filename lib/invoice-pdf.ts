@@ -3,10 +3,11 @@
 // link), so the shared file the member receives is byte-identical to the
 // on-screen preview. Pure jsPDF text/vector — no DOM or canvas.
 import { formatDate } from "@/lib/utils";
+import { formatMoney } from "@/lib/money";
 import type { jsPDF } from "jspdf";
 import type { Gym, Payment, PaymentMethod } from "@/types";
 
-export type InvoiceGym = Pick<Gym, "name" | "address" | "city" | "phone" | "email" | "ntn" | "report_settings">;
+export type InvoiceGym = Pick<Gym, "name" | "address" | "city" | "phone" | "email" | "ntn" | "report_settings" | "country">;
 
 export interface InvoicePdfData {
   payment: Payment;
@@ -111,6 +112,8 @@ export async function buildInvoiceDoc(
   const LGRAY: [number, number, number] = [130, 130, 130];
 
   const { payment, memberName, memberPhone, memberNumber, planName } = data;
+  // Country-aware currency formatter (null/absent country → PK "Rs.").
+  const fmt = (n: number) => formatMoney(n, gym?.country);
   const gymName = gym?.name ?? "Gym";
   const taxRate = gym?.report_settings?.taxRate ?? 0;
   const taxInc = gym?.report_settings?.taxInclusive ?? false;
@@ -320,7 +323,7 @@ export async function buildInvoiceDoc(
   doc.setFontSize(9.5);
   doc.setTextColor(...BLACK);
   doc.text("Grand Total", ML, y + 1);
-  doc.text(pkr(Number(payment.total_amount)), MR, y + 1, { align: "right" });
+  doc.text(fmt(Number(payment.total_amount)), MR, y + 1, { align: "right" });
   y += 13;
 
   y += 2;

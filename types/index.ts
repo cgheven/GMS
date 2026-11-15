@@ -137,6 +137,7 @@ export interface PublicGym {
   show_member_count: boolean;
   total_capacity: number;
   active_members: number;
+  country?: string | null;
 }
 
 export interface MembershipPlan {

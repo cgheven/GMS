@@ -1,3 +1,5 @@
+import { formatMoney } from "@/lib/money";
+
 // Canonical trainer-commission math. Mirrors the trainer portal exactly so the
 // owner-facing view and the trainer's own page always agree.
 //
@@ -32,8 +34,9 @@ export function commissionRuleLabel(
   trainerFloor: number,
   trainerPct: number,
   shift: CommissionShift | null,
+  country?: string | null,
 ): string {
-  const money = (n: number) => `Rs. ${Number(n || 0).toLocaleString("en-PK")}`;
+  const money = (n: number) => formatMoney(Number(n || 0), country);
   const floorN = Number(trainerFloor || 0);
   const pctN = Number(trainerPct || 0);
   if (shift) {

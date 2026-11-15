@@ -52,6 +52,7 @@ export function PaymentRecoverySection({ gym }: { gym: Gym | null }) {
     month: "April 2026",
     gymName: gym?.name ?? "Your Gym",
     accounts: methods,
+    country: gym?.country ?? null,
   });
 
   return (
@@ -130,7 +131,7 @@ export function PaymentRecoverySection({ gym }: { gym: Gym | null }) {
             className="w-full rounded-lg border border-sidebar-border bg-card p-3 text-sm font-mono leading-relaxed focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/50 resize-y"
           />
           <p className="text-[11px] text-muted-foreground">
-            Placeholders: <code className="text-foreground">{"{name}"}</code> · <code className="text-foreground">{"{amount}"}</code> · <code className="text-foreground">{"{month}"}</code> · <code className="text-foreground">{"{gym}"}</code> · <code className="text-foreground">{"{accounts}"}</code>
+            Placeholders: <code className="text-foreground">{"{name}"}</code> · <code className="text-foreground">{"{currency}"}</code> · <code className="text-foreground">{"{amount}"}</code> · <code className="text-foreground">{"{month}"}</code> · <code className="text-foreground">{"{gym}"}</code> · <code className="text-foreground">{"{accounts}"}</code>
           </p>
         </div>
 

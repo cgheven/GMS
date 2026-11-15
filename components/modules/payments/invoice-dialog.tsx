@@ -4,7 +4,8 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
 import { whatsappUrl } from "@/lib/whatsapp-reminder";
-import { buildInvoiceDoc, pkr, amountInWords, planLineItems, formatPeriod, methodLabels } from "@/lib/invoice-pdf";
+import { buildInvoiceDoc, amountInWords, planLineItems, formatPeriod, methodLabels } from "@/lib/invoice-pdf";
+import { formatMoney } from "@/lib/money";
 import { createInvoiceLink } from "@/app/actions/invoices";
 import { toast } from "@/hooks/use-toast";
 import { Download, MessageCircle } from "lucide-react";
@@ -20,7 +21,7 @@ export interface InvoiceData {
 
 interface InvoiceDialogProps {
   data: InvoiceData | null;
-  gym: Pick<Gym, "name" | "address" | "city" | "phone" | "email" | "ntn" | "report_settings"> | null;
+  gym: Pick<Gym, "name" | "address" | "city" | "phone" | "email" | "ntn" | "report_settings" | "country"> | null;
   onClose: () => void;
 }
 
@@ -32,6 +33,8 @@ export function InvoiceDialog({ data, gym, onClose }: InvoiceDialogProps) {
   if (!data) return null;
 
   const { payment, memberName, memberPhone, memberNumber, planName } = data;
+  // Country-aware currency formatter (null/absent country → PK "Rs.").
+  const fmt = (n: number) => formatMoney(n, gym?.country);
   const formattedPeriod = formatPeriod(payment.for_period);
   const taxRate = gym?.report_settings?.taxRate ?? 0;
   const taxInc = gym?.report_settings?.taxInclusive ?? false;
@@ -88,7 +91,7 @@ export function InvoiceDialog({ data, gym, onClose }: InvoiceDialogProps) {
       const planPart = planName ? ` for *${planName}*` : "";
       const message =
         `Assalam o Alaikum ${firstName},\n\n` +
-        `Your payment of *${pkr(Number(payment.total_amount))}*${planPart} has been received. ` +
+        `Your payment of *${fmt(Number(payment.total_amount))}*${planPart} has been received. ` +
         `You can download your receipt from the link below — this link will expire in 7 days:\n${res.url}\n\n` +
         `Thank you for choosing ${gymName}!`;
       const waUrl = whatsappUrl(memberPhone, message);
@@ -181,26 +184,26 @@ export function InvoiceDialog({ data, gym, onClose }: InvoiceDialogProps) {
               {planLineItems(payment).map((item, i) => (
                 <div key={i} className="flex justify-between gap-3">
                   <span className="text-[12px] text-slate-700 min-w-0 truncate">{item.name}</span>
-                  <span className="text-[12px] text-slate-700 shrink-0">{pkr(item.price)}</span>
+                  <span className="text-[12px] text-slate-700 shrink-0">{fmt(item.price)}</span>
                 </div>
               ))}
               {Number(payment.discount) > 0 && (
                 <div className="flex justify-between">
                   <span className="text-[12px] text-slate-500">Discount</span>
-                  <span className="text-[12px] text-emerald-600 font-medium">-{pkr(Number(payment.discount))}</span>
+                  <span className="text-[12px] text-emerald-600 font-medium">-{fmt(Number(payment.discount))}</span>
                 </div>
               )}
               {Number(payment.late_fee) > 0 && (
                 <div className="flex justify-between">
                   <span className="text-[12px] text-slate-500">Late Fee</span>
-                  <span className="text-[12px] text-rose-500 font-medium">+{pkr(Number(payment.late_fee))}</span>
+                  <span className="text-[12px] text-rose-500 font-medium">+{fmt(Number(payment.late_fee))}</span>
                 </div>
               )}
               {showTax && (
                 <div className="flex justify-between">
                   <span className="text-[12px] text-slate-500">{taxLabel} ({taxRate}%)</span>
                   <span className="text-[12px] text-slate-700">
-                    {pkr(Math.round((payment.total_amount * taxRate) / 100))}
+                    {fmt(Math.round((payment.total_amount * taxRate) / 100))}
                   </span>
                 </div>
               )}
@@ -212,7 +215,7 @@ export function InvoiceDialog({ data, gym, onClose }: InvoiceDialogProps) {
           {/* ── Total paid ── */}
           <div className="px-6 py-3.5 flex justify-between items-center">
             <span className="text-[12px] font-bold tracking-wide">TOTAL PAID</span>
-            <span className="text-[18px] font-bold">{pkr(Number(payment.total_amount))}</span>
+            <span className="text-[18px] font-bold">{fmt(Number(payment.total_amount))}</span>
           </div>
 
           <D />

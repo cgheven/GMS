@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { cn, formatDateInput } from "@/lib/utils";
+import { formatMoney } from "@/lib/money";
+import { useGymContext } from "@/contexts/gym-context";
 import { linkDeviceUser } from "@/app/actions/members";
 import { recordCheckIn } from "@/app/actions/check-ins";
 import { revalidateDashboard } from "@/app/actions/revalidate";
@@ -24,10 +26,10 @@ type CheckInRow = CheckIn & {
   }) | null;
 };
 
-function paymentDue(member: CheckInRow["member"]): { due: boolean; reason: string } {
+function paymentDue(member: CheckInRow["member"], country?: string | null): { due: boolean; reason: string } {
   if (!member) return { due: false, reason: "" };
   if (member.status === "defaulter") return { due: true, reason: "Defaulter" };
-  if ((member.outstanding_balance ?? 0) > 0) return { due: true, reason: `Rs. ${member.outstanding_balance} due` };
+  if ((member.outstanding_balance ?? 0) > 0) return { due: true, reason: `${formatMoney(member.outstanding_balance ?? 0, country)} due` };
   if (member.plan_expiry_date && new Date(member.plan_expiry_date) < new Date()) return { due: true, reason: "Plan expired" };
   return { due: false, reason: "" };
 }
@@ -46,6 +48,8 @@ function formatTime(iso: string) {
 }
 
 export function CheckInsClient({ gymId, checkIns: initial, members, unlinked: initialUnlinked }: Props) {
+  const { gym } = useGymContext();
+  const country = gym?.country ?? null;
   const [checkIns, setCheckIns] = useState<CheckInRow[]>(initial);
   const [unlinked, setUnlinked] = useState<UnlinkedPunch[]>(initialUnlinked);
   const [search, setSearch] = useState("");
@@ -373,7 +377,7 @@ export function CheckInsClient({ gymId, checkIns: initial, members, unlinked: in
                 {checkIns.map((c) => {
                   const name = c.member?.full_name ?? "—";
                   const trainerName = c.member?.trainer?.full_name;
-                  const { due, reason } = paymentDue(c.member);
+                  const { due, reason } = paymentDue(c.member, country);
                   return (
                     <tr key={c.id} className={cn("transition-colors", due ? "bg-rose-500/[0.04] hover:bg-rose-500/[0.07]" : "hover:bg-white/[0.02]")}>
                       <td className="px-4 py-3">

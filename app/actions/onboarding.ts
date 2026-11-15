@@ -153,6 +153,7 @@ export async function submitOnboarding(
 
       // new columns from this migration
       email,
+      country,
       gym_name: payload.gym_name.trim(),
       gym_type: payload.gym_type || null,
       active_members_count: activeMembers,

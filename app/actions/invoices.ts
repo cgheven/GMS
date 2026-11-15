@@ -92,7 +92,7 @@ export async function createInvoiceLink(
 
   const { data: gym } = await admin
     .from("pulse_gyms")
-    .select("name,address,city,phone,email,ntn,report_settings")
+    .select("name,address,city,phone,email,ntn,report_settings,country")
     .eq("id", ctx.gymId)
     .single();
 

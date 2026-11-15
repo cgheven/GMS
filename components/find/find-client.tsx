@@ -8,16 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { joinWaitlist } from "@/app/actions/public";
+import { phoneForWhatsApp } from "@/lib/phone";
 import type { PublicGym, GymType } from "@/types";
 
-function toWhatsAppUrl(phone: string, gymName: string): string | null {
-  const digits = phone.replace(/\D/g, "");
-  if (!digits) return null;
-  const normalized = digits.startsWith("0")
-    ? "92" + digits.slice(1)
-    : digits.startsWith("92")
-    ? digits
-    : digits;
+function toWhatsAppUrl(phone: string, gymName: string, country?: string | null): string | null {
+  const normalized = phoneForWhatsApp(phone, country);
+  if (!normalized) return null;
   const text = encodeURIComponent(`Hi! I saw your listing on Pulse Directory and I'm interested in joining ${gymName}. Is there availability?`);
   return `https://wa.me/${normalized}?text=${text}`;
 }
@@ -159,7 +155,7 @@ function GymCard({ g }: { g: PublicGym }) {
   const types          = g.gym_types?.length ? g.gym_types : (g.gym_type ? [g.gym_type] : []);
   const visibleAmenities = g.amenities.slice(0, 6);
   const extra          = g.amenities.length - 6;
-  const waUrl          = g.phone ? toWhatsAppUrl(g.phone, g.name) : null;
+  const waUrl          = g.phone ? toWhatsAppUrl(g.phone, g.name, g.country) : null;
   const isFull         = g.active_members >= g.total_capacity && g.total_capacity > 0;
   const hasSocial      = g.instagram_url || g.tiktok_url || g.facebook_url;
 

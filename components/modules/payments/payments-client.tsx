@@ -304,8 +304,9 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
       month: MONTH_LABEL,
       gymName: gym?.name ?? "Your Gym",
       accounts: gym?.payment_methods ?? [],
+      country: gym?.country ?? null,
     });
-    const url = whatsappUrl(m.phone, message);
+    const url = whatsappUrl(m.phone, message, gym?.country);
     if (!url) {
       toast({ title: "Phone format invalid", variant: "destructive" });
       return;

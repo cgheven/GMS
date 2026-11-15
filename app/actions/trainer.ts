@@ -885,6 +885,7 @@ export async function getTrainerCommissions(monthKey: string) {
   if (!ctx?.user || !ctx.gymId) return { error: "Unauthorized" as const };
   if (!/^\d{4}-\d{2}$/.test(monthKey)) return { error: "Invalid month" as const };
   const gymId = ctx.gymId;
+  const country = ctx.gym?.country ?? null;
   const admin = createAdminClient();
 
   const [{ data: trainers }, { data: members }, { data: shifts }, { data: payments }] =
@@ -935,7 +936,7 @@ export async function getTrainerCommissions(monthKey: string) {
           memberName: m.full_name,
           plan: memberPlanLabel(m as { plan?: { name?: string | null } | null; plans?: { plan?: { name?: string | null } | null }[] | null }),
           monthlyFee: Number(m.monthly_fee),
-          rule: commissionRuleLabel(floor, pct, shift),
+          rule: commissionRuleLabel(floor, pct, shift, country),
           commission: calcCommission(Number(m.monthly_fee), floor, pct, shift),
           paid: paidByMember.has(m.id),
         };
@@ -960,7 +961,7 @@ export async function getTrainerCommissions(monthKey: string) {
     return {
       trainerId: t.id,
       trainerName: t.full_name,
-      defaultRule: commissionRuleLabel(floor, pct, null),
+      defaultRule: commissionRuleLabel(floor, pct, null, country),
       baseSalary,
       totalMembers: assigned.length,
       feeGenerated,

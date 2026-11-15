@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
+import { useGymContext } from "@/contexts/gym-context";
 import { Download, FileSpreadsheet, FileText, Check } from "lucide-react";
 import type { Member } from "@/types";
 import {
@@ -29,6 +30,7 @@ interface Props {
 const LIST_ORDER: ListKey[] = ["active", "frozen", "on_hold", "defaulters", "expired", "all"];
 
 export function ExportMembersDialog({ open, onClose, lists, defaultList, gymName, applyFilters, filtersActive }: Props) {
+  const { gym } = useGymContext();
   const [list, setList] = useState<ListKey>(defaultList);
   const [format, setFormat] = useState<"csv" | "pdf">("csv");
   const [selected, setSelected] = useState<Set<string>>(new Set(DEFAULT_COLUMN_IDS));
@@ -90,7 +92,7 @@ export function ExportMembersDialog({ open, onClose, lists, defaultList, gymName
       return;
     }
     const dateStr = new Date().toISOString().slice(0, 10);
-    const meta = { gymName, listLabel: LIST_LABELS[list], dateStr };
+    const meta = { gymName, listLabel: LIST_LABELS[list], dateStr, country: gym?.country ?? null };
 
     setBusy(true);
     try {

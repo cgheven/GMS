@@ -2,6 +2,7 @@
 // Pure client-side: builds an Excel-friendly CSV or a paginated PDF table from
 // the member arrays already loaded in the browser. No server round-trip.
 import { formatDate, memberPlanLabel } from "@/lib/utils";
+import { getCountryConfig } from "@/lib/country-config";
 import type { jsPDF } from "jspdf";
 import type { Member } from "@/types";
 
@@ -58,6 +59,7 @@ export interface ExportMeta {
   gymName: string;
   listLabel: string;
   dateStr: string;
+  country?: string | null;
 }
 
 function selectedCols(columnIds: string[]): ExportColumn[] {
@@ -142,7 +144,7 @@ export async function buildMembersPdf(rows: Member[], columnIds: string[], meta:
       ...cols.map((c) => {
         const v = c.get(m);
         if (v == null || v === "") return "";
-        return c.numeric ? Number(v).toLocaleString("en-PK") : String(v);
+        return c.numeric ? Number(v).toLocaleString(getCountryConfig(meta.country).numberLocale) : String(v);
       }),
     ]),
     styles: { fontSize: 8, cellPadding: 4, overflow: "linebreak", textColor: [30, 30, 40] },
