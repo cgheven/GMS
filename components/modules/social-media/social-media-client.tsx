@@ -54,7 +54,7 @@ const emptyForm = {
 
 export function SocialMediaClient({ gymId, gymName, managers: initial, leads: initialLeads }: Props) {
   const router = useRouter();
-  const { format } = useCurrency();
+  const { format, symbol } = useCurrency();
   const [managers, setManagers] = useState(initial);
   const [leads, setLeads] = useState(initialLeads);
   const [search, setSearch] = useState("");
@@ -437,7 +437,7 @@ export function SocialMediaClient({ gymId, gymName, managers: initial, leads: in
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>{form.commission_type === "flat" ? "Amount (PKR)" : "Percentage (%)"}</Label>
+              <Label>{form.commission_type === "flat" ? `Amount (${symbol})` : "Percentage (%)"}</Label>
               <Input type="number" value={form.commission_value} onChange={(e) => setForm((f) => ({ ...f, commission_value: e.target.value }))} placeholder={form.commission_type === "flat" ? "2000" : "10"} className="bg-card border-sidebar-border" />
             </div>
             {editing && (

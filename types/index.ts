@@ -111,6 +111,7 @@ export interface Gym {
   payment_methods: PaymentMethodAccount[];
   payment_overdue_grace_days: number;
   device_serial: string | null;
+  device_push_key: string | null;
   device_last_seen: string | null;
   created_at: string;
   updated_at: string;

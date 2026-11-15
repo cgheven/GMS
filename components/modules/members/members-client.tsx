@@ -316,7 +316,7 @@ export function MembersClient({
   referrers: initialReferrers,
 }: Props) {
   const { isDemo, gym } = useGymContext();
-  const { format } = useCurrency();
+  const { format, symbol } = useCurrency();
   const [active, setActive] = useState(initialActive);
   const [frozen, setFrozen] = useState(initialFrozen);
   const [onHold, setOnHold] = useState(initialOnHold);
@@ -1404,17 +1404,17 @@ export function MembersClient({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Amount (PKR)</Label>
+                  <Label>Amount ({symbol})</Label>
                   <Input type="number" value={payForm.amount} onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Discount (PKR)</Label>
+                  <Label>Discount ({symbol})</Label>
                   <Input type="number" placeholder="0" value={payForm.discount} onChange={(e) => setPayForm({ ...payForm, discount: e.target.value })} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Late Fee (PKR)</Label>
+                  <Label>Late Fee ({symbol})</Label>
                   <Input type="number" placeholder="0" value={payForm.late_fee} onChange={(e) => setPayForm({ ...payForm, late_fee: e.target.value })} />
                 </div>
                 <div className="space-y-1.5">
@@ -1484,7 +1484,7 @@ export function MembersClient({
                   </div>
                 )}
                 <div className="space-y-1.5">
-                  <Label>Amount Received (PKR)</Label>
+                  <Label>Amount Received ({symbol})</Label>
                   <Input
                     type="number"
                     placeholder="0"
@@ -1595,7 +1595,7 @@ export function MembersClient({
               </div>
             )}
             <div className="space-y-1.5">
-              <Label>Monthly Fee (Rs.) <span className="text-muted-foreground text-xs font-normal">(optional)</span></Label>
+              <Label>Monthly Fee ({symbol}) <span className="text-muted-foreground text-xs font-normal">(optional)</span></Label>
               <Input
                 type="number"
                 min="0"
@@ -1765,7 +1765,7 @@ function MemberFormDialog({
 }: MemberFormDialogProps) {
   const { isDemo, gym } = useGymContext();
   const country = gym?.country ?? null;
-  const { format } = useCurrency();
+  const { format, symbol } = useCurrency();
   const [form, setForm] = useState(() => makeEmptyForm());
   const [saving, setSaving] = useState(false);
   const [allowDuplicate, setAllowDuplicate] = useState(false);
@@ -2297,7 +2297,7 @@ function MemberFormDialog({
                         <SelectItem value="none">No referrer</SelectItem>
                         {referrers.map((r) => (
                           <SelectItem key={r.id} value={r.id}>
-                            {r.full_name} · {r.commission_type === "flat" ? `PKR ${r.commission_value}` : `${r.commission_value}%`}
+                            {r.full_name} · {r.commission_type === "flat" ? `${symbol} ${r.commission_value}` : `${r.commission_value}%`}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -2380,7 +2380,7 @@ function MemberFormDialog({
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Monthly Fee (PKR) *</Label>
+                  <Label>Monthly Fee ({symbol}) *</Label>
                   <ValidatedInput
                     type="number"
                     placeholder="0"
@@ -2391,12 +2391,12 @@ function MemberFormDialog({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Admission Fee (PKR)</Label>
+                  <Label>Admission Fee ({symbol})</Label>
                   <Input type="number" placeholder="0" value={form.admission_fee} onChange={(e) => setForm((f) => ({ ...f, admission_fee: e.target.value }))} />
                 </div>
                 {!editing && parseFloat(form.admission_fee) > 0 && (
                   <div className="space-y-1.5">
-                    <Label>Discount (PKR)</Label>
+                    <Label>Discount ({symbol})</Label>
                     <Input
                       type="number"
                       min={0}
@@ -2453,7 +2453,7 @@ function MemberFormDialog({
                   </div>
                 )}
                 <div className="space-y-1.5">
-                  <Label>Outstanding Balance (PKR)</Label>
+                  <Label>Outstanding Balance ({symbol})</Label>
                   <Input type="number" placeholder="0" value={form.outstanding_balance} onChange={(e) => setForm((f) => ({ ...f, outstanding_balance: e.target.value }))} />
                 </div>
               </div>

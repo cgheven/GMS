@@ -635,7 +635,7 @@ function RecordSaleDialog({
   items: InventoryItem[];
   members: { id: string; full_name: string; status: string }[];
 }) {
-  const { format } = useCurrency();
+  const { format, symbol } = useCurrency();
   const [pending, startTransition] = useTransition();
   const [itemId, setItemId] = useState<string>("");
   const [quantity, setQuantity] = useState(1);
@@ -741,7 +741,7 @@ function RecordSaleDialog({
               {selectedItem && <p className="text-[10px] text-muted-foreground">{stock} available</p>}
             </div>
             <div className="space-y-1.5">
-              <Label>Price/unit (Rs.)</Label>
+              <Label>Price/unit ({symbol})</Label>
               <Input
                 type="number"
                 min={0}
@@ -829,7 +829,7 @@ function StockInDialog({
   onClose: () => void;
   items: InventoryItem[];
 }) {
-  const { format } = useCurrency();
+  const { format, symbol } = useCurrency();
   const [pending, startTransition] = useTransition();
   const [itemId, setItemId] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -911,7 +911,7 @@ function StockInDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Cost/unit (Rs.)</Label>
+              <Label>Cost/unit ({symbol})</Label>
               <Input
                 type="number"
                 min={0}
@@ -972,6 +972,7 @@ function StockInDialog({
 // ── Add Item dialog ─────────────────────────────────────────────────────────
 
 function AddItemDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { symbol } = useCurrency();
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState("");
   const [category, setCategory] = useState<InventoryCategory>("supplements");
@@ -1037,7 +1038,7 @@ function AddItemDialog({ open, onClose }: { open: boolean; onClose: () => void }
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Sale price (Rs.)</Label>
+              <Label>Sale price ({symbol})</Label>
               <Input
                 type="number"
                 min={0}

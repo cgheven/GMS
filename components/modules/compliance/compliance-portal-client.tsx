@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import { Shield, Users, Dumbbell, TrendingUp, Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { moneyConfig } from "@/lib/money";
 
 interface ComplianceMember {
   id: string;
@@ -17,6 +18,7 @@ interface ComplianceMember {
 
 interface Props {
   gymName: string;
+  country: string;
   members: ComplianceMember[];
   pctSelf: number;
   pctPt: number;
@@ -35,16 +37,14 @@ function formatDDMMYYYY(iso: string | null): string {
   return `${dd}/${mm}/${yyyy}`;
 }
 
-function formatPKR(amount: number): string {
-  return `PKR ${amount.toLocaleString("en-PK")}`;
-}
 
 function formatReportDate(date: Date): string {
   return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
-function downloadCSV(members: ComplianceMember[], gymName: string, reportDate: string) {
-  const headers = ["#", "Full Name", "CNIC", "Phone", "Date of Birth", "Join Date", "Plan", "Monthly Fee (PKR)", "Type"];
+function downloadCSV(members: ComplianceMember[], gymName: string, reportDate: string, country: string) {
+  const sym = moneyConfig(country).symbol;
+  const headers = ["#", "Full Name", "CNIC", "Phone", "Date of Birth", "Join Date", "Plan", `Monthly Fee (${sym})`, "Type"];
   const rows = members.map((m, i) => [
     i + 1,
     m.full_name,
@@ -77,7 +77,9 @@ async function downloadPDF(
   revenue: number,
   pctSelf: number,
   pctPt: number,
+  country: string,
 ) {
+  const mc = moneyConfig(country);
   const { default: jsPDF } = await import("jspdf");
   const { default: autoTable } = await import("jspdf-autotable");
 
@@ -95,7 +97,7 @@ async function downloadPDF(
   doc.setTextColor(120, 120, 120);
   doc.text(`Generated: ${reportDate}`, 14, 35);
   doc.text(
-    `Self Training: ${selfCount} (${pctSelf}% shown)   |   Personal Training: ${ptCount} (${pctPt}% shown)   |   Total Revenue: PKR ${revenue.toLocaleString("en-PK")}`,
+    `Self Training: ${selfCount} (${pctSelf}% shown)   |   Personal Training: ${ptCount} (${pctPt}% shown)   |   Total Revenue: ${mc.symbol} ${revenue.toLocaleString(mc.numberLocale)}`,
     14,
     41,
   );
@@ -104,7 +106,7 @@ async function downloadPDF(
 
   autoTable(doc, {
     startY: 48,
-    head: [["#", "Full Name", "CNIC", "Phone", "Date of Birth", "Join Date", "Plan", "Fee (PKR)", "Type"]],
+    head: [["#", "Full Name", "CNIC", "Phone", "Date of Birth", "Join Date", "Plan", `Fee (${mc.symbol})`, "Type"]],
     body: members.map((m, i) => [
       i + 1,
       m.full_name,
@@ -113,7 +115,7 @@ async function downloadPDF(
       formatDDMMYYYY(m.date_of_birth),
       formatDDMMYYYY(m.join_date),
       m.plan_name ?? "—",
-      m.monthly_fee.toLocaleString("en-PK"),
+      m.monthly_fee.toLocaleString(mc.numberLocale),
       m.category === "self" ? "Self" : "PT",
     ]),
     styles: { fontSize: 8, cellPadding: 2 },
@@ -125,8 +127,10 @@ async function downloadPDF(
   doc.save(`${gymName.replace(/\s+/g, "_")}_compliance_${reportDate}.pdf`);
 }
 
-export function CompliancePortalClient({ gymName, members, pctSelf, pctPt, totalSelf, totalPt, shownRevenue }: Props) {
+export function CompliancePortalClient({ gymName, country, members, pctSelf, pctPt, totalSelf, totalPt, shownRevenue }: Props) {
   const [exportingPDF, setExportingPDF] = useState(false);
+  const mc = moneyConfig(country);
+  const fmtMoney = (n: number) => `${mc.symbol}${mc.space ? " " : ""}${n.toLocaleString(mc.numberLocale)}`;
 
   const selfMembers = useMemo(() => members.filter((m) => m.category === "self"), [members]);
   const ptMembers = useMemo(() => members.filter((m) => m.category === "pt"), [members]);
@@ -135,7 +139,7 @@ export function CompliancePortalClient({ gymName, members, pctSelf, pctPt, total
 
   async function handlePDF() {
     setExportingPDF(true);
-    await downloadPDF(members, gymName, fileDate, selfMembers.length, ptMembers.length, shownRevenue, pctSelf, pctPt);
+    await downloadPDF(members, gymName, fileDate, selfMembers.length, ptMembers.length, shownRevenue, pctSelf, pctPt, country);
     setExportingPDF(false);
   }
 
@@ -162,7 +166,7 @@ export function CompliancePortalClient({ gymName, members, pctSelf, pctPt, total
               variant="outline"
               size="sm"
               className="gap-1.5 text-xs"
-              onClick={() => downloadCSV(members, gymName, fileDate)}
+              onClick={() => downloadCSV(members, gymName, fileDate, country)}
             >
               <Download className="w-3.5 h-3.5" />
               CSV
@@ -216,11 +220,11 @@ export function CompliancePortalClient({ gymName, members, pctSelf, pctPt, total
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp className="w-4 h-4 text-emerald-400" />
             <span className="text-xs font-semibold text-emerald-400/80 uppercase tracking-wider">
-              Monthly Revenue (PKR)
+              Monthly Revenue ({mc.symbol})
             </span>
           </div>
           <p className="text-3xl font-bold text-emerald-400">
-            {shownRevenue.toLocaleString("en-PK")}
+            {shownRevenue.toLocaleString(mc.numberLocale)}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
             from {members.length} visible member{members.length !== 1 ? "s" : ""}
@@ -260,7 +264,7 @@ export function CompliancePortalClient({ gymName, members, pctSelf, pctPt, total
                     <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{formatDDMMYYYY(m.date_of_birth)}</td>
                     <td className="px-4 py-3 text-muted-foreground">{formatDDMMYYYY(m.join_date)}</td>
                     <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">{m.plan_name ?? "—"}</td>
-                    <td className="px-4 py-3 text-right font-medium text-foreground whitespace-nowrap">{formatPKR(m.monthly_fee)}</td>
+                    <td className="px-4 py-3 text-right font-medium text-foreground whitespace-nowrap">{fmtMoney(m.monthly_fee)}</td>
                   </tr>
                 ))}
 
@@ -288,7 +292,7 @@ export function CompliancePortalClient({ gymName, members, pctSelf, pctPt, total
                       <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{formatDDMMYYYY(m.date_of_birth)}</td>
                       <td className="px-4 py-3 text-muted-foreground">{formatDDMMYYYY(m.join_date)}</td>
                       <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">{m.plan_name ?? "—"}</td>
-                      <td className="px-4 py-3 text-right font-medium text-foreground whitespace-nowrap">{formatPKR(m.monthly_fee)}</td>
+                      <td className="px-4 py-3 text-right font-medium text-foreground whitespace-nowrap">{fmtMoney(m.monthly_fee)}</td>
                     </tr>
                   );
                 })}

@@ -43,7 +43,7 @@ function buildUsername(name: string, gymName: string | null | undefined): string
 
 export function ReferrersClient({ gymId, gymName, referrers: initial, referrals: initialReferrals }: Props) {
   const router = useRouter();
-  const { format, country } = useCurrency();
+  const { format, country, symbol } = useCurrency();
   const [referrers, setReferrers] = useState(initial);
   const [referrals, setReferrals] = useState(initialReferrals);
 
@@ -322,13 +322,13 @@ export function ReferrersClient({ gymId, gymName, referrers: initial, referrals:
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="flat"><span className="flex items-center gap-2"><DollarSign className="w-3.5 h-3.5" /> Flat amount (PKR)</span></SelectItem>
+                  <SelectItem value="flat"><span className="flex items-center gap-2"><DollarSign className="w-3.5 h-3.5" /> Flat amount ({symbol})</span></SelectItem>
                   <SelectItem value="percentage"><span className="flex items-center gap-2"><Percent className="w-3.5 h-3.5" /> Percentage of monthly fee</span></SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>{form.commission_type === "flat" ? "Amount (PKR) *" : "Percentage (%) *"}</Label>
+              <Label>{form.commission_type === "flat" ? `Amount (${symbol}) *` : "Percentage (%) *"}</Label>
               <Input type="number" min="0" placeholder={form.commission_type === "flat" ? "e.g. 500" : "e.g. 10"} value={form.commission_value} onChange={(e) => setForm({ ...form, commission_value: e.target.value })} />
             </div>
             {editing && (

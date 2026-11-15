@@ -1438,7 +1438,7 @@ function LostReasonDialog({ onConfirm, onClose }: {
 function ConvertDialog({ lead, plans, trainers, onClose, onSaved }: {
   lead: Lead; plans: PlanLite[]; trainers: StaffLite[]; onClose: () => void; onSaved: () => void;
 }) {
-  const { format } = useCurrency();
+  const { format, symbol } = useCurrency();
   const NO_TRAINER = "__none__";
   const today = formatDateInput(new Date());
   const targetDate = new Date(); targetDate.setMonth(targetDate.getMonth() + 1);
@@ -1557,7 +1557,7 @@ function ConvertDialog({ lead, plans, trainers, onClose, onSaved }: {
           )}
           {parseFloat(form.admission_fee) > 0 && (
             <div className="space-y-1.5">
-              <Label>Discount (PKR)</Label>
+              <Label>Discount ({symbol})</Label>
               <Input
                 type="number"
                 min={0}

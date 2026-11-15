@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { formatDate, formatDateInput, formatTime12h, memberPlanLabel } from "@/lib/utils";
-import { formatMoney } from "@/lib/money";
+import { formatMoney, currencySymbol } from "@/lib/money";
 import { buildReminderMessage, whatsappUrl } from "@/lib/whatsapp-reminder";
 import type { Payment, PaymentMethod, PaymentStatus, Member, MembershipPlan, Staff, MemberGoal, BodyMetric, MetricSkip, TrainerShift, PaymentMethodAccount } from "@/types";
 
@@ -101,6 +101,7 @@ export function TrainerClient({ staff, gymId, gymName, reminderTemplate, payment
   // Portals render outside the dashboard GymProvider, so currency resolves from
   // the gym country carried on the trainer's own gym record.
   const country = staff.gym?.country ?? null;
+  const symbol = currencySymbol(country);
   const fmt = (n: number) => formatMoney(n, country);
   const [payments, setPayments] = useState<Payment[]>(initialPayments);
   const [selectedMonth, setSelectedMonth] = useState(CURRENT_MONTH);
@@ -624,7 +625,7 @@ export function TrainerClient({ staff, gymId, gymName, reminderTemplate, payment
                           {(() => {
                             const shift = member.assigned_shift_id ? shiftMap[member.assigned_shift_id] : null;
                             const label = shift
-                              ? `${shift.name} · ${shift.commission_type === "flat" ? `PKR ${shift.commission_value}` : `${shift.commission_value}%`}`
+                              ? `${shift.name} · ${shift.commission_type === "flat" ? `${symbol} ${shift.commission_value}` : `${shift.commission_value}%`}`
                               : `${staff.default_shift_name} · ${staff.commission_percentage}%`;
                             return <span className="text-[10px] text-muted-foreground">{label}</span>;
                           })()}
@@ -835,18 +836,18 @@ export function TrainerClient({ staff, gymId, gymName, reminderTemplate, payment
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Amount (PKR)</Label>
+                  <Label>Amount ({symbol})</Label>
                   <Input type="number" value={payForm.amount} onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Discount (PKR)</Label>
+                  <Label>Discount ({symbol})</Label>
                   <Input type="number" placeholder="0" value={payForm.discount} onChange={(e) => setPayForm({ ...payForm, discount: e.target.value })} />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Late Fee (PKR)</Label>
+                  <Label>Late Fee ({symbol})</Label>
                   <Input type="number" placeholder="0" value={payForm.late_fee} onChange={(e) => setPayForm({ ...payForm, late_fee: e.target.value })} />
                 </div>
                 <div className="space-y-1.5">
@@ -972,7 +973,7 @@ export function TrainerClient({ staff, gymId, gymName, reminderTemplate, payment
                     <SelectItem value="none">No shift — use trainer default</SelectItem>
                     {Object.values(shiftMap).map((sh) => (
                       <SelectItem key={sh.id} value={sh.id}>
-                        {sh.name} · {formatTime12h(sh.start_time)}–{formatTime12h(sh.end_time)} · {sh.commission_type === "flat" ? `PKR ${sh.commission_value}` : `${sh.commission_value}%`}
+                        {sh.name} · {formatTime12h(sh.start_time)}–{formatTime12h(sh.end_time)} · {sh.commission_type === "flat" ? `${symbol} ${sh.commission_value}` : `${sh.commission_value}%`}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -981,7 +982,7 @@ export function TrainerClient({ staff, gymId, gymName, reminderTemplate, payment
             )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>Monthly Fee (PKR)</Label>
+                <Label>Monthly Fee ({symbol})</Label>
                 <Input type="number" value={memberForm.monthly_fee} onChange={(e) => setMemberForm({ ...memberForm, monthly_fee: e.target.value })} />
               </div>
               <div className="space-y-1.5">
@@ -990,7 +991,7 @@ export function TrainerClient({ staff, gymId, gymName, reminderTemplate, payment
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Admission Fee (PKR)</Label>
+              <Label>Admission Fee ({symbol})</Label>
               <Input type="number" value={memberForm.admission_fee} onChange={(e) => setMemberForm({ ...memberForm, admission_fee: e.target.value })} />
             </div>
             {!editingMember && parseFloat(memberForm.admission_fee) > 0 && (
@@ -1013,7 +1014,7 @@ export function TrainerClient({ staff, gymId, gymName, reminderTemplate, payment
             )}
             {!editingMember && parseFloat(memberForm.admission_fee) > 0 && (
               <div className="space-y-1.5">
-                <Label>Discount (PKR)</Label>
+                <Label>Discount ({symbol})</Label>
                 <Input
                   type="number"
                   min={0}
@@ -1025,7 +1026,7 @@ export function TrainerClient({ staff, gymId, gymName, reminderTemplate, payment
                   const d = parseFloat(memberForm.discount) || 0;
                   const fee = parseFloat(memberForm.admission_fee) || 0;
                   if (d > fee) {
-                    return <p className="text-xs text-rose-400">Discount cannot exceed admission fee. It will be clamped to PKR {fee}.</p>;
+                    return <p className="text-xs text-rose-400">Discount cannot exceed admission fee. It will be clamped to {symbol} {fee}.</p>;
                   }
                   if (d < 0) {
                     return <p className="text-xs text-rose-400">Discount cannot be negative. It will be clamped to 0.</p>;

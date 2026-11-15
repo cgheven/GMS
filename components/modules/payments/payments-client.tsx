@@ -179,7 +179,7 @@ function MemberPicker({ members, value, onChange }: {
 // ─── Main component ───────────────────────────────────────────────────────────
 export function PaymentsClient({ gymId, payments: initialPayments, members }: Props) {
   const { gym, isDemo } = useGymContext();
-  const { format } = useCurrency();
+  const { format, symbol } = useCurrency();
   const [payments, setPayments] = useState<Payment[]>(initialPayments);
   const [view, setView] = useState<"members" | "history">("members");
 
@@ -760,7 +760,7 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Amount (PKR) *</Label>
+                <Label>Amount ({symbol}) *</Label>
                 <Input type="number" placeholder="0" value={addForm.total_amount} onChange={(e) => setAddForm({ ...addForm, total_amount: e.target.value })} />
               </div>
               <div className="space-y-1.5">
@@ -770,11 +770,11 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Discount (PKR)</Label>
+                <Label>Discount ({symbol})</Label>
                 <Input type="number" placeholder="0" value={addForm.discount} onChange={(e) => setAddForm({ ...addForm, discount: e.target.value })} />
               </div>
               <div className="space-y-1.5">
-                <Label>Late Fee (PKR)</Label>
+                <Label>Late Fee ({symbol})</Label>
                 <Input type="number" placeholder="0" value={addForm.late_fee} onChange={(e) => setAddForm({ ...addForm, late_fee: e.target.value })} />
               </div>
             </div>

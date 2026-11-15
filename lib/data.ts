@@ -1730,7 +1730,7 @@ export async function getCompliancePageData() {
   const [{ data: gymData }, { data: membersData }] = await Promise.all([
     admin
       .from("pulse_gyms")
-      .select("name, compliance_settings")
+      .select("name, country, compliance_settings")
       .eq("id", complianceUser.gym_id)
       .single(),
     admin
@@ -1789,6 +1789,7 @@ export async function getCompliancePageData() {
 
   return {
     gymName: gymData?.name ?? "",
+    country: (gymData as { country?: string } | null)?.country ?? "PK",
     members,
     pctSelf,
     pctPt,

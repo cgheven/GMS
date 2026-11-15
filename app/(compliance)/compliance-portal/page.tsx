@@ -10,6 +10,7 @@ export default async function CompliancePortalPage() {
   return (
     <CompliancePortalClient
       gymName={data.gymName}
+      country={data.country}
       members={data.members}
       pctSelf={data.pctSelf}
       pctPt={data.pctPt}

@@ -4,6 +4,7 @@ import { Building2, User, Save, Loader2, Globe, ExternalLink, Target, Shield, Tr
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/lib/supabase/client";
 import { useGymContext } from "@/contexts/gym-context";
+import { useCurrency } from "@/hooks/use-currency";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,6 +74,7 @@ function DeviceStatusBadge({ lastSeen }: { lastSeen: string | null }) {
 
 export function SettingsClient() {
   const { profile, gym, isDemo } = useGymContext();
+  const { symbol } = useCurrency();
   const gymId = gym?.id ?? null;
 
   const [gymForm, setGymForm] = useState({
@@ -81,6 +83,7 @@ export function SettingsClient() {
     monthly_revenue_target: "",
     default_trainer_capacity: "20",
     device_serial: "",
+    device_push_key: "",
   });
   const [listingForm, setListingForm] = useState({
     listing_enabled: false,
@@ -200,6 +203,7 @@ export function SettingsClient() {
         monthly_revenue_target: gym.monthly_revenue_target?.toString() ?? "",
         default_trainer_capacity: ((gym as typeof gym & { default_trainer_capacity?: number }).default_trainer_capacity ?? 20).toString(),
         device_serial: gym.device_serial ?? "",
+        device_push_key: gym.device_push_key ?? "",
       });
       const cs = (gym as typeof gym & { compliance_settings?: Record<string, unknown> | null }).compliance_settings;
       setDefaulterThreshold(Math.max(1, Math.min(6, (cs?.defaulter_threshold_months as number) ?? 2)));
@@ -240,6 +244,7 @@ export function SettingsClient() {
       monthly_revenue_target: parseFloat(gymForm.monthly_revenue_target) || 0,
       default_trainer_capacity: Math.max(1, parseInt(gymForm.default_trainer_capacity) || 20),
       device_serial: gymForm.device_serial.trim() || null,
+      device_push_key: gymForm.device_push_key.trim() || null,
     }).eq("id", gymId);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
     else toast({ title: "Gym settings saved" });
@@ -401,7 +406,7 @@ export function SettingsClient() {
             <div className="space-y-1.5">
               <Label className="flex items-center gap-1.5">
                 <Target className="w-3.5 h-3.5 text-[hsl(219_100%_50%)]" />
-                Monthly Revenue Target (PKR)
+                Monthly Revenue Target ({symbol})
               </Label>
               <Input
                 type="number"
@@ -440,6 +445,18 @@ export function SettingsClient() {
               {gym?.device_serial && (
                 <DeviceStatusBadge lastSeen={gym.device_last_seen ?? null} />
               )}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Device Push Key <span className="text-muted-foreground text-xs">(optional, recommended)</span></Label>
+              <Input
+                placeholder="a long random secret"
+                value={gymForm.device_push_key}
+                onChange={(e) => setGymForm({ ...gymForm, device_push_key: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                A shared secret the device must send so a leaked serial alone can&apos;t forge check-ins. When set, configure
+                your device&apos;s server URL to include <code>&amp;key=&lt;this value&gt;</code>. Leave blank to accept the serial only.
+              </p>
             </div>
             <Button type="submit" disabled={savingGym} className="gap-2">
               {savingGym ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

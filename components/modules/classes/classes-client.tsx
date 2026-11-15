@@ -71,7 +71,7 @@ type FormState = typeof emptyForm;
 
 export function ClassesClient({ gymId: initialGymId, classes: initialClasses, staff }: Props) {
   const { gymId: ctxGymId, isDemo } = useGymContext();
-  const { format } = useCurrency();
+  const { format, symbol } = useCurrency();
   const gymId = ctxGymId ?? initialGymId;
 
   const [classes, setClasses] = useState<GymClass[]>(initialClasses);
@@ -409,7 +409,7 @@ export function ClassesClient({ gymId: initialGymId, classes: initialClasses, st
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Price (PKR)</Label>
+                <Label>Price ({symbol})</Label>
                 <Input type="number" min="0" placeholder="0 = free" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
               </div>
             </div>

@@ -78,7 +78,7 @@ interface Props {
 
 export function PlansClient({ gymId, plans: initialPlans }: Props) {
   const { isDemo } = useGymContext();
-  const { format } = useCurrency();
+  const { format, symbol } = useCurrency();
   const [plans, setPlans] = useState<PlanWithCount[]>(initialPlans);
   const [filtered, setFiltered] = useState<PlanWithCount[]>(initialPlans);
   const [search, setSearch] = useState("");
@@ -453,7 +453,7 @@ export function PlansClient({ gymId, plans: initialPlans }: Props) {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>Monthly Fee (PKR) *</Label>
+                <Label>Monthly Fee ({symbol}) *</Label>
                 <Input
                   type="number"
                   placeholder="0"
@@ -462,7 +462,7 @@ export function PlansClient({ gymId, plans: initialPlans }: Props) {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Admission Fee (PKR)</Label>
+                <Label>Admission Fee ({symbol})</Label>
                 <Input
                   type="number"
                   placeholder="0"

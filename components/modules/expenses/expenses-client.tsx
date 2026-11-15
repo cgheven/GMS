@@ -97,7 +97,7 @@ interface Props {
 
 export function ExpensesClient({ gymId, expenses: initialExpenses, monthFilter: defaultMonth }: Props) {
   const { isDemo } = useGymContext();
-  const { format } = useCurrency();
+  const { format, symbol } = useCurrency();
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState("all");
@@ -328,7 +328,7 @@ export function ExpensesClient({ gymId, expenses: initialExpenses, monthFilter: 
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>Amount (PKR) *</Label>
+                <Label>Amount ({symbol}) *</Label>
                 <Input type="number" placeholder="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
               </div>
               <div className="space-y-1.5">

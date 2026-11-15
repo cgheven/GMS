@@ -1030,7 +1030,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
                     <Input type="number" placeholder="0" value={form.commission_percentage} onChange={(e) => setForm({ ...form, commission_percentage: e.target.value })} />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Gym Fee (PKR)</Label>
+                    <Label>Gym Fee ({symbol})</Label>
                     <Input type="number" placeholder="0" value={form.commission_floor} onChange={(e) => setForm({ ...form, commission_floor: e.target.value })} />
                   </div>
                 </div>
@@ -1044,7 +1044,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
                   <Input type="number" placeholder="0" value={form.commission_percentage} onChange={(e) => setForm({ ...form, commission_percentage: e.target.value })} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Gym Fee (PKR)</Label>
+                  <Label>Gym Fee ({symbol})</Label>
                   <Input type="number" placeholder="0" value={form.commission_floor} onChange={(e) => setForm({ ...form, commission_floor: e.target.value })} />
                   <p className="text-[11px] text-muted-foreground leading-snug">Gym&apos;s share kept off the top. Commission % applies to whatever remains of the member fee.</p>
                 </div>
@@ -1070,7 +1070,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
                   <div key={sh.id} className="flex items-center justify-between gap-2 rounded-md border border-sidebar-border bg-card px-3 py-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground">{sh.name}</p>
-                      <p className="text-xs text-muted-foreground">{formatTime12h(sh.start_time)} – {formatTime12h(sh.end_time)} · {sh.commission_type === "flat" ? `PKR ${sh.commission_value}` : `${sh.commission_value}%`}{Number(sh.commission_floor) > 0 ? ` · floor ${sh.commission_floor}` : ""}</p>
+                      <p className="text-xs text-muted-foreground">{formatTime12h(sh.start_time)} – {formatTime12h(sh.end_time)} · {sh.commission_type === "flat" ? `${symbol} ${sh.commission_value}` : `${sh.commission_value}%`}{Number(sh.commission_floor) > 0 ? ` · floor ${sh.commission_floor}` : ""}</p>
                     </div>
                     <button type="button" onClick={() => handleDeleteShift(sh.id)} className="text-muted-foreground hover:text-destructive transition-colors shrink-0">
                       <Trash2 className="w-3.5 h-3.5" />
@@ -1083,7 +1083,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
                   <div key={idx} className="flex items-center justify-between gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground">{sh.name} <span className="text-[10px] text-amber-400 uppercase ml-1">pending</span></p>
-                      <p className="text-xs text-muted-foreground">{formatTime12h(sh.start_time)} – {formatTime12h(sh.end_time)} · {sh.commission_type === "flat" ? `PKR ${sh.commission_value}` : `${sh.commission_value}%`}{sh.commission_floor > 0 ? ` · floor ${sh.commission_floor}` : ""}</p>
+                      <p className="text-xs text-muted-foreground">{formatTime12h(sh.start_time)} – {formatTime12h(sh.end_time)} · {sh.commission_type === "flat" ? `${symbol} ${sh.commission_value}` : `${sh.commission_value}%`}{sh.commission_floor > 0 ? ` · floor ${sh.commission_floor}` : ""}</p>
                     </div>
                     <button type="button" onClick={() => handleDeletePendingShift(idx)} className="text-muted-foreground hover:text-destructive transition-colors shrink-0">
                       <Trash2 className="w-3.5 h-3.5" />
@@ -1104,7 +1104,7 @@ export function StaffClient({ gymId, gymName, staff: initialStaff, salaryPayment
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="percentage">Percentage %</SelectItem>
-                        <SelectItem value="flat">Flat (PKR)</SelectItem>
+                        <SelectItem value="flat">Flat ({symbol})</SelectItem>
                       </SelectContent>
                     </Select>
                     <Input type="number" placeholder={shiftForm.commission_type === "flat" ? "PKR amount" : "e.g. 30"} value={shiftForm.commission_value} onChange={(e) => setShiftForm({ ...shiftForm, commission_value: e.target.value })} />

@@ -62,7 +62,7 @@ interface Props {
 
 export function BillsClient({ gymId, bills: initialBills }: Props) {
   const { isDemo } = useGymContext();
-  const { format } = useCurrency();
+  const { format, symbol } = useCurrency();
   const [bills, setBills] = useState<Bill[]>(initialBills);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -386,12 +386,12 @@ export function BillsClient({ gymId, bills: initialBills }: Props) {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Amount (PKR) *</Label>
+                <Label>Amount ({symbol}) *</Label>
                 <Input type="number" placeholder="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Late Fee / Penalty (PKR)</Label>
+              <Label>Late Fee / Penalty ({symbol})</Label>
               <div className="flex items-center gap-3">
                 <Input type="number" min="0" placeholder="0" value={form.late_fee} onChange={(e) => setForm({ ...form, late_fee: e.target.value })} className="w-36" />
                 {parseInt(form.late_fee) > 0 && (
