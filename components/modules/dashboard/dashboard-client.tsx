@@ -4,7 +4,7 @@ import Link from "next/link";
 import {
   Dumbbell, Wallet,
   AlertTriangle, Clock, CheckCircle2,
-  TrendingUp, TrendingDown, FileWarning, Zap, Trophy, Target, HandCoins, Instagram,
+  TrendingUp, TrendingDown, FileWarning, Zap, Trophy, Target, HandCoins, Instagram, Scale,
 } from "lucide-react";
 import { useCurrency } from "@/hooks/use-currency";
 import type { DashboardStats, DashboardMember, Bill, TrainerStat, GoalsOverview } from "@/types";
@@ -67,6 +67,18 @@ export function DashboardClient({ data, leadsSummary }: Props) {
   const targetProgress = stats.revenue_target > 0
     ? Math.min(100, Math.round((stats.monthly_collected / stats.revenue_target) * 100))
     : 0;
+
+  // Profit breakdown — the cost components that turn revenue into net profit.
+  const profitCosts = [
+    { label: "Expenses", value: stats.monthly_expenses,                  bar: "bg-rose-400",   text: "text-rose-400" },
+    { label: "Salaries", value: stats.monthly_salaries,                  bar: "bg-purple-400", text: "text-purple-400" },
+    { label: "Bills",    value: stats.monthly_paid_bills,                bar: "bg-orange-400", text: "text-orange-400" },
+    { label: "Partner",  value: stats.paid_commissions_this_month,       bar: "bg-amber-400",  text: "text-amber-400" },
+    { label: "Social",   value: stats.paid_social_commissions_this_month, bar: "bg-pink-400",   text: "text-pink-400" },
+  ].filter((c) => c.value > 0);
+  const breakdownDenom = Math.max(stats.monthly_collected, profitCosts.reduce((s, c) => s + c.value, 0), 1);
+  const profitBarWidth = isProfit ? (stats.net_profit / breakdownDenom) * 100 : 0;
+  const profitMargin = stats.monthly_collected > 0 ? Math.round((stats.net_profit / stats.monthly_collected) * 100) : 0;
 
   // Unified action items — sorted by urgency, capped to keep UI compact
   const ACTION_LIMIT = 12;
@@ -144,7 +156,35 @@ export function DashboardClient({ data, leadsSummary }: Props) {
       </div>
 
       {/* ── Section 1: Hero Numbers ──────────────────────────── */}
-      <div className={`grid grid-cols-1 gap-4 ${(stats.pending_commissions_count > 0 || stats.pending_social_commissions_count > 0) ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
+      <div className={`grid grid-cols-1 gap-4 ${
+        stats.pending_commissions_count > 0 && stats.pending_social_commissions_count > 0
+          ? "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
+          : (stats.pending_commissions_count > 0 || stats.pending_social_commissions_count > 0)
+            ? "sm:grid-cols-2 lg:grid-cols-4"
+            : "sm:grid-cols-3"
+      }`}>
+
+        {/* Net Profit */}
+        <div className={`rounded-2xl border p-5 space-y-3 ${isProfit ? "border-sidebar-border bg-card" : "border-rose-500/25 bg-rose-500/[0.05]"}`}>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Net Profit</p>
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${isProfit ? "bg-emerald-500/10 border-emerald-500/20" : "bg-rose-500/10 border-rose-500/20"}`}>
+              {isProfit
+                ? <TrendingUp className="w-4 h-4 text-emerald-400" />
+                : <TrendingDown className="w-4 h-4 text-rose-400" />}
+            </div>
+          </div>
+          <p className={`text-3xl font-bold leading-none ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>
+            {isProfit ? "+" : ""}{format(stats.net_profit)}
+          </p>
+          {stats.monthly_collected > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              <span className={`font-semibold ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>{profitMargin}%</span> margin this month
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">This month</p>
+          )}
+        </div>
 
         {/* Collected */}
         <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.05] p-5 space-y-3">
@@ -194,79 +234,89 @@ export function DashboardClient({ data, leadsSummary }: Props) {
           )}
         </div>
 
-        {/* Net Profit */}
-        <div className={`rounded-2xl border p-5 space-y-3 ${isProfit ? "border-sidebar-border bg-card" : "border-rose-500/25 bg-rose-500/[0.05]"}`}>
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Net Profit</p>
-            <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${isProfit ? "bg-emerald-500/10 border-emerald-500/20" : "bg-rose-500/10 border-rose-500/20"}`}>
-              {isProfit
-                ? <TrendingUp className="w-4 h-4 text-emerald-400" />
-                : <TrendingDown className="w-4 h-4 text-rose-400" />}
+        {/* Partner Payouts — only when there's something owed */}
+        {stats.pending_commissions_count > 0 && (
+          <Link href="/referrers" className="block rounded-2xl border border-amber-500/25 bg-amber-500/[0.05] p-5 space-y-3 hover:bg-amber-500/[0.09] transition-colors">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Partner Payouts</p>
+              <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                <HandCoins className="w-4 h-4 text-amber-400" />
+              </div>
             </div>
-          </div>
-          <p className={`text-3xl font-bold leading-none ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>
-            {isProfit ? "+" : ""}{format(stats.net_profit)}
-          </p>
-          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
-            <span>Rev <span className="text-foreground font-medium">{format(stats.monthly_collected)}</span></span>
-            <span>·</span>
-            <span>Exp <span className="text-rose-400 font-medium">{format(stats.monthly_expenses)}</span></span>
-            <span>·</span>
-            <span>Sal <span className="text-purple-400 font-medium">{format(stats.monthly_salaries)}</span></span>
-            {stats.monthly_paid_bills > 0 && (
-              <>
-                <span>·</span>
-                <span>Bills <span className="text-orange-400 font-medium">{format(stats.monthly_paid_bills)}</span></span>
-              </>
-            )}
-            {stats.paid_commissions_this_month > 0 && (
-              <>
-                <span>·</span>
-                <span>Partner <span className="text-amber-400 font-medium">{format(stats.paid_commissions_this_month)}</span></span>
-              </>
-            )}
-            {stats.paid_social_commissions_this_month > 0 && (
-              <>
-                <span>·</span>
-                <span>Social <span className="text-pink-400 font-medium">{format(stats.paid_social_commissions_this_month)}</span></span>
-              </>
-            )}
-          </div>
-        </div>
-        {/* Pending Commissions — only shown when there's something owed */}
-        {(stats.pending_commissions_count > 0 || stats.pending_social_commissions_count > 0) && (
-          <div className="space-y-3">
-            {stats.pending_commissions_count > 0 && (
-              <Link href="/referrers" className="block rounded-2xl border border-amber-500/25 bg-amber-500/[0.05] p-5 space-y-3 hover:bg-amber-500/[0.09] transition-colors">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Partner Payouts</p>
-                  <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-                    <HandCoins className="w-4 h-4 text-amber-400" />
-                  </div>
-                </div>
-                <p className="text-3xl font-bold text-amber-400 leading-none">{format(stats.pending_commissions_amount)}</p>
-                <p className="text-xs text-muted-foreground">
-                  <span className="text-amber-400 font-semibold">{stats.pending_commissions_count}</span> pending payout{stats.pending_commissions_count !== 1 ? "s" : ""}
-                </p>
-              </Link>
-            )}
-            {stats.pending_social_commissions_count > 0 && (
-              <Link href="/social-media" className="block rounded-2xl border border-pink-500/25 bg-pink-500/[0.05] p-5 space-y-3 hover:bg-pink-500/[0.09] transition-colors">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Social Payouts</p>
-                  <div className="w-8 h-8 rounded-xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center">
-                    <Instagram className="w-4 h-4 text-pink-400" />
-                  </div>
-                </div>
-                <p className="text-3xl font-bold text-pink-400 leading-none">{format(stats.pending_social_commissions_amount)}</p>
-                <p className="text-xs text-muted-foreground">
-                  <span className="text-pink-400 font-semibold">{stats.pending_social_commissions_count}</span> pending payout{stats.pending_social_commissions_count !== 1 ? "s" : ""}
-                </p>
-              </Link>
-            )}
-          </div>
+            <p className="text-3xl font-bold text-amber-400 leading-none">{format(stats.pending_commissions_amount)}</p>
+            <p className="text-xs text-muted-foreground">
+              <span className="text-amber-400 font-semibold">{stats.pending_commissions_count}</span> pending payout{stats.pending_commissions_count !== 1 ? "s" : ""}
+            </p>
+          </Link>
+        )}
+        {/* Social Payouts — only when there's something owed */}
+        {stats.pending_social_commissions_count > 0 && (
+          <Link href="/social-media" className="block rounded-2xl border border-pink-500/25 bg-pink-500/[0.05] p-5 space-y-3 hover:bg-pink-500/[0.09] transition-colors">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Social Payouts</p>
+              <div className="w-8 h-8 rounded-xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center">
+                <Instagram className="w-4 h-4 text-pink-400" />
+              </div>
+            </div>
+            <p className="text-3xl font-bold text-pink-400 leading-none">{format(stats.pending_social_commissions_amount)}</p>
+            <p className="text-xs text-muted-foreground">
+              <span className="text-pink-400 font-semibold">{stats.pending_social_commissions_count}</span> pending payout{stats.pending_social_commissions_count !== 1 ? "s" : ""}
+            </p>
+          </Link>
         )}
       </div>
+
+      {/* ── Profit Breakdown ─────────────────────────────────── */}
+      {stats.monthly_collected > 0 && (
+        <div className="rounded-2xl border border-sidebar-border bg-card p-5 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                <Scale className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">Profit Breakdown</p>
+                <p className="text-xs text-muted-foreground">Where this month&apos;s revenue went</p>
+              </div>
+            </div>
+            <div className={`px-2.5 py-1 rounded-lg text-xs font-semibold shrink-0 ${isProfit ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"}`}>
+              {profitMargin}% margin
+            </div>
+          </div>
+
+          {/* Proportional bar — costs eat into revenue, the remainder is profit */}
+          <div className="flex h-2.5 w-full rounded-full overflow-hidden bg-white/5">
+            {profitCosts.map((c) => (
+              <div key={c.label} className={c.bar} style={{ width: `${(c.value / breakdownDenom) * 100}%` }} title={`${c.label} ${format(c.value)}`} />
+            ))}
+            {profitBarWidth > 0 && (
+              <div className="bg-emerald-400" style={{ width: `${profitBarWidth}%` }} title={`Net profit ${format(stats.net_profit)}`} />
+            )}
+          </div>
+
+          {/* Legend — reads like a P&L line */}
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-sm bg-emerald-400 shrink-0" />
+              <span className="text-muted-foreground">Revenue</span>
+              <span className="font-semibold text-emerald-400">{format(stats.monthly_collected)}</span>
+            </div>
+            {profitCosts.map((c) => (
+              <div key={c.label} className="flex items-center gap-2">
+                <span className="text-muted-foreground">−</span>
+                <span className={`w-2.5 h-2.5 rounded-sm shrink-0 ${c.bar}`} />
+                <span className="text-muted-foreground">{c.label}</span>
+                <span className={`font-semibold ${c.text}`}>{format(c.value)}</span>
+              </div>
+            ))}
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">=</span>
+              <span className="text-muted-foreground">Net Profit</span>
+              <span className={`font-semibold ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>{isProfit ? "+" : ""}{format(stats.net_profit)}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Leads strip ──────────────────────────────────────── */}
       {leadsSummary && (leadsSummary.open > 0 || leadsSummary.dueToday > 0 || leadsSummary.overdue > 0) && (
