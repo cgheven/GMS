@@ -4,7 +4,7 @@ import Link from "next/link";
 import {
   Dumbbell, Wallet,
   AlertTriangle, Clock, CheckCircle2,
-  TrendingUp, TrendingDown, FileWarning, Zap, Trophy, Target, HandCoins, Instagram, Scale,
+  Banknote, Users, FileWarning, Zap, Trophy, Target, HandCoins, Instagram, Scale,
 } from "lucide-react";
 import { useCurrency } from "@/hooks/use-currency";
 import type { DashboardStats, DashboardMember, Bill, TrainerStat, GoalsOverview } from "@/types";
@@ -155,115 +155,94 @@ export function DashboardClient({ data, leadsSummary }: Props) {
         </p>
       </div>
 
-      {/* ── Section 1: Hero Numbers ──────────────────────────── */}
-      <div className={`grid grid-cols-1 gap-4 ${
-        stats.pending_commissions_count > 0 && stats.pending_social_commissions_count > 0
-          ? "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
-          : (stats.pending_commissions_count > 0 || stats.pending_social_commissions_count > 0)
-            ? "sm:grid-cols-2 lg:grid-cols-4"
-            : "sm:grid-cols-3"
-      }`}>
+      {/* ── Hero KPI Cards (premium grid) ────────────────────── */}
+      {/* Net Profit and the 4th card span both columns on mobile so the 2-col
+          mobile grid stays even; all four sit in one row from lg. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
 
-        {/* Net Profit */}
-        <div className={`rounded-2xl border p-5 space-y-3 ${isProfit ? "border-sidebar-border bg-card" : "border-rose-500/25 bg-rose-500/[0.05]"}`}>
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Net Profit</p>
-            <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${isProfit ? "bg-emerald-500/10 border-emerald-500/20" : "bg-rose-500/10 border-rose-500/20"}`}>
-              {isProfit
-                ? <TrendingUp className="w-4 h-4 text-emerald-400" />
-                : <TrendingDown className="w-4 h-4 text-rose-400" />}
+        {/* Net Profit — most prominent, full-width on mobile */}
+        <div className={`col-span-2 lg:col-span-1 relative rounded-2xl border p-4 sm:p-5 transition-all duration-300 animate-fade-up ${isProfit ? "border-emerald-500/30 bg-emerald-500/[0.06] hover:border-emerald-500/50" : "border-rose-500/30 bg-rose-500/[0.06] hover:border-rose-500/50"}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Net Profit</p>
+              <p className={`mt-2 text-3xl font-bold leading-none break-words ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>
+                {isProfit ? "+" : ""}{format(stats.net_profit)}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {stats.monthly_collected > 0
+                  ? <>{isProfit ? "↑" : "↓"} <span className={`font-semibold ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>{profitMargin}%</span> margin this month</>
+                  : (isProfit ? "↑ Profit this month" : "↓ Loss this month")}
+              </p>
+            </div>
+            <div className={`flex items-center justify-center w-9 h-9 rounded-xl border shrink-0 ${isProfit ? "bg-emerald-500/10 border-emerald-500/20" : "bg-rose-500/10 border-rose-500/20"}`}>
+              <Banknote className={`w-4 h-4 ${isProfit ? "text-emerald-400" : "text-rose-400"}`} />
             </div>
           </div>
-          <p className={`text-3xl font-bold leading-none ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>
-            {isProfit ? "+" : ""}{format(stats.net_profit)}
-          </p>
-          {stats.monthly_collected > 0 ? (
-            <p className="text-xs text-muted-foreground">
-              <span className={`font-semibold ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>{profitMargin}%</span> margin this month
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">This month</p>
-          )}
         </div>
 
         {/* Collected */}
-        <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.05] p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Collected</p>
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-              <Wallet className="w-4 h-4 text-emerald-400" />
+        <div className="relative rounded-2xl border border-sidebar-border bg-card p-4 sm:p-5 hover:border-emerald-500/30 transition-all animate-fade-up" style={{ animationDelay: "75ms" }}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide leading-tight">Collected</p>
+              <p className="mt-2 text-lg sm:text-2xl font-bold leading-tight break-words">{format(stats.monthly_collected)}</p>
+              {stats.revenue_target > 0 ? (
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                    <div className="h-full bg-emerald-400 rounded-full transition-all" style={{ width: `${targetProgress}%` }} />
+                  </div>
+                  <span className="text-xs text-emerald-400 font-semibold shrink-0">{targetProgress}%</span>
+                </div>
+              ) : (
+                <p className="mt-2 text-[10px] sm:text-xs text-muted-foreground">{stats.active_members} active members</p>
+              )}
+            </div>
+            <div className="hidden sm:flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 shrink-0">
+              <Wallet className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
             </div>
           </div>
-          <p className="text-3xl font-bold text-emerald-400 leading-none">{format(stats.monthly_collected)}</p>
-          {stats.revenue_target > 0 ? (
-            <div className="space-y-1.5">
-              <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-                <div className="h-full bg-emerald-400 rounded-full transition-all duration-700" style={{ width: `${targetProgress}%` }} />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                <span className="text-emerald-400 font-semibold">{targetProgress}%</span> of {format(stats.revenue_target)} target
-              </p>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">{stats.active_members} active members</p>
-          )}
         </div>
 
         {/* Outstanding */}
-        <div className={`rounded-2xl border p-5 space-y-3 ${stats.monthly_outstanding > 0 ? "border-rose-500/25 bg-rose-500/[0.05]" : "border-sidebar-border bg-card"}`}>
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Outstanding</p>
-            <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${stats.monthly_outstanding > 0 ? "bg-rose-500/10 border-rose-500/20" : "bg-white/5 border-white/10"}`}>
-              <Clock className={`w-4 h-4 ${stats.monthly_outstanding > 0 ? "text-rose-400" : "text-muted-foreground"}`} />
+        <div className="relative rounded-2xl border border-sidebar-border bg-card p-4 sm:p-5 hover:border-rose-500/30 transition-all animate-fade-up" style={{ animationDelay: "150ms" }}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide leading-tight">Outstanding</p>
+              <p className="mt-2 text-lg sm:text-2xl font-bold leading-tight break-words">{format(stats.monthly_outstanding)}</p>
+              {overdueMembers.length > 0 ? (
+                <Link href="/payments" className="group/out mt-2 flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground">
+                  <span><span className="text-rose-400 font-semibold">{overdueMembers.length}</span> member{overdueMembers.length !== 1 ? "s" : ""} owe money</span>
+                  <span className="text-rose-400 opacity-0 group-hover/out:opacity-100 transition-opacity">→</span>
+                </Link>
+              ) : (
+                <p className="mt-2 text-[10px] sm:text-xs text-emerald-400 font-medium flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> All caught up
+                </p>
+              )}
+            </div>
+            <div className="hidden sm:flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-rose-500/10 border border-rose-500/20 shrink-0">
+              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-400" />
             </div>
           </div>
-          <p className={`text-3xl font-bold leading-none ${stats.monthly_outstanding > 0 ? "text-rose-400" : "text-muted-foreground"}`}>
-            {format(stats.monthly_outstanding)}
-          </p>
-          {overdueMembers.length > 0 ? (
-            <Link href="/payments" className="flex items-center justify-between group">
-              <p className="text-xs text-muted-foreground">
-                <span className="text-rose-400 font-semibold">{overdueMembers.length}</span> member{overdueMembers.length !== 1 ? "s" : ""} owe money
-              </p>
-              <span className="text-xs text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity">Collect →</span>
-            </Link>
-          ) : (
-            <p className="text-xs text-emerald-400 font-medium flex items-center gap-1.5">
-              <CheckCircle2 className="w-3 h-3" /> All caught up
-            </p>
-          )}
         </div>
 
-        {/* Partner Payouts — only when there's something owed */}
-        {stats.pending_commissions_count > 0 && (
-          <Link href="/referrers" className="block rounded-2xl border border-amber-500/25 bg-amber-500/[0.05] p-5 space-y-3 hover:bg-amber-500/[0.09] transition-colors">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Partner Payouts</p>
-              <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-                <HandCoins className="w-4 h-4 text-amber-400" />
-              </div>
+        {/* Active Members — full-width on mobile, same as Net Profit */}
+        <div className="col-span-2 lg:col-span-1 relative rounded-2xl border border-sidebar-border bg-card p-4 sm:p-5 hover:border-blue-500/30 transition-all animate-fade-up" style={{ animationDelay: "225ms" }}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide leading-tight">Active Members</p>
+              <p className="mt-2 text-lg sm:text-2xl font-bold leading-none">{stats.active_members.toLocaleString()}</p>
+              <p className="mt-2 text-[10px] sm:text-xs text-muted-foreground">
+                {stats.todays_checkins > 0
+                  ? `${stats.todays_checkins.toLocaleString()} checked in today`
+                  : `${stats.total_members.toLocaleString()} total members`}
+              </p>
             </div>
-            <p className="text-3xl font-bold text-amber-400 leading-none">{format(stats.pending_commissions_amount)}</p>
-            <p className="text-xs text-muted-foreground">
-              <span className="text-amber-400 font-semibold">{stats.pending_commissions_count}</span> pending payout{stats.pending_commissions_count !== 1 ? "s" : ""}
-            </p>
-          </Link>
-        )}
-        {/* Social Payouts — only when there's something owed */}
-        {stats.pending_social_commissions_count > 0 && (
-          <Link href="/social-media" className="block rounded-2xl border border-pink-500/25 bg-pink-500/[0.05] p-5 space-y-3 hover:bg-pink-500/[0.09] transition-colors">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Social Payouts</p>
-              <div className="w-8 h-8 rounded-xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center">
-                <Instagram className="w-4 h-4 text-pink-400" />
-              </div>
+            <div className="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 shrink-0">
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-400" />
             </div>
-            <p className="text-3xl font-bold text-pink-400 leading-none">{format(stats.pending_social_commissions_amount)}</p>
-            <p className="text-xs text-muted-foreground">
-              <span className="text-pink-400 font-semibold">{stats.pending_social_commissions_count}</span> pending payout{stats.pending_social_commissions_count !== 1 ? "s" : ""}
-            </p>
-          </Link>
-        )}
+          </div>
+        </div>
       </div>
 
       {/* ── Profit Breakdown ─────────────────────────────────── */}
@@ -315,6 +294,46 @@ export function DashboardClient({ data, leadsSummary }: Props) {
               <span className={`font-semibold ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>{isProfit ? "+" : ""}{format(stats.net_profit)}</span>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Pending Payouts (partner / social) ───────────────── */}
+      {(stats.pending_commissions_count > 0 || stats.pending_social_commissions_count > 0) && (
+        <div className={`grid grid-cols-1 gap-4 ${stats.pending_commissions_count > 0 && stats.pending_social_commissions_count > 0 ? "sm:grid-cols-2" : ""}`}>
+          {stats.pending_commissions_count > 0 && (
+            <Link href="/referrers" className="group/pay relative rounded-2xl border border-amber-500/25 bg-amber-500/[0.05] p-4 sm:p-5 hover:border-amber-500/45 transition-all">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide leading-tight">Partner Payouts</p>
+                  <p className="mt-2 text-lg sm:text-2xl font-bold leading-tight break-words text-amber-400">{format(stats.pending_commissions_amount)}</p>
+                  <p className="mt-2 text-[10px] sm:text-xs text-muted-foreground flex items-center gap-1.5">
+                    <span><span className="text-amber-400 font-semibold">{stats.pending_commissions_count}</span> pending payout{stats.pending_commissions_count !== 1 ? "s" : ""}</span>
+                    <span className="text-amber-400 opacity-0 group-hover/pay:opacity-100 transition-opacity">→</span>
+                  </p>
+                </div>
+                <div className="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 shrink-0">
+                  <HandCoins className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
+                </div>
+              </div>
+            </Link>
+          )}
+          {stats.pending_social_commissions_count > 0 && (
+            <Link href="/social-media" className="group/pay relative rounded-2xl border border-pink-500/25 bg-pink-500/[0.05] p-4 sm:p-5 hover:border-pink-500/45 transition-all">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide leading-tight">Social Payouts</p>
+                  <p className="mt-2 text-lg sm:text-2xl font-bold leading-tight break-words text-pink-400">{format(stats.pending_social_commissions_amount)}</p>
+                  <p className="mt-2 text-[10px] sm:text-xs text-muted-foreground flex items-center gap-1.5">
+                    <span><span className="text-pink-400 font-semibold">{stats.pending_social_commissions_count}</span> pending payout{stats.pending_social_commissions_count !== 1 ? "s" : ""}</span>
+                    <span className="text-pink-400 opacity-0 group-hover/pay:opacity-100 transition-opacity">→</span>
+                  </p>
+                </div>
+                <div className="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-pink-500/10 border border-pink-500/20 shrink-0">
+                  <Instagram className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-pink-400" />
+                </div>
+              </div>
+            </Link>
+          )}
         </div>
       )}
 
