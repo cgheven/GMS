@@ -166,7 +166,7 @@ export function DashboardClient({ data, leadsSummary }: Props) {
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Net Profit</p>
               <p className={`mt-2 text-3xl font-bold leading-none break-words ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>
-                {isProfit ? "+" : ""}{format(stats.net_profit)}
+                {format(stats.net_profit)}
               </p>
               <p className="mt-2 text-xs text-muted-foreground">
                 {stats.monthly_collected > 0
@@ -291,7 +291,7 @@ export function DashboardClient({ data, leadsSummary }: Props) {
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground">=</span>
               <span className="text-muted-foreground">Net Profit</span>
-              <span className={`font-semibold ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>{isProfit ? "+" : ""}{format(stats.net_profit)}</span>
+              <span className={`font-semibold ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>{format(stats.net_profit)}</span>
             </div>
           </div>
         </div>

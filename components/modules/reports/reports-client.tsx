@@ -215,10 +215,10 @@ export function ReportsClient({ data }: Props) {
                 </div>
               </div>
               <p className={`text-2xl sm:text-3xl font-bold leading-none break-words ${totalProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                {totalProfit >= 0 ? "+" : ""}{format(totalProfit)}
+                {format(totalProfit)}
               </p>
               <p className={`text-xs font-semibold ${totalProfit >= 0 ? "text-emerald-400/70" : "text-rose-400/70"}`}>
-                {profitMargin >= 0 ? "+" : ""}{profitMargin}% margin
+                {profitMargin}% margin
               </p>
             </div>
 
@@ -290,8 +290,8 @@ export function ReportsClient({ data }: Props) {
                         <td className="px-3 sm:px-6 py-3">
                           <div className="flex items-center gap-2.5">
                             <span className="text-muted-foreground font-medium whitespace-nowrap">{m.month}</span>
-                            {isBest  && <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">Best</span>}
-                            {isWorst && <span className="text-[10px] font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded-full">Worst</span>}
+                            {isBest  && <span className="hidden sm:inline-block text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">Best</span>}
+                            {isWorst && <span className="hidden sm:inline-block text-[10px] font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded-full">Worst</span>}
                           </div>
                         </td>
                         <td className="px-3 sm:px-4 py-3 text-right">
@@ -312,7 +312,7 @@ export function ReportsClient({ data }: Props) {
                           </div>
                         </td>
                         <td className={`px-3 sm:px-6 py-3 text-right font-bold tabular-nums whitespace-nowrap ${m.profit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                          {m.profit >= 0 ? "+" : ""}{format(m.profit)}
+                          {format(m.profit)}
                         </td>
                       </tr>
                     );
@@ -331,7 +331,7 @@ export function ReportsClient({ data }: Props) {
                       </div>
                     </td>
                     <td className={`px-3 sm:px-6 py-3 text-right font-bold tabular-nums whitespace-nowrap ${totalProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                      {totalProfit >= 0 ? "+" : ""}{format(totalProfit)}
+                      {format(totalProfit)}
                     </td>
                   </tr>
                 </tfoot>
@@ -490,7 +490,7 @@ export function ReportsClient({ data }: Props) {
                               ? <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                               : <ArrowDownRight className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
                             <span className={`font-bold tabular-nums whitespace-nowrap ${t.netContribution >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                              {t.netContribution >= 0 ? "+" : ""}{format(t.netContribution)}
+                              {format(t.netContribution)}
                             </span>
                           </div>
                         </td>
@@ -512,7 +512,7 @@ export function ReportsClient({ data }: Props) {
                       </td>
                       <td className="px-3 sm:px-4 py-3 text-right font-bold text-rose-400 tabular-nums whitespace-nowrap hidden sm:table-cell">{format(totalTrainerCost)}</td>
                       <td className={`px-3 sm:px-6 py-3 text-right font-bold tabular-nums whitespace-nowrap ${totalNetContrib >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                        {totalNetContrib >= 0 ? "+" : ""}{format(totalNetContrib)}
+                        {format(totalNetContrib)}
                       </td>
                     </tr>
                   </tfoot>
