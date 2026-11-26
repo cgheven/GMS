@@ -453,61 +453,67 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
           {/* Collection stat cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {/* Total card */}
-            <button type="button" onClick={() => setMemberTrainerFilter("all")}
-              className={`flex flex-col gap-1 p-3 sm:p-4 rounded-2xl border text-left transition-all ${
-                memberTrainerFilter === "all"
-                  ? "border-primary/30 bg-primary/10"
-                  : "border-sidebar-border bg-card hover:border-primary/20 hover:bg-primary/5"
-              }`}>
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Total</p>
-              <p className={`text-base sm:text-lg font-bold leading-none ${collectionStats.totalDue > 0 ? "text-rose-400" : "text-foreground"}`}>
-                {format(collectionStats.totalDue)}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                <span className="text-rose-400/80">due</span>
-                {" · "}
-                <span className="text-emerald-400/80">{format(collectionStats.totalCollected)} collected</span>
-              </p>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-emerald-400">{collectionStats.totalPaid} paid</span>
-                {collectionStats.totalRemaining > 0 && <span className="text-rose-400">{collectionStats.totalRemaining} left</span>}
-              </div>
-              <div className="w-full bg-white/5 rounded-full h-1 mt-0.5">
-                <div className="bg-emerald-500 h-1 rounded-full transition-all"
-                  style={{ width: members.length ? `${(collectionStats.totalPaid / members.length) * 100}%` : "0%" }} />
-              </div>
-            </button>
+            {(() => {
+              const pct = members.length ? Math.round((collectionStats.totalPaid / members.length) * 100) : 0;
+              return (
+              <button type="button" onClick={() => setMemberTrainerFilter("all")}
+                className={`flex flex-col gap-2 p-3 rounded-2xl border text-left transition-all ${
+                  memberTrainerFilter === "all"
+                    ? "border-primary/30 bg-primary/10"
+                    : "border-sidebar-border bg-card hover:border-primary/20 hover:bg-primary/5"
+                }`}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider truncate">Total</p>
+                  <span className="text-[10px] font-semibold text-muted-foreground tabular-nums shrink-0">{collectionStats.totalPaid}/{members.length}</span>
+                </div>
+                <p className="text-base sm:text-lg font-bold text-emerald-400 leading-none">{format(collectionStats.totalCollected)}</p>
+                <div className="flex items-center gap-1.5">
+                  <div className="flex-1 bg-white/5 rounded-full h-1">
+                    <div className="bg-emerald-500 h-1 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">{pct}%</span>
+                </div>
+                <p className="text-[11px] leading-none">
+                  {collectionStats.totalDue > 0
+                    ? <span className="text-rose-400">{format(collectionStats.totalDue)} due · {collectionStats.totalRemaining} left</span>
+                    : <span className="text-emerald-400">All collected</span>}
+                </p>
+              </button>
+              );
+            })()}
 
             {/* Per-trainer + gym only cards */}
-            {collectionStats.groups.map((g) => (
+            {collectionStats.groups.map((g) => {
+              const pct = g.total ? Math.round((g.paid / g.total) * 100) : 0;
+              return (
               <button key={g.id} type="button"
                 onClick={() => setMemberTrainerFilter(memberTrainerFilter === g.id ? "all" : g.id)}
-                className={`flex flex-col gap-1 p-3 sm:p-4 rounded-2xl border text-left transition-all ${
+                className={`flex flex-col gap-2 p-3 rounded-2xl border text-left transition-all ${
                   memberTrainerFilter === g.id
                     ? "border-primary/30 bg-primary/10"
                     : "border-sidebar-border bg-card hover:border-primary/20 hover:bg-primary/5"
                 }`}>
-                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider truncate">
-                  {g.id === "none" ? "Gym Only" : g.label}
-                </p>
-                <p className={`text-base sm:text-lg font-bold leading-none ${g.due > 0 ? "text-rose-400" : "text-foreground"}`}>
-                  {format(g.due)}
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  <span className="text-rose-400/80">due</span>
-                  {" · "}
-                  <span className="text-emerald-400/80">{format(g.collected)}</span>
-                </p>
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-emerald-400">{g.paid}/{g.total} paid</span>
-                  {g.remaining > 0 && <span className="text-rose-400">{g.remaining} left</span>}
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider truncate">
+                    {g.id === "none" ? "Gym Only" : g.label}
+                  </p>
+                  <span className="text-[10px] font-semibold text-muted-foreground tabular-nums shrink-0">{g.paid}/{g.total}</span>
                 </div>
-                <div className="w-full bg-white/5 rounded-full h-1 mt-0.5">
-                  <div className="bg-emerald-500 h-1 rounded-full transition-all"
-                    style={{ width: g.total ? `${(g.paid / g.total) * 100}%` : "0%" }} />
+                <p className="text-base sm:text-lg font-bold text-emerald-400 leading-none">{format(g.collected)}</p>
+                <div className="flex items-center gap-1.5">
+                  <div className="flex-1 bg-white/5 rounded-full h-1">
+                    <div className="bg-emerald-500 h-1 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">{pct}%</span>
                 </div>
+                <p className="text-[11px] leading-none">
+                  {g.due > 0
+                    ? <span className="text-rose-400">{format(g.due)} due · {g.remaining} left</span>
+                    : <span className="text-emerald-400">All collected</span>}
+                </p>
               </button>
-            ))}
+              );
+            })}
           </div>
 
           {/* Search */}
