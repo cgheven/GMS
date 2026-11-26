@@ -2486,6 +2486,9 @@ type TimelineEvent = {
   // one long line that wraps badly in the narrow dialog. lines[0] is shown
   // emphasized; the rest are muted.
   lines?: string[];
+  // Structured payment detail for a clean, compact render (amount + method
+  // chip + plan · trainer). Preferred over `lines` when present.
+  pay?: { amount: string; method?: string; plan?: string; trainer?: string };
 };
 
 const TIMELINE_ICONS: Record<TimelineEvent["type"], { icon: React.ElementType; color: string; bg: string }> = {
@@ -2541,7 +2544,8 @@ function buildTimeline(member: Member, audits: AuditRow[], payments: TimelinePay
       if (!y || !m) return period || "Payment";
       return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
     })();
-    const method = (p.payment_method ?? "").replace("_", " ");
+    const methodRaw = (p.payment_method ?? "").replace(/_/g, " ").trim();
+    const method = methodRaw ? methodRaw.replace(/\b\w/g, (c) => c.toUpperCase()) : undefined;
     // Prefer the plan breakdown snapshotted on the payment (all plans that
     // month) over the single primary-plan join.
     const breakdown = (p as Payment & { plan_breakdown?: { name: string }[] | null }).plan_breakdown;
@@ -2549,18 +2553,19 @@ function buildTimeline(member: Member, audits: AuditRow[], payments: TimelinePay
       ? breakdown.map((b) => b.name).join(" + ")
       : p.plan?.name;
     const trainerName = p.trainer?.full_name;
-    const lines = [
-      `${fmt(p.total_amount)}${method ? ` (${method})` : ""}`,
-      planName ? `Plan:  ${planName}` : null,
-      trainerName ? `Trainer:  ${trainerName}` : null,
-    ].filter(Boolean) as string[];
+    const pay = {
+      amount: fmt(p.total_amount),
+      method,
+      plan: planName ?? undefined,
+      trainer: trainerName ?? undefined,
+    };
     events.push({
       id: p.id,
       date: p.payment_date ?? p.created_at,
       type: "payment",
       title: `Payment · ${label}`,
-      description: lines.join(" · "),
-      lines,
+      description: `${pay.amount}${method ? ` · ${method}` : ""}`,
+      pay,
     });
   }
 
@@ -2793,11 +2798,36 @@ function MemberTimelineDialog({ member, gymId, onClose }: { member: Member | nul
                         <cfg.icon className={`w-4 h-4 ${cfg.color}`} />
                       </div>
                       <div className="flex-1 min-w-0 pt-1.5">
-                        <div className="flex items-baseline gap-2 flex-wrap">
-                          <p className="text-sm font-semibold text-foreground">{ev.title}</p>
-                          <p className="text-xs text-muted-foreground">{formatDate(ev.date)}</p>
+                        <div className="flex items-baseline justify-between gap-2">
+                          <p className="text-sm font-semibold text-foreground truncate">{ev.title}</p>
+                          <p className="text-xs text-muted-foreground shrink-0">{formatDate(ev.date)}</p>
                         </div>
-                        {ev.lines ? (
+                        {ev.pay ? (
+                          <div className="mt-1.5 space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-bold text-foreground">{ev.pay.amount}</span>
+                              {ev.pay.method && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-white/5 border border-white/10 text-muted-foreground">
+                                  {ev.pay.method}
+                                </span>
+                              )}
+                              {isReceipt && (
+                                <button
+                                  type="button"
+                                  onClick={() => openReceipt(ev.id)}
+                                  className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline shrink-0"
+                                >
+                                  <CreditCard className="w-3 h-3" /> Receipt
+                                </button>
+                              )}
+                            </div>
+                            {(ev.pay.plan || ev.pay.trainer) && (
+                              <p className="text-xs text-muted-foreground truncate">
+                                {[ev.pay.plan, ev.pay.trainer].filter(Boolean).join(" · ")}
+                              </p>
+                            )}
+                          </div>
+                        ) : ev.lines ? (
                           <div className="mt-1 space-y-0.5">
                             {ev.lines.map((line, idx) => (
                               <p key={idx} className={`text-xs ${idx === 0 ? "text-foreground font-medium" : "text-muted-foreground"}`}>
@@ -2807,15 +2837,6 @@ function MemberTimelineDialog({ member, gymId, onClose }: { member: Member | nul
                           </div>
                         ) : (
                           <p className="text-xs text-muted-foreground mt-0.5">{ev.description}</p>
-                        )}
-                        {isReceipt && (
-                          <button
-                            type="button"
-                            onClick={() => openReceipt(ev.id)}
-                            className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
-                          >
-                            <CreditCard className="w-3 h-3" /> View receipt
-                          </button>
                         )}
                       </div>
                     </div>
