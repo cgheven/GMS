@@ -408,18 +408,18 @@ export function ReportsClient({ data }: Props) {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="rounded-2xl border border-sidebar-border bg-card p-5 space-y-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fee Generated</p>
-              <p className="text-3xl font-bold text-primary">{format(totalFeeGenerated)}</p>
+              <p className="text-2xl sm:text-3xl font-bold text-primary break-words">{format(totalFeeGenerated)}</p>
               <p className="text-xs text-muted-foreground">Sum of all active members&apos; fees across trainers</p>
             </div>
             <div className="rounded-2xl border border-sidebar-border bg-card p-5 space-y-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Trainer Cost</p>
-              <p className="text-3xl font-bold text-purple-400">{format(totalTrainerCost)}</p>
+              <p className="text-2xl sm:text-3xl font-bold text-purple-400 break-words">{format(totalTrainerCost)}</p>
               <p className="text-xs text-muted-foreground">Base salaries + commissions this month</p>
             </div>
             <div className={`rounded-2xl border p-5 space-y-2 ${totalNetContrib >= 0 ? "border-emerald-500/25 bg-emerald-500/[0.05]" : "border-rose-500/25 bg-rose-500/[0.05]"}`}>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Net Contribution</p>
-              <p className={`text-3xl font-bold ${totalNetContrib >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                {totalNetContrib >= 0 ? "+" : ""}{format(totalNetContrib)}
+              <p className={`text-2xl sm:text-3xl font-bold break-words ${totalNetContrib >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                {format(totalNetContrib)}
               </p>
               <p className="text-xs text-muted-foreground">Fee generated minus trainer costs</p>
             </div>
