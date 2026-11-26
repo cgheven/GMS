@@ -169,68 +169,67 @@ export function ReportsClient({ data }: Props) {
           {/* Range selector */}
           {RangeSelector}
 
-          {/* 4 KPI cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            <div className="rounded-2xl border border-sidebar-border bg-card p-4 sm:p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Collected</p>
-                <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-                  <TrendingUp className="w-4 h-4 text-primary" />
+          {/* 4 KPI tiles — compact 2-col on mobile */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {/* Collected */}
+            <div className="rounded-2xl border border-sidebar-border bg-card p-3 sm:p-5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Collected</p>
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                  <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                 </div>
               </div>
-              <p className="text-2xl sm:text-3xl font-bold leading-none break-words">{format(totalCollected)}</p>
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Collection rate</span>
-                  <span className="text-primary font-semibold">{avgCollectionRate}%</span>
-                </div>
-                <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+              <p className="mt-2 text-lg sm:text-2xl font-bold leading-none tabular-nums">{format(totalCollected)}</p>
+              <div className="mt-2.5 flex items-center gap-1.5">
+                <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
                   <div className="h-full bg-primary rounded-full" style={{ width: `${avgCollectionRate}%` }} />
                 </div>
+                <span className="text-[10px] text-primary font-semibold shrink-0">{avgCollectionRate}%</span>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-sidebar-border bg-card p-4 sm:p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expenses</p>
-                <div className="w-8 h-8 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
-                  <BarChart3 className="w-4 h-4 text-rose-400" />
+            {/* Expenses */}
+            <div className="rounded-2xl border border-sidebar-border bg-card p-3 sm:p-5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expenses</p>
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center shrink-0">
+                  <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-400" />
                 </div>
               </div>
-              <p className="text-2xl sm:text-3xl font-bold leading-none break-words">{format(totalExpenses)}</p>
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Ops <span className="text-rose-400 font-semibold">{format(totalOperating)}</span></span>
-                <span>·</span>
-                <span>Sal <span className="text-purple-400 font-semibold">{format(totalSalaries)}</span></span>
-              </div>
+              <p className="mt-2 text-lg sm:text-2xl font-bold leading-none tabular-nums">{format(totalExpenses)}</p>
+              <p className="mt-2.5 text-[10px] sm:text-xs text-muted-foreground truncate">
+                <span className="text-rose-400 font-semibold tabular-nums">{totalOperating.toLocaleString()}</span> ops · <span className="text-purple-400 font-semibold tabular-nums">{totalSalaries.toLocaleString()}</span> sal
+              </p>
             </div>
 
-            <div className={`rounded-2xl border p-4 sm:p-5 space-y-3 ${totalProfit >= 0 ? "border-emerald-500/25 bg-emerald-500/[0.05]" : "border-rose-500/25 bg-rose-500/[0.05]"}`}>
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Net Profit</p>
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${totalProfit >= 0 ? "bg-emerald-500/10 border-emerald-500/20" : "bg-rose-500/10 border-rose-500/20"}`}>
+            {/* Net Profit */}
+            <div className={`rounded-2xl border p-3 sm:p-5 ${totalProfit >= 0 ? "border-emerald-500/25 bg-emerald-500/[0.05]" : "border-rose-500/25 bg-rose-500/[0.05]"}`}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Net Profit</p>
+                <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center border shrink-0 ${totalProfit >= 0 ? "bg-emerald-500/10 border-emerald-500/20" : "bg-rose-500/10 border-rose-500/20"}`}>
                   {totalProfit >= 0
-                    ? <TrendingUp className="w-4 h-4 text-emerald-400" />
-                    : <TrendingDown className="w-4 h-4 text-rose-400" />}
+                    ? <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
+                    : <TrendingDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-400" />}
                 </div>
               </div>
-              <p className={`text-2xl sm:text-3xl font-bold leading-none break-words ${totalProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+              <p className={`mt-2 text-lg sm:text-2xl font-bold leading-none tabular-nums ${totalProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
                 {format(totalProfit)}
               </p>
-              <p className={`text-xs font-semibold ${totalProfit >= 0 ? "text-emerald-400/70" : "text-rose-400/70"}`}>
+              <p className={`mt-2.5 text-[10px] sm:text-xs font-semibold ${totalProfit >= 0 ? "text-emerald-400/80" : "text-rose-400/80"}`}>
                 {profitMargin}% margin
               </p>
             </div>
 
-            <div className="rounded-2xl border border-sidebar-border bg-card p-4 sm:p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Avg / Month</p>
-                <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
-                  <Activity className="w-4 h-4 text-purple-400" />
+            {/* Avg / Month */}
+            <div className="rounded-2xl border border-sidebar-border bg-card p-3 sm:p-5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Avg / Month</p>
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center shrink-0">
+                  <Activity className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
                 </div>
               </div>
-              <p className="text-2xl sm:text-3xl font-bold leading-none break-words">{format(avgMonthly)}</p>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <p className="mt-2 text-lg sm:text-2xl font-bold leading-none tabular-nums">{format(avgMonthly)}</p>
+              <div className="mt-2.5 flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground">
                 {bestMonth && <span className="text-emerald-400 font-medium">↑ {bestMonth.month}</span>}
                 {worstMonth && worstMonth.monthKey !== bestMonth?.monthKey && (
                   <span className="text-rose-400 font-medium">↓ {worstMonth.month}</span>
