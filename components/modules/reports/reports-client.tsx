@@ -170,15 +170,15 @@ export function ReportsClient({ data }: Props) {
           {RangeSelector}
 
           {/* 4 KPI cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="rounded-2xl border border-sidebar-border bg-card p-5 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="rounded-2xl border border-sidebar-border bg-card p-4 sm:p-5 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Collected</p>
                 <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
                   <TrendingUp className="w-4 h-4 text-primary" />
                 </div>
               </div>
-              <p className="text-3xl font-bold leading-none">{format(totalCollected)}</p>
+              <p className="text-2xl sm:text-3xl font-bold leading-none break-words">{format(totalCollected)}</p>
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>Collection rate</span>
@@ -190,14 +190,14 @@ export function ReportsClient({ data }: Props) {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-sidebar-border bg-card p-5 space-y-3">
+            <div className="rounded-2xl border border-sidebar-border bg-card p-4 sm:p-5 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expenses</p>
                 <div className="w-8 h-8 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
                   <BarChart3 className="w-4 h-4 text-rose-400" />
                 </div>
               </div>
-              <p className="text-3xl font-bold leading-none">{format(totalExpenses)}</p>
+              <p className="text-2xl sm:text-3xl font-bold leading-none break-words">{format(totalExpenses)}</p>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>Ops <span className="text-rose-400 font-semibold">{format(totalOperating)}</span></span>
                 <span>·</span>
@@ -205,7 +205,7 @@ export function ReportsClient({ data }: Props) {
               </div>
             </div>
 
-            <div className={`rounded-2xl border p-5 space-y-3 ${totalProfit >= 0 ? "border-emerald-500/25 bg-emerald-500/[0.05]" : "border-rose-500/25 bg-rose-500/[0.05]"}`}>
+            <div className={`rounded-2xl border p-4 sm:p-5 space-y-3 ${totalProfit >= 0 ? "border-emerald-500/25 bg-emerald-500/[0.05]" : "border-rose-500/25 bg-rose-500/[0.05]"}`}>
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Net Profit</p>
                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${totalProfit >= 0 ? "bg-emerald-500/10 border-emerald-500/20" : "bg-rose-500/10 border-rose-500/20"}`}>
@@ -214,7 +214,7 @@ export function ReportsClient({ data }: Props) {
                     : <TrendingDown className="w-4 h-4 text-rose-400" />}
                 </div>
               </div>
-              <p className={`text-3xl font-bold leading-none ${totalProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+              <p className={`text-2xl sm:text-3xl font-bold leading-none break-words ${totalProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
                 {totalProfit >= 0 ? "+" : ""}{format(totalProfit)}
               </p>
               <p className={`text-xs font-semibold ${totalProfit >= 0 ? "text-emerald-400/70" : "text-rose-400/70"}`}>
@@ -222,14 +222,14 @@ export function ReportsClient({ data }: Props) {
               </p>
             </div>
 
-            <div className="rounded-2xl border border-sidebar-border bg-card p-5 space-y-3">
+            <div className="rounded-2xl border border-sidebar-border bg-card p-4 sm:p-5 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Avg / Month</p>
                 <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
                   <Activity className="w-4 h-4 text-purple-400" />
                 </div>
               </div>
-              <p className="text-3xl font-bold leading-none">{format(avgMonthly)}</p>
+              <p className="text-2xl sm:text-3xl font-bold leading-none break-words">{format(avgMonthly)}</p>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 {bestMonth && <span className="text-emerald-400 font-medium">↑ {bestMonth.month}</span>}
                 {worstMonth && worstMonth.monthKey !== bestMonth?.monthKey && (
@@ -272,12 +272,12 @@ export function ReportsClient({ data }: Props) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-sidebar-border">
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Month</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Collected</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Operating</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Salaries</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Members</th>
-                    <th className="text-right px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Net Profit</th>
+                    <th className="text-left px-3 sm:px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Month</th>
+                    <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Collected</th>
+                    <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Operating</th>
+                    <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Salaries</th>
+                    <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Members</th>
+                    <th className="text-right px-3 sm:px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Net Profit</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-sidebar-border/50">
@@ -287,31 +287,31 @@ export function ReportsClient({ data }: Props) {
                     const barPct  = Math.round((m.collected / maxCollected) * 100);
                     return (
                       <tr key={m.monthKey} className={`transition-colors ${isBest ? "bg-emerald-500/[0.04]" : isWorst ? "bg-rose-500/[0.04]" : "hover:bg-white/[0.02]"}`}>
-                        <td className="px-6 py-3">
+                        <td className="px-3 sm:px-6 py-3">
                           <div className="flex items-center gap-2.5">
-                            <span className="text-muted-foreground font-medium">{m.month}</span>
+                            <span className="text-muted-foreground font-medium whitespace-nowrap">{m.month}</span>
                             {isBest  && <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">Best</span>}
                             {isWorst && <span className="text-[10px] font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded-full">Worst</span>}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-3 sm:px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-3">
                             <div className="hidden sm:block w-20 h-1.5 rounded-full bg-white/10 overflow-hidden">
                               <div className="h-full bg-primary/50 rounded-full" style={{ width: `${barPct}%` }} />
                             </div>
-                            <span className="text-primary font-semibold tabular-nums">{format(m.collected)}</span>
+                            <span className="text-primary font-semibold tabular-nums whitespace-nowrap">{format(m.collected)}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-right text-rose-400 tabular-nums hidden md:table-cell">{format(Math.max(0, m.expenses - m.salaries))}</td>
-                        <td className="px-4 py-3 text-right text-purple-400 tabular-nums hidden md:table-cell">{format(m.salaries)}</td>
-                        <td className="px-4 py-3 text-right hidden sm:table-cell">
+                        <td className="px-3 sm:px-4 py-3 text-right text-rose-400 tabular-nums hidden md:table-cell">{format(Math.max(0, m.expenses - m.salaries))}</td>
+                        <td className="px-3 sm:px-4 py-3 text-right text-purple-400 tabular-nums hidden md:table-cell">{format(m.salaries)}</td>
+                        <td className="px-3 sm:px-4 py-3 text-right hidden sm:table-cell">
                           <div className="flex items-center justify-end gap-2 text-xs">
                             {m.newMembers > 0 && <span className="text-emerald-400 font-medium">+{m.newMembers}</span>}
                             {m.cancelledMembers > 0 && <span className="text-rose-400 font-medium">-{m.cancelledMembers}</span>}
                             {m.newMembers === 0 && m.cancelledMembers === 0 && <span className="text-muted-foreground">—</span>}
                           </div>
                         </td>
-                        <td className={`px-6 py-3 text-right font-bold tabular-nums ${m.profit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                        <td className={`px-3 sm:px-6 py-3 text-right font-bold tabular-nums whitespace-nowrap ${m.profit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
                           {m.profit >= 0 ? "+" : ""}{format(m.profit)}
                         </td>
                       </tr>
@@ -320,17 +320,17 @@ export function ReportsClient({ data }: Props) {
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-sidebar-border">
-                    <td className="px-6 py-3 text-sm font-semibold text-muted-foreground">Total</td>
-                    <td className="px-4 py-3 text-right font-bold text-primary tabular-nums">{format(totalCollected)}</td>
-                    <td className="px-4 py-3 text-right font-bold text-rose-400 tabular-nums hidden md:table-cell">{format(totalOperating)}</td>
-                    <td className="px-4 py-3 text-right font-bold text-purple-400 tabular-nums hidden md:table-cell">{format(totalSalaries)}</td>
-                    <td className="px-4 py-3 text-right hidden sm:table-cell">
+                    <td className="px-3 sm:px-6 py-3 text-sm font-semibold text-muted-foreground">Total</td>
+                    <td className="px-3 sm:px-4 py-3 text-right font-bold text-primary tabular-nums whitespace-nowrap">{format(totalCollected)}</td>
+                    <td className="px-3 sm:px-4 py-3 text-right font-bold text-rose-400 tabular-nums hidden md:table-cell">{format(totalOperating)}</td>
+                    <td className="px-3 sm:px-4 py-3 text-right font-bold text-purple-400 tabular-nums hidden md:table-cell">{format(totalSalaries)}</td>
+                    <td className="px-3 sm:px-4 py-3 text-right hidden sm:table-cell">
                       <div className="flex items-center justify-end gap-2 text-xs font-semibold">
                         {totalNewMembers > 0 && <span className="text-emerald-400">+{totalNewMembers}</span>}
                         {totalCancelledMembers > 0 && <span className="text-rose-400">-{totalCancelledMembers}</span>}
                       </div>
                     </td>
-                    <td className={`px-6 py-3 text-right font-bold tabular-nums ${totalProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                    <td className={`px-3 sm:px-6 py-3 text-right font-bold tabular-nums whitespace-nowrap ${totalProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
                       {totalProfit >= 0 ? "+" : ""}{format(totalProfit)}
                     </td>
                   </tr>
@@ -449,47 +449,47 @@ export function ReportsClient({ data }: Props) {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-sidebar-border">
-                      <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Trainer</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Members</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fee Generated</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Base Salary</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Commission</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total Cost</th>
-                      <th className="text-right px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Net Contrib.</th>
+                      <th className="text-left px-3 sm:px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Trainer</th>
+                      <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Members</th>
+                      <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fee Generated</th>
+                      <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Base Salary</th>
+                      <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Commission</th>
+                      <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Total Cost</th>
+                      <th className="text-right px-3 sm:px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Net Contrib.</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-sidebar-border/50">
                     {trainerRows.map((t) => (
                       <tr key={t.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="px-6 py-3">
+                        <td className="px-3 sm:px-6 py-3">
                           <div className="flex items-center gap-2.5">
                             <div className="w-7 h-7 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0">
                               {t.name.charAt(0).toUpperCase()}
                             </div>
-                            <span className="font-medium">{t.name}</span>
+                            <span className="font-medium whitespace-nowrap">{t.name}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-3 sm:px-4 py-3 text-right">
                           <span className={`text-sm font-semibold tabular-nums ${t.activeMembers === 0 ? "text-muted-foreground" : "text-foreground"}`}>
                             {t.activeMembers}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-right text-primary font-semibold tabular-nums">
+                        <td className="px-3 sm:px-4 py-3 text-right text-primary font-semibold tabular-nums whitespace-nowrap">
                           {t.monthlyFeeGenerated > 0 ? format(t.monthlyFeeGenerated) : <span className="text-muted-foreground">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-right text-purple-400 tabular-nums hidden md:table-cell">{format(t.baseSalary)}</td>
-                        <td className="px-4 py-3 text-right tabular-nums hidden md:table-cell">
+                        <td className="px-3 sm:px-4 py-3 text-right text-purple-400 tabular-nums hidden md:table-cell">{format(t.baseSalary)}</td>
+                        <td className="px-3 sm:px-4 py-3 text-right tabular-nums hidden md:table-cell">
                           {t.commissionEarned > 0
                             ? <span className="text-amber-400">{format(t.commissionEarned)}</span>
                             : <span className="text-muted-foreground">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-right text-rose-400 font-semibold tabular-nums">{format(t.totalCost)}</td>
-                        <td className="px-6 py-3 text-right">
+                        <td className="px-3 sm:px-4 py-3 text-right text-rose-400 font-semibold tabular-nums whitespace-nowrap hidden sm:table-cell">{format(t.totalCost)}</td>
+                        <td className="px-3 sm:px-6 py-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             {t.netContribution >= 0
                               ? <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                               : <ArrowDownRight className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
-                            <span className={`font-bold tabular-nums ${t.netContribution >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                            <span className={`font-bold tabular-nums whitespace-nowrap ${t.netContribution >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
                               {t.netContribution >= 0 ? "+" : ""}{format(t.netContribution)}
                             </span>
                           </div>
@@ -499,19 +499,19 @@ export function ReportsClient({ data }: Props) {
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-sidebar-border bg-white/[0.01]">
-                      <td className="px-6 py-3 text-sm font-semibold text-muted-foreground">Total</td>
-                      <td className="px-4 py-3 text-right font-bold tabular-nums">
+                      <td className="px-3 sm:px-6 py-3 text-sm font-semibold text-muted-foreground">Total</td>
+                      <td className="px-3 sm:px-4 py-3 text-right font-bold tabular-nums">
                         {trainerRows.reduce((s, t) => s + t.activeMembers, 0)}
                       </td>
-                      <td className="px-4 py-3 text-right font-bold text-primary tabular-nums">{format(totalFeeGenerated)}</td>
-                      <td className="px-4 py-3 text-right font-bold text-purple-400 tabular-nums hidden md:table-cell">
+                      <td className="px-3 sm:px-4 py-3 text-right font-bold text-primary tabular-nums whitespace-nowrap">{format(totalFeeGenerated)}</td>
+                      <td className="px-3 sm:px-4 py-3 text-right font-bold text-purple-400 tabular-nums hidden md:table-cell">
                         {format(trainerRows.reduce((s, t) => s + t.baseSalary, 0))}
                       </td>
-                      <td className="px-4 py-3 text-right font-bold text-amber-400 tabular-nums hidden md:table-cell">
+                      <td className="px-3 sm:px-4 py-3 text-right font-bold text-amber-400 tabular-nums hidden md:table-cell">
                         {format(trainerRows.reduce((s, t) => s + t.commissionEarned, 0))}
                       </td>
-                      <td className="px-4 py-3 text-right font-bold text-rose-400 tabular-nums">{format(totalTrainerCost)}</td>
-                      <td className={`px-6 py-3 text-right font-bold tabular-nums ${totalNetContrib >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                      <td className="px-3 sm:px-4 py-3 text-right font-bold text-rose-400 tabular-nums whitespace-nowrap hidden sm:table-cell">{format(totalTrainerCost)}</td>
+                      <td className={`px-3 sm:px-6 py-3 text-right font-bold tabular-nums whitespace-nowrap ${totalNetContrib >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
                         {totalNetContrib >= 0 ? "+" : ""}{format(totalNetContrib)}
                       </td>
                     </tr>
@@ -545,13 +545,13 @@ export function ReportsClient({ data }: Props) {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-sidebar-border">
-                        <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Trainer</th>
-                        <th className="text-center px-4 py-3 text-xs font-semibold text-emerald-400 uppercase tracking-wider">Gained</th>
-                        <th className="text-center px-4 py-3 text-xs font-semibold text-rose-400 uppercase tracking-wider">Lost</th>
-                        <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Net</th>
-                        <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Avg Gained<span className="font-normal ml-1">(6mo)</span></th>
-                        <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Avg Lost<span className="font-normal ml-1">(6mo)</span></th>
-                        <th className="text-center px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Avg Net<span className="font-normal ml-1">(6mo)</span></th>
+                        <th className="text-left px-3 sm:px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Trainer</th>
+                        <th className="text-center px-3 sm:px-4 py-3 text-xs font-semibold text-emerald-400 uppercase tracking-wider">Gained</th>
+                        <th className="text-center px-3 sm:px-4 py-3 text-xs font-semibold text-rose-400 uppercase tracking-wider">Lost</th>
+                        <th className="text-center px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Net</th>
+                        <th className="text-center px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Avg Gained<span className="font-normal ml-1">(6mo)</span></th>
+                        <th className="text-center px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Avg Lost<span className="font-normal ml-1">(6mo)</span></th>
+                        <th className="text-center px-3 sm:px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Avg Net<span className="font-normal ml-1">(6mo)</span></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-sidebar-border/50">
@@ -559,7 +559,7 @@ export function ReportsClient({ data }: Props) {
                         const m = t.months.find((x) => x.monthKey === selectedKey) ?? { gained: 0, lost: 0, net: 0 };
                         return (
                           <tr key={t.id} className="hover:bg-white/[0.02] transition-colors">
-                            <td className="px-6 py-3">
+                            <td className="px-3 sm:px-6 py-3">
                               <div className="flex items-center gap-2.5">
                                 <div className="w-7 h-7 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0">
                                   {t.name.charAt(0).toUpperCase()}
@@ -567,28 +567,28 @@ export function ReportsClient({ data }: Props) {
                                 <span className="font-medium">{t.name}</span>
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-center">
+                            <td className="px-3 sm:px-4 py-3 text-center">
                               <span className={`inline-flex items-center justify-center gap-1 text-sm font-bold tabular-nums ${m.gained > 0 ? "text-emerald-400" : "text-muted-foreground"}`}>
                                 {m.gained > 0 && <ArrowUpRight className="w-3.5 h-3.5" />}{m.gained}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-center">
+                            <td className="px-3 sm:px-4 py-3 text-center">
                               <span className={`inline-flex items-center justify-center gap-1 text-sm font-bold tabular-nums ${m.lost > 0 ? "text-rose-400" : "text-muted-foreground"}`}>
                                 {m.lost > 0 && <ArrowDownRight className="w-3.5 h-3.5" />}{m.lost}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-center">
+                            <td className="px-3 sm:px-4 py-3 text-center">
                               <span className={`text-sm font-bold tabular-nums ${m.net > 0 ? "text-emerald-400" : m.net < 0 ? "text-rose-400" : "text-muted-foreground"}`}>
                                 {m.net > 0 ? "+" : ""}{m.net}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-center hidden md:table-cell">
+                            <td className="px-3 sm:px-4 py-3 text-center hidden md:table-cell">
                               <span className={`text-sm tabular-nums ${t.avgGained > 0 ? "text-emerald-400/70" : "text-muted-foreground"}`}>{t.avgGained}</span>
                             </td>
-                            <td className="px-4 py-3 text-center hidden md:table-cell">
+                            <td className="px-3 sm:px-4 py-3 text-center hidden md:table-cell">
                               <span className={`text-sm tabular-nums ${t.avgLost > 0 ? "text-rose-400/70" : "text-muted-foreground"}`}>{t.avgLost}</span>
                             </td>
-                            <td className="px-6 py-3 text-center hidden md:table-cell">
+                            <td className="px-3 sm:px-6 py-3 text-center hidden md:table-cell">
                               <span className={`text-sm font-semibold tabular-nums ${t.avgNet > 0 ? "text-emerald-400/70" : t.avgNet < 0 ? "text-rose-400/70" : "text-muted-foreground"}`}>
                                 {t.avgNet > 0 ? "+" : ""}{t.avgNet}
                               </span>
@@ -615,17 +615,17 @@ export function ReportsClient({ data }: Props) {
               { label: "Defaulters", value: memberSummary.defaulters, icon: AlertTriangle, color: "text-amber-400",   bg: "bg-amber-500/10 border-amber-500/20" },
               { label: "Lapsed",     value: memberSummary.lapsed,     icon: UserX,         color: "text-rose-400",    bg: "bg-rose-500/10 border-rose-500/20" },
             ].map(({ label, value, icon: Icon, color, bg }) => (
-              <div key={label} className="rounded-2xl border border-sidebar-border bg-card p-5 space-y-3">
+              <div key={label} className="rounded-2xl border border-sidebar-border bg-card p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
                   <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${bg}`}>
                     <Icon className={`w-4 h-4 ${color}`} />
                   </div>
                 </div>
-                <p className={`text-3xl font-bold ${color}`}>{value}</p>
+                <p className={`text-2xl sm:text-3xl font-bold ${color}`}>{value}</p>
               </div>
             ))}
-            <div className="rounded-2xl border border-sidebar-border bg-card p-5 space-y-3">
+            <div className="rounded-2xl border border-sidebar-border bg-card p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">New This Month</p>
                 <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
@@ -633,7 +633,7 @@ export function ReportsClient({ data }: Props) {
                 </div>
               </div>
               <div className="flex items-baseline gap-1.5">
-                <p className="text-3xl font-bold">{memberSummary.newThisMonth}</p>
+                <p className="text-2xl sm:text-3xl font-bold">{memberSummary.newThisMonth}</p>
                 {memberSummary.newLastMonth > 0 && (
                   <span className={`text-xs font-semibold ${memberSummary.newThisMonth >= memberSummary.newLastMonth ? "text-emerald-400" : "text-rose-400"}`}>
                     {memberSummary.newThisMonth >= memberSummary.newLastMonth ? "↑" : "↓"} {memberSummary.newLastMonth}
@@ -641,7 +641,7 @@ export function ReportsClient({ data }: Props) {
                 )}
               </div>
             </div>
-            <div className="rounded-2xl border border-sidebar-border bg-card p-5 space-y-3">
+            <div className="rounded-2xl border border-sidebar-border bg-card p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total Members</p>
                 <div className="w-8 h-8 rounded-xl bg-white/5 border border-sidebar-border flex items-center justify-center">
@@ -649,7 +649,7 @@ export function ReportsClient({ data }: Props) {
                 </div>
               </div>
               <div className="flex items-baseline gap-1.5">
-                <p className="text-3xl font-bold">{memberSummary.total}</p>
+                <p className="text-2xl sm:text-3xl font-bold">{memberSummary.total}</p>
                 <span className="text-xs text-muted-foreground">
                   {memberSummary.total > 0 ? `${Math.round((memberSummary.active / memberSummary.total) * 100)}% active` : ""}
                 </span>
@@ -684,14 +684,14 @@ export function ReportsClient({ data }: Props) {
                   <tbody className="divide-y divide-sidebar-border/50">
                     {memberSummary.defaulterList.slice(0, 10).map((d) => (
                       <tr key={d.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="px-6 py-3">
+                        <td className="px-3 sm:px-6 py-3">
                           <p className="font-medium text-sm">{d.name}</p>
                           {d.phone && <p className="text-xs text-muted-foreground">{d.phone}</p>}
                         </td>
-                        <td className="px-4 py-3 text-right text-xs text-muted-foreground hidden sm:table-cell">
+                        <td className="px-3 sm:px-4 py-3 text-right text-xs text-muted-foreground hidden sm:table-cell">
                           {d.defaulterSince ? formatDate(d.defaulterSince) : "—"}
                         </td>
-                        <td className="px-6 py-3 text-right text-amber-400 font-semibold tabular-nums text-sm">
+                        <td className="px-3 sm:px-6 py-3 text-right text-amber-400 font-semibold tabular-nums text-sm">
                           {format(d.monthlyFee)}
                         </td>
                       </tr>
@@ -740,7 +740,7 @@ export function ReportsClient({ data }: Props) {
             ) : (
               <div className="divide-y divide-sidebar-border/50">
                 {memberSummary.expiringIn7Days.slice(0, 10).map((m) => (
-                  <div key={m.id} className="flex items-center justify-between px-6 py-3 hover:bg-white/[0.02] transition-colors">
+                  <div key={m.id} className="flex items-center justify-between px-3 sm:px-6 py-3 hover:bg-white/[0.02] transition-colors">
                     <div className="flex items-center gap-3">
                       <div className="w-7 h-7 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-xs font-bold text-rose-400 shrink-0">
                         {m.name.charAt(0).toUpperCase()}
@@ -778,7 +778,7 @@ export function ReportsClient({ data }: Props) {
             ) : (
               <div className="divide-y divide-sidebar-border/50">
                 {memberSummary.planDistribution.map((p, i) => (
-                  <div key={p.planId ?? "__none__"} className="px-6 py-3 space-y-1.5">
+                  <div key={p.planId ?? "__none__"} className="px-3 sm:px-6 py-3 space-y-1.5">
                     <div className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2">
                         {i === 0 && <span className="text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded-full">Top</span>}
@@ -994,10 +994,10 @@ function DiscountsPanel({ discounts }: { discounts: DiscountReport | undefined }
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-sidebar-border">
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Month</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total Discount</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Payments</th>
-                  <th className="text-right px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Members</th>
+                  <th className="text-left px-3 sm:px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Month</th>
+                  <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total Discount</th>
+                  <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Payments</th>
+                  <th className="text-right px-3 sm:px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Members</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-sidebar-border/50">
@@ -1056,12 +1056,12 @@ function DiscountsPanel({ discounts }: { discounts: DiscountReport | undefined }
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-sidebar-border">
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Member</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Realized</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Promised</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Payments</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Avg / Payment</th>
-                  <th className="text-right px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Last Discount</th>
+                  <th className="text-left px-3 sm:px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Member</th>
+                  <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Realized</th>
+                  <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Promised</th>
+                  <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Payments</th>
+                  <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Avg / Payment</th>
+                  <th className="text-right px-3 sm:px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Last Discount</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-sidebar-border/50">
@@ -1069,7 +1069,7 @@ function DiscountsPanel({ discounts }: { discounts: DiscountReport | undefined }
                   const barPct = Math.round((r.totalDiscount / maxDiscount) * 100);
                   return (
                     <tr key={r.memberId} className="hover:bg-white/[0.02] transition-colors">
-                      <td className="px-6 py-3">
+                      <td className="px-3 sm:px-6 py-3">
                         <div className="flex items-center gap-2.5">
                           <div className="w-7 h-7 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-xs font-bold text-amber-400 shrink-0">
                             {r.memberName.charAt(0).toUpperCase()}
@@ -1082,7 +1082,7 @@ function DiscountsPanel({ discounts }: { discounts: DiscountReport | undefined }
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-3 sm:px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-3">
                           <div className="hidden sm:block w-20 h-1.5 rounded-full bg-white/10 overflow-hidden">
                             <div className="h-full bg-amber-400/60 rounded-full" style={{ width: `${barPct}%` }} />
@@ -1094,23 +1094,23 @@ function DiscountsPanel({ discounts }: { discounts: DiscountReport | undefined }
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
+                      <td className="px-3 sm:px-4 py-3 text-right tabular-nums">
                         {r.pendingDiscount > 0 ? (
                           <span className="text-sky-400 font-semibold">{format(r.pendingDiscount)}</span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums hidden sm:table-cell">
+                      <td className="px-3 sm:px-4 py-3 text-right tabular-nums hidden sm:table-cell">
                         <span className="text-foreground font-semibold">{r.discountCount}</span>
                         {r.totalPayments > r.discountCount && (
                           <span className="text-muted-foreground"> / {r.totalPayments}</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right text-muted-foreground tabular-nums hidden md:table-cell">
+                      <td className="px-3 sm:px-4 py-3 text-right text-muted-foreground tabular-nums hidden md:table-cell">
                         {format(r.avgDiscount)}
                       </td>
-                      <td className="px-6 py-3 text-right text-xs text-muted-foreground hidden md:table-cell">
+                      <td className="px-3 sm:px-6 py-3 text-right text-xs text-muted-foreground hidden md:table-cell">
                         {r.lastDiscountDate ? formatDate(r.lastDiscountDate) : "—"}
                       </td>
                     </tr>
@@ -1119,16 +1119,16 @@ function DiscountsPanel({ discounts }: { discounts: DiscountReport | undefined }
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-sidebar-border">
-                  <td className="px-6 py-3 text-xs font-semibold text-muted-foreground">
+                  <td className="px-3 sm:px-6 py-3 text-xs font-semibold text-muted-foreground">
                     {rows.length} member{rows.length !== 1 ? "s" : ""}{search && ` (filtered)`}
                   </td>
-                  <td className="px-4 py-3 text-right font-bold text-emerald-400 tabular-nums">
+                  <td className="px-3 sm:px-4 py-3 text-right font-bold text-emerald-400 tabular-nums">
                     {format(rows.reduce((s, r) => s + r.realizedDiscount, 0))}
                   </td>
-                  <td className="px-4 py-3 text-right font-bold text-sky-400 tabular-nums">
+                  <td className="px-3 sm:px-4 py-3 text-right font-bold text-sky-400 tabular-nums">
                     {format(rows.reduce((s, r) => s + r.pendingDiscount, 0))}
                   </td>
-                  <td className="px-4 py-3 text-right font-bold tabular-nums hidden sm:table-cell">
+                  <td className="px-3 sm:px-4 py-3 text-right font-bold tabular-nums hidden sm:table-cell">
                     {rows.reduce((s, r) => s + r.discountCount, 0)}
                   </td>
                   <td className="hidden md:table-cell" />
