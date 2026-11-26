@@ -224,24 +224,21 @@ export function PlansClient({ gymId, plans: initialPlans }: Props) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-4">
         {[
           { label: "Total",   sub: "Plans",     value: stats.total,        icon: Dumbbell, color: "text-primary",     bg: "bg-primary/10 border border-primary/20" },
           { label: "Active",  sub: "Plans",     value: stats.active,       icon: Check,    color: "text-emerald-400", bg: "bg-emerald-500/10 border border-emerald-500/20" },
-          { label: "Members", sub: "Enrolled",  value: stats.totalMembers, icon: Users,    color: "text-blue-400",    bg: "bg-blue-500/10 border border-blue-500/20" },
         ].map(({ label, sub, value, icon: Icon, color, bg }) => (
-          <div key={label} className="rounded-2xl border border-sidebar-border bg-card p-3 sm:p-5">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-              <div className={`flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${bg} shrink-0`}>
+          <div key={label} className="rounded-xl sm:rounded-2xl border border-sidebar-border bg-card p-2.5 sm:p-5">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className={`flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl ${bg} shrink-0`}>
                 <Icon className={`w-4 h-4 ${color}`} />
               </div>
               <div className="min-w-0">
-                <p className="text-[11px] sm:text-xs text-muted-foreground leading-tight">
-                  {label}
-                  <span className="hidden sm:inline"> {sub}</span>
-                  <span className="sm:hidden block opacity-70">{sub}</span>
+                <p className="text-lg sm:text-2xl font-bold text-foreground leading-none">{value}</p>
+                <p className="text-[11px] sm:text-xs text-muted-foreground leading-tight mt-0.5 sm:mt-1 truncate">
+                  {label}<span className="hidden sm:inline"> {sub}</span>
                 </p>
-                <p className="text-xl sm:text-2xl font-bold text-foreground leading-none mt-1 sm:mt-0.5">{value}</p>
               </div>
             </div>
           </div>
@@ -271,128 +268,90 @@ export function PlansClient({ gymId, plans: initialPlans }: Props) {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filtered.map((plan) => (
-            <Card
+            <div
               key={plan.id}
-              className="hover:shadow-md transition-shadow card-hover overflow-hidden"
+              className="group relative rounded-2xl border border-sidebar-border bg-card overflow-hidden transition-colors hover:border-white/20"
               style={{ borderTopColor: plan.color, borderTopWidth: 3 }}
             >
-              <CardHeader className="pb-2">
+              {/* Header — name, status, and price over a subtle plan-color tint */}
+              <div
+                className="p-3.5 sm:p-5"
+                style={{ background: `linear-gradient(to bottom, ${plan.color}12, transparent)` }}
+              >
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span
-                      className="inline-block w-3 h-3 rounded-full shrink-0"
-                      style={{ backgroundColor: plan.color }}
-                    />
-                    <CardTitle className="text-base truncate">{plan.name}</CardTitle>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: plan.color }} />
+                      <h3 className="text-base font-semibold text-foreground truncate">{plan.name}</h3>
+                    </div>
+                    <p className={`flex items-center gap-1 text-[11px] sm:text-xs mt-1 ${DURATION_COLORS[plan.duration_type]}`}>
+                      <Clock className="w-3 h-3 shrink-0" />
+                      {DURATION_LABELS[plan.duration_type]}
+                      {plan.duration_days && <span className="text-muted-foreground">· {plan.duration_days}d</span>}
+                    </p>
                   </div>
-                  <Badge variant={plan.is_active ? "success" : "secondary"} className="text-xs shrink-0">
+                  <Badge variant={plan.is_active ? "success" : "secondary"} className="text-[10px] shrink-0">
                     {plan.is_active ? "Active" : "Inactive"}
                   </Badge>
                 </div>
-                <div className={`flex items-center gap-1 text-xs mt-1 ${DURATION_COLORS[plan.duration_type]}`}>
-                  <Clock className="w-3 h-3" />
-                  {DURATION_LABELS[plan.duration_type]}
-                  {plan.duration_days && <span className="text-muted-foreground">({plan.duration_days}d)</span>}
-                </div>
-                {/* Plan ID — short prefix + copy button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(plan.id);
-                    toast({ title: "Plan ID copied", description: plan.id });
-                  }}
-                  title="Click to copy full Plan ID"
-                  className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors group/id self-start"
-                >
-                  <span className="opacity-60">ID:</span>
-                  <span>{plan.id.slice(0, 8)}…{plan.id.slice(-4)}</span>
-                  <Copy className="w-2.5 h-2.5 opacity-50 group-hover/id:opacity-100" />
-                </button>
-              </CardHeader>
 
-              <CardContent className="space-y-3">
-                {/* Price */}
-                <div className="space-y-1">
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-2xl font-bold text-foreground">{format(plan.price)}</span>
-                    <span className="text-xs text-muted-foreground">
-                      /{plan.duration_type === "monthly" ? "mo" : plan.duration_type === "annual" ? "yr" : "plan"}
-                    </span>
-                  </div>
+                <div className="mt-2.5 flex items-baseline gap-1">
+                  <span className="text-2xl sm:text-3xl font-bold text-foreground leading-none">{format(plan.price)}</span>
+                  <span className="text-xs text-muted-foreground">
+                    /{plan.duration_type === "monthly" ? "mo" : plan.duration_type === "annual" ? "yr" : "plan"}
+                  </span>
                   {plan.admission_fee > 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      + {format(plan.admission_fee)} admission fee
-                    </p>
+                    <span className="ml-auto text-[11px] text-muted-foreground">+{format(plan.admission_fee)} adm.</span>
                   )}
                 </div>
+              </div>
 
-                {/* Features */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground flex items-center gap-1">
-                      <Star className="w-3 h-3" /> Personal Training
-                    </span>
-                    {plan.includes_pt ? (
-                      <span className="text-emerald-400 flex items-center gap-0.5 text-xs font-medium">
-                        <Check className="w-3 h-3" /> Included
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">Not included</span>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground flex items-center gap-1">
-                      <Infinity className="w-3 h-3" /> Unlimited Classes
-                    </span>
-                    {plan.unlimited_classes ? (
-                      <span className="text-emerald-400 flex items-center gap-0.5 text-xs font-medium">
-                        <Check className="w-3 h-3" /> Yes
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">No</span>
-                    )}
-                  </div>
-                  {plan.access_hours && (
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Access Hours</span>
-                      <span className="text-xs font-medium text-foreground">{plan.access_hours}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground flex items-center gap-1">
-                      <Users className="w-3 h-3" /> Active Members
-                    </span>
-                    <span className="text-xs font-bold text-foreground">{plan.member_count ?? 0}</span>
-                  </div>
+              {/* Features */}
+              <div className="px-3.5 sm:px-5 pb-3.5 sm:pb-5 pt-1 space-y-2">
+                <div className="h-px bg-sidebar-border/60 mb-2.5" />
+
+                <div className="flex items-center justify-between text-xs sm:text-sm gap-2">
+                  <span className="text-muted-foreground flex items-center gap-1.5 min-w-0"><Star className="w-3.5 h-3.5 shrink-0" /> Personal Training</span>
+                  {plan.includes_pt
+                    ? <span className="text-emerald-400 font-medium flex items-center gap-0.5 shrink-0"><Check className="w-3.5 h-3.5" /> Included</span>
+                    : <span className="text-muted-foreground/50 shrink-0">—</span>}
                 </div>
+                <div className="flex items-center justify-between text-xs sm:text-sm gap-2">
+                  <span className="text-muted-foreground flex items-center gap-1.5 min-w-0"><Infinity className="w-3.5 h-3.5 shrink-0" /> Unlimited Classes</span>
+                  {plan.unlimited_classes
+                    ? <span className="text-emerald-400 font-medium flex items-center gap-0.5 shrink-0"><Check className="w-3.5 h-3.5" /> Yes</span>
+                    : <span className="text-muted-foreground/50 shrink-0">—</span>}
+                </div>
+                {plan.access_hours && (
+                  <div className="flex items-center justify-between text-xs sm:text-sm gap-2">
+                    <span className="text-muted-foreground flex items-center gap-1.5 min-w-0"><Clock className="w-3.5 h-3.5 shrink-0" /> Access Hours</span>
+                    <span className="font-medium text-foreground shrink-0">{plan.access_hours === "all_hours" ? "24/7" : plan.access_hours}</span>
+                  </div>
+                )}
 
                 {plan.description && (
-                  <p className="text-xs text-muted-foreground line-clamp-2 border-t border-border pt-2">
-                    {plan.description}
-                  </p>
+                  <p className="text-xs text-muted-foreground line-clamp-2 pt-0.5">{plan.description}</p>
                 )}
 
                 {/* Actions */}
-                <div className="flex gap-2 pt-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 gap-1"
-                    onClick={() => openEdit(plan)}
-                  >
+                <div className="flex items-center gap-2 pt-2">
+                  <Button variant="outline" size="sm" className="flex-1 gap-1 h-8" onClick={() => openEdit(plan)}>
                     <Edit2 className="w-3 h-3" /> Edit
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => setDeleteId(plan.id)}
-                  >
+                  <Button variant="outline" size="sm" className="h-8 w-8 p-0 text-destructive hover:text-destructive" onClick={() => setDeleteId(plan.id)}>
                     <Trash2 className="w-3 h-3" />
                   </Button>
+                  <button
+                    type="button"
+                    onClick={() => { navigator.clipboard.writeText(plan.id); toast({ title: "Plan ID copied", description: plan.id }); }}
+                    title="Copy Plan ID"
+                    className="h-8 w-8 flex items-center justify-center rounded-md border border-sidebar-border text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                  >
+                    <Copy className="w-3 h-3" />
+                  </button>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))}
         </div>
       )}
