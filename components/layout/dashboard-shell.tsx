@@ -41,8 +41,8 @@ export function DashboardShell({ children, permissions = null }: DashboardShellP
             gyms={gyms}
             setActiveGym={setActiveGym}
           />
-          <main className="flex-1 overflow-y-auto overflow-x-hidden">
-            <div className="container mx-auto px-4 sm:px-6 py-6 max-w-7xl min-w-0">
+          <main className="flex-1 overflow-y-auto">
+            <div className="container mx-auto px-4 sm:px-6 py-6 max-w-7xl min-w-0 overflow-x-clip">
               {children}
             </div>
           </main>
