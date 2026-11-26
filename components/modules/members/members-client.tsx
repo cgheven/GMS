@@ -918,17 +918,16 @@ export function MembersClient({
           { label: "Defaulters", sub: "Unpaid",     value: stats.defaulters, icon: Ban,         color: "text-rose-400",    bg: "bg-rose-500/10 border border-rose-500/20" },
           { label: "Expired",   sub: "Cancelled",   value: stats.expired,    icon: CalendarX,   color: "text-muted-foreground", bg: "bg-white/5 border border-white/10" },
         ].map(({ label, sub, value, icon: Icon, color, bg }) => (
-          <div key={label} className="rounded-2xl border border-sidebar-border bg-card p-3 sm:p-5">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-              <div className={`flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${bg} shrink-0`}>
+          <div key={label} className="rounded-xl sm:rounded-2xl border border-sidebar-border bg-card p-2.5 sm:p-5">
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              <div className={`flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl ${bg} shrink-0`}>
                 <Icon className={`w-4 h-4 ${color}`} />
               </div>
               <div className="min-w-0">
-                <p className="text-[11px] sm:text-xs text-muted-foreground leading-tight">
-                  {label} <span className="hidden sm:inline">{sub}</span>
-                  <span className="sm:hidden block opacity-70">{sub}</span>
+                <p className="text-lg sm:text-2xl font-bold text-foreground leading-none">{value}</p>
+                <p className="text-[11px] sm:text-xs text-muted-foreground leading-tight mt-0.5 sm:mt-1 truncate">
+                  {label}<span className="hidden sm:inline"> {sub}</span>
                 </p>
-                <p className="text-xl sm:text-2xl font-bold text-foreground leading-none mt-1 sm:mt-0.5">{value}</p>
               </div>
             </div>
           </div>
