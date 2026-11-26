@@ -445,7 +445,50 @@ export function ReportsClient({ data }: Props) {
                 <h2 className="text-sm font-semibold">Trainer Performance — Current Month</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">Sorted by net contribution. Commission uses generated salary records when available, otherwise estimated from member fees × rate.</p>
               </div>
-              <div className="overflow-x-auto">
+
+              {/* Mobile: trainer cards (no horizontal scroll) */}
+              <div className="md:hidden p-3 space-y-2.5">
+                {trainerRows.map((t) => (
+                  <div key={t.id} className="rounded-xl border border-white/5 bg-white/[0.02] p-3 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                          {t.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">{t.name}</p>
+                          <p className="text-xs text-muted-foreground">{t.activeMembers} member{t.activeMembers !== 1 ? "s" : ""}</p>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className={`text-base font-bold tabular-nums leading-none ${t.netContribution >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{format(t.netContribution)}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide mt-1">Net contrib.</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 pt-2.5 border-t border-white/5">
+                      <div>
+                        <p className="text-[11px] text-muted-foreground">Fee generated</p>
+                        <p className="text-sm font-semibold text-primary tabular-nums mt-0.5">{t.monthlyFeeGenerated > 0 ? format(t.monthlyFeeGenerated) : "—"}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[11px] text-muted-foreground">Trainer cost</p>
+                        <p className="text-sm font-semibold text-rose-400 tabular-nums mt-0.5">{format(t.totalCost)}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {/* Total summary */}
+                <div className="rounded-xl border border-sidebar-border bg-card p-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">Total</p>
+                    <p className="text-xs text-muted-foreground truncate">{trainerRows.reduce((s, t) => s + t.activeMembers, 0)} members · Fee {format(totalFeeGenerated)}</p>
+                  </div>
+                  <p className={`text-base font-bold tabular-nums shrink-0 ${totalNetContrib >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{format(totalNetContrib)}</p>
+                </div>
+              </div>
+
+              {/* Desktop: table */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-sidebar-border">
