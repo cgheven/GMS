@@ -170,7 +170,66 @@ const MemberTable = memo(function MemberTable({ list, showExpired, planMap, onEd
   const allSelected = list.length > 0 && list.every((m) => selectedIds.has(m.id));
   const someSelected = !allSelected && list.some((m) => selectedIds.has(m.id));
   return (
-    <div className="overflow-x-auto">
+    <>
+    {/* Mobile: stacked cards (no sideways scroll) */}
+    <div className="md:hidden divide-y divide-sidebar-border/60">
+      {list.map((m) => {
+        const plan = m.plan_id ? planMap[m.plan_id] : null;
+        const planData = (m as Member & { plan?: { name: string; color: string } | null }).plan;
+        const planName = planData?.name ?? plan?.name;
+        const planColor = planData?.color ?? plan?.color ?? "#6B7A99";
+        const allPlans = ((m as Member & { plans?: { plan?: { id: string; name: string; color: string } | null }[] }).plans ?? [])
+          .map((pp) => pp.plan)
+          .filter((p): p is { id: string; name: string; color: string } => !!p)
+          .sort((a, b) => (a.id === m.plan_id ? -1 : b.id === m.plan_id ? 1 : 0));
+        const firstPlanName = allPlans[0]?.name ?? planName;
+        const firstPlanColor = allPlans[0]?.color ?? planColor;
+        const extraPlans = allPlans.length > 1 ? ` +${allPlans.length - 1}` : "";
+        const isSelected = selectedIds.has(m.id);
+        return (
+          <div
+            key={m.id}
+            onClick={() => onView?.(m)}
+            className={`flex items-center gap-3 py-3 px-1 transition-colors ${onView ? "cursor-pointer active:bg-white/[0.04]" : ""} ${isSelected ? "bg-primary/[0.05]" : ""}`}
+          >
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => onToggle(m.id)}
+              onClick={(e) => e.stopPropagation()}
+              className="w-4 h-4 rounded accent-primary cursor-pointer shrink-0"
+            />
+            <div
+              className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 overflow-hidden"
+              style={{ backgroundColor: `${firstPlanColor}22`, color: firstPlanColor }}
+            >
+              {m.photo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={m.photo_url} alt="" className="w-full h-full object-cover" />
+              ) : (
+                m.full_name[0]?.toUpperCase() ?? "?"
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-foreground truncate">{m.full_name}</p>
+              <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground min-w-0">
+                {m.member_number && <span className="font-mono shrink-0">{m.member_number}</span>}
+                {firstPlanName && (
+                  <span className="truncate font-medium" style={{ color: firstPlanColor }}>● {firstPlanName}{extraPlans}</span>
+                )}
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="font-semibold text-foreground whitespace-nowrap text-sm">{format(Number(m.monthly_fee))}<span className="text-muted-foreground text-xs">/mo</span></p>
+              {m.outstanding_balance > 0 && <p className="text-[11px] text-rose-400 whitespace-nowrap">Due {format(m.outstanding_balance)}</p>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+
+    {/* Desktop: full table */}
+    <div className="hidden md:block overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-sidebar-border">
@@ -300,6 +359,7 @@ const MemberTable = memo(function MemberTable({ list, showExpired, planMap, onEd
         </tbody>
       </table>
     </div>
+    </>
   );
 });
 

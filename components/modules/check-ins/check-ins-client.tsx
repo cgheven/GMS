@@ -362,7 +362,36 @@ export function CheckInsClient({ gymId, checkIns: initial, members, unlinked: in
             <p className="text-sm">No check-ins yet today</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Mobile: check-in cards */}
+          <div className="md:hidden divide-y divide-sidebar-border/60">
+            {checkIns.map((c) => {
+              const name = c.member?.full_name ?? "—";
+              const trainerName = c.member?.trainer?.full_name;
+              const { due, reason } = paymentDue(c.member, country);
+              return (
+                <div key={c.id} className={cn("flex items-center gap-3 py-3 px-1", due && "bg-rose-500/[0.05]")}>
+                  <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 overflow-hidden", due ? "bg-rose-500/15 text-rose-400" : "bg-primary/15 text-primary")}>
+                    {c.member?.photo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={c.member.photo_url} alt="" className="w-full h-full object-cover" />
+                    ) : (name[0]?.toUpperCase() ?? "?")}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-foreground truncate">{name}</p>
+                    <div className="flex items-center gap-2 mt-0.5 text-xs min-w-0">
+                      {trainerName && <span className="text-primary truncate">● {trainerName}</span>}
+                      {due && <span className="text-rose-400 font-semibold whitespace-nowrap shrink-0">⚠ {reason}</span>}
+                    </div>
+                  </div>
+                  <span className="text-sm font-medium text-foreground whitespace-nowrap shrink-0">{formatTime(c.checked_in_at)}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop: table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-sidebar-border">
@@ -424,6 +453,7 @@ export function CheckInsClient({ gymId, checkIns: initial, members, unlinked: in
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
     </div>

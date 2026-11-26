@@ -333,7 +333,7 @@ export function LeadsClient({ gymId, leads, plans, staff, activities }: Props) {
       </div>
 
       {/* Kanban board */}
-      <div className="flex gap-3 overflow-x-auto pb-4 -mx-1 px-1">
+      <div className="flex gap-3 overflow-x-auto pb-4 -mx-1 px-1 snap-x snap-mandatory sm:snap-none scroll-px-1">
         {PIPELINE.map((stage, i) => {
           const stageLeads = filtered.filter((l) => l.status === stage.status);
           return (
@@ -647,7 +647,7 @@ function KanbanColumn({ stage, leads, isLast, onCardClick, onAddClick }: {
   onAddClick: () => void;
 }) {
   return (
-    <div className="flex flex-col min-w-[256px] w-64 shrink-0 rounded-2xl border border-sidebar-border bg-card/50 overflow-hidden">
+    <div className="flex flex-col w-[82vw] max-w-[320px] sm:w-64 sm:min-w-[256px] sm:max-w-none shrink-0 snap-start rounded-2xl border border-sidebar-border bg-card/50 overflow-hidden">
       {/* Column header */}
       <div className={`flex items-center justify-between px-3 py-2.5 ${stage.headerBg} border-b border-sidebar-border/50`}>
         <div className="flex items-center gap-2">
