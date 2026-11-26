@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo, useTransition } from "react";
 import {
-  CreditCard, AlertTriangle, Plus, XCircle, Search, MessageCircle, FileText,
+  CreditCard, AlertTriangle, Plus, XCircle, Search, MessageCircle, FileText, RefreshCw,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { revalidatePayments, createPayment, updatePayment } from "@/app/actions/payments";
@@ -433,47 +433,34 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-serif font-normal tracking-tight">Payments</h1>
-          <p className="text-muted-foreground text-sm mt-1">Collect fees and review payment history</p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-serif font-normal tracking-tight">Payments</h1>
+          <p className="text-muted-foreground text-xs sm:text-sm mt-1">Collect fees and record payments</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={hardRefresh} disabled={refreshing} variant="outline" size="sm">
-            {refreshing ? "Refreshing…" : "Refresh"}
+        <div className="flex items-center gap-2 shrink-0">
+          <Button onClick={hardRefresh} disabled={refreshing} variant="outline" size="icon" className="h-9 w-9" title="Refresh">
+            <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
           </Button>
-          <Button onClick={() => { setAddForm(emptyForm); setAddDialog(true); }} className="gap-2">
+          <Button onClick={() => { setAddForm(emptyForm); setAddDialog(true); }} size="sm" className="gap-1.5">
             <Plus className="w-4 h-4" /> Add Entry
           </Button>
         </div>
       </div>
 
-      {/* View toggle */}
-      <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-sidebar-border w-fit">
-        {(["members", "history"] as const).map((v) => (
-          <button key={v} type="button" onClick={() => setView(v)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize ${
-              view === v
-                ? "bg-primary/15 text-primary border border-primary/20"
-                : "text-muted-foreground hover:text-foreground"
-            }`}>{v === "members" ? `Members` : "History"}</button>
-        ))}
-      </div>
-
-      {/* ── Members view ─────────────────────────────────────────────────────── */}
-      {view === "members" && (
-        <div className="space-y-4">
+      {/* ── Collection view ──────────────────────────────────────────────────── */}
+      <div className="space-y-4">
           {/* Collection stat cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {/* Total card */}
             <button type="button" onClick={() => setMemberTrainerFilter("all")}
-              className={`flex flex-col gap-1.5 p-4 rounded-2xl border text-left transition-all ${
+              className={`flex flex-col gap-1 p-3 sm:p-4 rounded-2xl border text-left transition-all ${
                 memberTrainerFilter === "all"
                   ? "border-primary/30 bg-primary/10"
                   : "border-sidebar-border bg-card hover:border-primary/20 hover:bg-primary/5"
               }`}>
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Total</p>
-              <p className={`text-xl font-bold ${collectionStats.totalDue > 0 ? "text-rose-400" : "text-foreground"}`}>
+              <p className={`text-base sm:text-lg font-bold leading-none ${collectionStats.totalDue > 0 ? "text-rose-400" : "text-foreground"}`}>
                 {format(collectionStats.totalDue)}
               </p>
               <p className="text-[11px] text-muted-foreground">
@@ -495,7 +482,7 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
             {collectionStats.groups.map((g) => (
               <button key={g.id} type="button"
                 onClick={() => setMemberTrainerFilter(memberTrainerFilter === g.id ? "all" : g.id)}
-                className={`flex flex-col gap-1.5 p-4 rounded-2xl border text-left transition-all ${
+                className={`flex flex-col gap-1 p-3 sm:p-4 rounded-2xl border text-left transition-all ${
                   memberTrainerFilter === g.id
                     ? "border-primary/30 bg-primary/10"
                     : "border-sidebar-border bg-card hover:border-primary/20 hover:bg-primary/5"
@@ -503,7 +490,7 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider truncate">
                   {g.id === "none" ? "Gym Only" : g.label}
                 </p>
-                <p className={`text-xl font-bold ${g.due > 0 ? "text-rose-400" : "text-foreground"}`}>
+                <p className={`text-base sm:text-lg font-bold leading-none ${g.due > 0 ? "text-rose-400" : "text-foreground"}`}>
                   {format(g.due)}
                 </p>
                 <p className="text-[11px] text-muted-foreground">
@@ -548,13 +535,13 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
                   const graceDays = gym?.payment_overdue_grace_days ?? 2;
                   const overdue = !joinedThisMonth && todayDayOfMonth > graceDays;
                   return (
-                    <div key={m.id} className="flex items-center gap-3 py-3 px-1">
-                      <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center text-sm font-bold text-primary shrink-0">
+                    <div key={m.id} className="flex items-center gap-2.5 py-2.5 px-1">
+                      <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary shrink-0">
                         {m.full_name[0]?.toUpperCase() ?? "?"}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium text-foreground truncate">{m.full_name}</p>
-                        <div className="flex items-center gap-2 mt-1">
+                        <p className="text-sm font-medium text-foreground truncate">{m.full_name}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-xs font-semibold text-foreground whitespace-nowrap">{format(Number(m.monthly_fee))}</span>
                           {payment ? (
                             <StatusBadge status={payment.status} />
@@ -684,126 +671,6 @@ export function PaymentsClient({ gymId, payments: initialPayments, members }: Pr
             )}
           </div>
         </div>
-      )}
-
-      {/* ── History view ─────────────────────────────────────────────────────── */}
-      {view === "history" && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative max-w-sm w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search by name or receipt…" value={histSearch}
-                onChange={(e) => setHistSearch(e.target.value)} className="pl-9" />
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              {([["all", "All"], ["paid", "Paid"], ["pending", "Pending"], ["overdue", "Overdue"], ["refunded", "Refunded"], ["waived", "Waived"]] as const).map(([val, label]) => (
-                <button key={val} type="button" onClick={() => setHistStatus(val as PaymentStatus | "all")}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                    histStatus === val
-                      ? val === "paid"     ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                      : val === "overdue"  ? "bg-rose-500/10 border-rose-500/30 text-rose-400"
-                      : val === "pending"  ? "bg-primary/10 border-primary/30 text-primary"
-                      : "bg-primary/15 border-primary/40 text-primary"
-                      : "bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
-                  }`}>{label}</button>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-sidebar-border bg-card overflow-hidden">
-            {historyRows.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
-                <CreditCard className="w-10 h-10 opacity-20" />
-                <p className="text-sm">No transactions found</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-sidebar-border">
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Member</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Period</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Method</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Date</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden xl:table-cell">Receipt</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Amount</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-sidebar-border/50">
-                    {historyRows.map((p) => {
-                      const name = p.member?.full_name ?? "—";
-                      return (
-                        <tr key={p.id} className="hover:bg-white/[0.02] transition-colors group">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary shrink-0">
-                                {name[0]?.toUpperCase() ?? "?"}
-                              </div>
-                              <p className="font-medium text-foreground">{name}</p>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 hidden md:table-cell">
-                            <span className="text-sm text-muted-foreground">{p.for_period ?? "—"}</span>
-                          </td>
-                          <td className="px-4 py-3 hidden lg:table-cell">
-                            <span className="text-sm text-muted-foreground">
-                              {p.payment_method ? methodLabels[p.payment_method] : "—"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 hidden lg:table-cell">
-                            <span className="text-sm text-muted-foreground">
-                              {p.payment_date ? formatDate(p.payment_date) : "—"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 hidden xl:table-cell">
-                            <span className="text-xs text-muted-foreground font-mono">{p.receipt_number ?? "—"}</span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <p className="font-semibold text-foreground">{format(Number(p.total_amount))}</p>
-                            {Number(p.discount) > 0 && <p className="text-xs text-emerald-400">-{format(p.discount)} disc</p>}
-                            {Number(p.late_fee) > 0 && <p className="text-xs text-rose-400">+{format(p.late_fee)} late</p>}
-                          </td>
-                          <td className="px-4 py-3 text-center"><StatusBadge status={p.status} /></td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button title="View Receipt" onClick={() => openInvoice(p, members.find(m => m.id === p.member_id))}
-                                className="p-1.5 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors">
-                                <FileText className="w-3.5 h-3.5" />
-                              </button>
-                              {p.status !== "paid" && p.status !== "waived" && p.status !== "refunded" && (
-                                <>
-                                  {p.status !== "overdue" && (
-                                    <button title="Mark Overdue" onClick={() => updateStatus(p, "overdue")}
-                                      className="p-1.5 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors">
-                                      <AlertTriangle className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-                                  <button title="Waive" onClick={() => updateStatus(p, "waived")}
-                                    className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors">
-                                    <XCircle className="w-3.5 h-3.5" />
-                                  </button>
-                                </>
-                              )}
-                              {p.status === "paid" && (
-                                <button title="Mark Refunded" onClick={() => updateStatus(p, "refunded")}
-                                  className="p-1.5 rounded text-muted-foreground hover:text-sky-400 hover:bg-sky-500/10 transition-colors">
-                                  <XCircle className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Add Entry Dialog */}
       <Dialog open={addDialog} onOpenChange={(o) => !o && setAddDialog(false)}>
